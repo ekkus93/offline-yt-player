@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1380" viewBox="0 0 1500 1380">
+  <defs>
+    <style><![CDATA[
+      .bg{fill:#0B0F17}.surface{fill:#141B25}.elev{fill:#1C2633}.primary{fill:#7AA2FF}.accent{fill:#39D0C7}.success{fill:#4FD1A1}.warning{fill:#F2B66D}.error{fill:#FF6B7A}
+      .t1{fill:#F3F6FA;font-family:Inter,Roboto,Arial,sans-serif;font-weight:700}.t2{fill:#A8B3C2;font-family:Inter,Roboto,Arial,sans-serif}.line{stroke:#334154;stroke-width:1}.phone{fill:#070A0F;stroke:#344257;stroke-width:3}.screen{fill:#0B0F17}.chip{fill:#1C2633}.thumb{fill:#26364A}.track{fill:#334154}.white{fill:#F3F6FA}
+      .s10{font-size:10px}.s11{font-size:11px}.s12{font-size:12px}.s13{font-size:13px}.s14{font-size:14px}.s16{font-size:16px}.s18{font-size:18px}.s22{font-size:22px}.s34{font-size:34px}
+    ]]></style>
+  </defs>
+  <rect class="bg" width="1500" height="1380"/>
+  <text x="48" y="64" class="t1 s34">Offline YT Player — Portrait UI Mockups</text>
+  <text x="48" y="94" class="t2 s16">Midnight Transit · fixed functional regions · no hidden primary controls · portrait only</text>
+
+  <g transform="translate(48 120)">
+    <rect width="120" height="44" rx="14" fill="#0B0F17" stroke="#334154"/><circle cx="22" cy="22" r="12" fill="#7AA2FF"/><text x="42" y="27" class="t2 s12">Primary</text>
+    <g transform="translate(132 0)"><rect width="120" height="44" rx="14" fill="#141B25" stroke="#334154"/><circle cx="22" cy="22" r="12" fill="#39D0C7"/><text x="42" y="27" class="t2 s12">Accent</text></g>
+    <g transform="translate(264 0)"><rect width="120" height="44" rx="14" fill="#141B25" stroke="#334154"/><circle cx="22" cy="22" r="12" fill="#4FD1A1"/><text x="42" y="27" class="t2 s12">Success</text></g>
+    <g transform="translate(396 0)"><rect width="120" height="44" rx="14" fill="#141B25" stroke="#334154"/><circle cx="22" cy="22" r="12" fill="#F2B66D"/><text x="42" y="27" class="t2 s12">Warning</text></g>
+    <g transform="translate(528 0)"><rect width="120" height="44" rx="14" fill="#141B25" stroke="#334154"/><circle cx="22" cy="22" r="12" fill="#FF6B7A"/><text x="42" y="27" class="t2 s12">Error</text></g>
+  </g>
+
+  <g transform="translate(55 205)">
+    <rect class="phone" width="310" height="548" rx="34"/><rect class="screen" x="12" y="14" width="286" height="520" rx="24"/>
+    <text x="28" y="48" class="t1 s16">Offline YT Player</text><text x="250" y="48" class="t1 s18">⌕</text><text x="278" y="48" class="t1 s16">⚙</text>
+    <rect x="26" y="68" width="64" height="30" rx="15" class="primary"/><text x="49" y="88" class="t1 s11">All</text>
+    <rect x="98" y="68" width="74" height="30" rx="15" class="chip"/><text x="116" y="88" class="t2 s11">Videos</text>
+    <rect x="180" y="68" width="82" height="30" rx="15" class="chip"/><text x="196" y="88" class="t2 s11">Recent</text>
+    <g transform="translate(26 114)"><rect width="90" height="54" rx="8" class="thumb"/><path d="M8 46 L36 18 L52 32 L68 12 L84 46Z" fill="#39D0C7" opacity=".45"/><text x="102" y="18" class="t1 s12">Switzerland 4K</text><text x="102" y="36" class="t2 s10">12:34 · 1.2 GB · 1080p</text></g>
+    <g transform="translate(26 184)"><rect width="90" height="54" rx="8" fill="#293043"/><circle cx="45" cy="27" r="16" fill="#7AA2FF" opacity=".35"/><text x="102" y="18" class="t1 s12">Lo-fi Study Mix</text><text x="102" y="36" class="t2 s10">1:02:15 · 892 MB</text></g>
+    <g transform="translate(26 254)"><rect width="90" height="54" rx="8" fill="#3A2C2A"/><path d="M12 44 L44 12 L78 44Z" fill="#F2B66D" opacity=".45"/><text x="102" y="18" class="t1 s12">Japan Travel Guide</text><text x="102" y="36" class="t2 s10">18:20 · 450 MB</text></g>
+    <rect x="0" y="472" width="310" height="76" fill="#101722"/><text x="40" y="503" class="t1 s14">⌂</text><text x="35" y="522" class="t2 s10">Library</text><text x="116" y="503" class="t1 s14">↓</text><text x="99" y="522" class="t2 s10">Downloads</text><text x="202" y="503" class="t1 s16">＋</text><text x="199" y="522" class="t2 s10">Add</text><text x="270" y="503" class="t1 s14">⚙</text><text x="253" y="522" class="t2 s10">Settings</text>
+    <text x="0" y="582" class="t1 s18">1. Library</text><text x="0" y="603" class="t2 s12">Only the item region scrolls.</text>
+  </g>
+
+  <g transform="translate(415 205)">
+    <rect class="phone" width="310" height="548" rx="34"/><rect class="screen" x="12" y="14" width="286" height="520" rx="24"/>
+    <text x="28" y="48" class="t1 s16">Add Video</text>
+    <rect x="26" y="86" width="258" height="54" rx="12" class="surface"/><text x="40" y="119" class="t2 s11">https://youtu.be/…</text>
+    <rect x="26" y="154" width="258" height="50" rx="12" class="primary"/><text x="126" y="185" class="t1 s13">Analyze</text>
+    <text x="145" y="232" class="t2 s11">or</text><line x1="26" y1="228" x2="130" y2="228" class="line"/><line x1="166" y1="228" x2="284" y2="228" class="line"/>
+    <rect x="26" y="252" width="258" height="50" rx="12" class="surface" stroke="#334154"/><text x="91" y="283" class="t1 s12">Paste from Clipboard</text>
+    <text x="26" y="346" class="t1 s13">Supported</text><text x="26" y="372" class="t2 s12">YouTube videos / compatible URLs</text><text x="26" y="396" class="t2 s11">No scrolling needed on this screen.</text>
+    <rect x="0" y="472" width="310" height="76" fill="#101722"/><text x="40" y="503" class="t1 s14">⌂</text><text x="35" y="522" class="t2 s10">Library</text><text x="116" y="503" class="t1 s14">↓</text><text x="99" y="522" class="t2 s10">Downloads</text><text x="202" y="503" class="t1 s16">＋</text><text x="199" y="522" class="t2 s10">Add</text><text x="270" y="503" class="t1 s14">⚙</text><text x="253" y="522" class="t2 s10">Settings</text>
+    <text x="0" y="582" class="t1 s18">2. Add Video</text><text x="0" y="603" class="t2 s12">Paste or share a URL, then analyze.</text>
+  </g>
+
+  <g transform="translate(775 205)">
+    <rect class="phone" width="310" height="548" rx="34"/><rect class="screen" x="12" y="14" width="286" height="520" rx="24"/>
+    <text x="28" y="48" class="t1 s16">Download Setup</text>
+    <rect x="26" y="68" width="258" height="130" rx="12" class="thumb"/><path d="M38 184 L100 108 L150 150 L205 92 L272 184Z" fill="#39D0C7" opacity=".35"/>
+    <text x="26" y="224" class="t1 s14">Switzerland 4K — Cinematic Journey</text><text x="26" y="244" class="t2 s11">12:34 · estimated size shown below</text>
+    <g transform="translate(26 270)"><circle cx="10" cy="10" r="8" fill="#7AA2FF"/><text x="30" y="14" class="t1 s12">1080p</text><text x="206" y="14" class="t2 s11">1.2 GB</text></g>
+    <g transform="translate(26 306)"><circle cx="10" cy="10" r="8" fill="none" stroke="#A8B3C2"/><text x="30" y="14" class="t1 s12">720p</text><text x="206" y="14" class="t2 s11">620 MB</text></g>
+    <g transform="translate(26 342)"><circle cx="10" cy="10" r="8" fill="none" stroke="#A8B3C2"/><text x="30" y="14" class="t1 s12">480p</text><text x="206" y="14" class="t2 s11">320 MB</text></g>
+    <rect x="26" y="392" width="106" height="44" rx="10" class="surface" stroke="#334154"/><text x="58" y="419" class="t1 s12">Options</text>
+    <rect x="144" y="392" width="140" height="44" rx="10" class="primary"/><text x="185" y="419" class="t1 s12">Download</text>
+    <text x="0" y="582" class="t1 s18">3. Download Setup</text><text x="0" y="603" class="t2 s12">Curated choices; advanced options get a subpage.</text>
+  </g>
+
+  <g transform="translate(1135 205)">
+    <rect class="phone" width="310" height="548" rx="34"/><rect class="screen" x="12" y="14" width="286" height="520" rx="24"/>
+    <text x="28" y="48" class="t1 s16">Downloads</text>
+    <rect x="26" y="68" width="104" height="30" rx="15" class="primary"/><text x="52" y="88" class="t1 s11">Active (1)</text><rect x="138" y="68" width="122" height="30" rx="15" class="chip"/><text x="160" y="88" class="t2 s11">Completed</text>
+    <rect x="26" y="122" width="258" height="142" rx="14" class="surface"/><rect x="38" y="136" width="70" height="44" rx="7" class="thumb"/><text x="120" y="150" class="t1 s11">Switzerland 4K</text><text x="120" y="170" class="t2 s10">680 MB / 1.2 GB</text><rect x="38" y="196" width="196" height="8" rx="4" class="track"/><rect x="38" y="196" width="112" height="8" rx="4" class="accent"/><circle cx="258" cy="200" r="16" class="elev"/><text x="253" y="205" class="t1 s12">Ⅱ</text><text x="38" y="229" class="t2 s10">12 MB/s · 45 sec left</text>
+    <text x="26" y="306" class="t2 s11">Active and history entries scroll here only.</text>
+    <rect x="0" y="472" width="310" height="76" fill="#101722"/><text x="40" y="503" class="t1 s14">⌂</text><text x="35" y="522" class="t2 s10">Library</text><text x="116" y="503" class="t1 s14">↓</text><text x="99" y="522" class="t2 s10">Downloads</text><text x="202" y="503" class="t1 s16">＋</text><text x="199" y="522" class="t2 s10">Add</text><text x="270" y="503" class="t1 s14">⚙</text><text x="253" y="522" class="t2 s10">Settings</text>
+    <text x="0" y="582" class="t1 s18">4. Downloads</text><text x="0" y="603" class="t2 s12">Visible progress and pause/resume.</text>
+  </g>
+
+  <g transform="translate(55 825)">
+    <rect class="phone" width="310" height="548" rx="34"/><rect class="screen" x="12" y="14" width="286" height="520" rx="24"/>
+    <text x="28" y="48" class="t1 s16">‹  Player</text>
+    <rect x="12" y="66" width="286" height="161" class="thumb"/><path d="M22 215 L76 130 L122 176 L182 112 L288 215Z" fill="#39D0C7" opacity=".35"/>
+    <text x="26" y="256" class="t1 s14">Switzerland 4K — Cinematic Journey</text><text x="26" y="277" class="t2 s11">Scenic Relaxation</text>
+    <rect x="26" y="308" width="258" height="6" rx="3" class="track"/><rect x="26" y="308" width="86" height="6" rx="3" class="primary"/><text x="26" y="337" class="t2 s10">02:15</text><text x="252" y="337" class="t2 s10">12:34</text>
+    <text x="63" y="385" class="t1 s18">↶</text><circle cx="155" cy="378" r="30" class="elev"/><text x="148" y="385" class="t1 s20">Ⅱ</text><text x="238" y="385" class="t1 s18">↷</text>
+    <text x="34" y="442" class="t1 s11">1.0×</text><text x="94" y="442" class="t1 s11">Subtitles</text><text x="176" y="442" class="t1 s11">Audio</text><text x="236" y="442" class="t1 s11">Details</text>
+    <text x="0" y="582" class="t1 s18">5. Player</text><text x="0" y="603" class="t2 s12">All playback controls fit in portrait.</text>
+  </g>
+
+  <g transform="translate(415 825)">
+    <rect class="phone" width="310" height="548" rx="34"/><rect class="screen" x="12" y="14" width="286" height="520" rx="24"/>
+    <text x="28" y="48" class="t1 s16">Settings</text>
+    <g transform="translate(26 78)"><rect width="258" height="58" rx="12" class="surface"/><text x="18" y="35" class="t1 s13">Downloads</text><text x="232" y="35" class="t2 s16">›</text></g>
+    <g transform="translate(26 148)"><rect width="258" height="58" rx="12" class="surface"/><text x="18" y="35" class="t1 s13">Playback</text><text x="232" y="35" class="t2 s16">›</text></g>
+    <g transform="translate(26 218)"><rect width="258" height="58" rx="12" class="surface"/><text x="18" y="35" class="t1 s13">Storage</text><text x="232" y="35" class="t2 s16">›</text></g>
+    <g transform="translate(26 288)"><rect width="258" height="58" rx="12" class="surface"/><text x="18" y="35" class="t1 s13">Appearance</text><text x="232" y="35" class="t2 s16">›</text></g>
+    <g transform="translate(26 358)"><rect width="258" height="58" rx="12" class="surface"/><text x="18" y="35" class="t1 s13">About</text><text x="232" y="35" class="t2 s16">›</text></g>
+    <rect x="0" y="472" width="310" height="76" fill="#101722"/><text x="40" y="503" class="t1 s14">⌂</text><text x="35" y="522" class="t2 s10">Library</text><text x="116" y="503" class="t1 s14">↓</text><text x="99" y="522" class="t2 s10">Downloads</text><text x="202" y="503" class="t1 s16">＋</text><text x="199" y="522" class="t2 s10">Add</text><text x="270" y="503" class="t1 s14">⚙</text><text x="253" y="522" class="t2 s10">Settings</text>
+    <text x="0" y="582" class="t1 s18">6. Settings Hub</text><text x="0" y="603" class="t2 s12">Focused subpages instead of a long settings scroll.</text>
+  </g>
+
+  <g transform="translate(775 825)">
+    <rect class="phone" width="310" height="548" rx="34"/><rect class="screen" x="12" y="14" width="286" height="520" rx="24"/>
+    <text x="28" y="48" class="t1 s16">‹  Downloads</text>
+    <g transform="translate(26 82)"><rect width="258" height="56" rx="12" class="surface"/><text x="16" y="24" class="t1 s12">Default quality</text><text x="188" y="35" class="t2 s11">1080p  ▾</text></g>
+    <g transform="translate(26 150)"><rect width="258" height="56" rx="12" class="surface"/><text x="16" y="34" class="t1 s12">Wi-Fi only</text><rect x="205" y="16" width="38" height="24" rx="12" class="primary"/><circle cx="231" cy="28" r="9" class="white"/></g>
+    <g transform="translate(26 218)"><rect width="258" height="56" rx="12" class="surface"/><text x="16" y="24" class="t1 s12">Concurrent downloads</text><text x="218" y="35" class="t2 s11">2 ▾</text></g>
+    <g transform="translate(26 286)"><rect width="258" height="56" rx="12" class="surface"/><text x="16" y="34" class="t1 s12">Download subtitles</text><rect x="205" y="16" width="38" height="24" rx="12" class="primary"/><circle cx="231" cy="28" r="9" class="white"/></g>
+    <g transform="translate(26 354)"><rect width="258" height="56" rx="12" class="surface"/><text x="16" y="24" class="t1 s12">Subtitle language</text><text x="190" y="35" class="t2 s11">English ▾</text></g>
+    <text x="0" y="582" class="t1 s18">7. Download Settings</text><text x="0" y="603" class="t2 s12">All important preferences visible on one page.</text>
+  </g>
+
+  <g transform="translate(1135 825)">
+    <rect class="phone" width="310" height="548" rx="34"/><rect class="screen" x="12" y="14" width="286" height="520" rx="24"/>
+    <text x="28" y="48" class="t1 s16">‹  Storage</text>
+    <rect x="26" y="82" width="258" height="112" rx="14" class="surface"/><text x="42" y="112" class="t1 s12">Internal storage</text><text x="42" y="136" class="t2 s11">12.4 GB used · 52.6 GB free</text><rect x="42" y="156" width="218" height="10" rx="5" class="track"/><rect x="42" y="156" width="72" height="10" rx="5" class="primary"/>
+    <rect x="26" y="214" width="258" height="58" rx="12" class="surface"/><text x="42" y="249" class="t1 s12">Manage downloaded files</text><text x="260" y="249" class="t2 s16">›</text>
+    <rect x="26" y="286" width="258" height="58" rx="12" class="surface"/><text x="42" y="321" class="t1 s12">Clear cache</text><text x="226" y="321" class="t2 s11">146 MB</text>
+    <rect x="26" y="358" width="258" height="58" rx="12" class="surface"/><text x="42" y="393" class="t1 s12">Clean incomplete downloads</text>
+    <text x="0" y="582" class="t1 s18">8. Storage</text><text x="0" y="603" class="t2 s12">Storage summary and maintenance actions.</text>
+  </g>
+</svg>
