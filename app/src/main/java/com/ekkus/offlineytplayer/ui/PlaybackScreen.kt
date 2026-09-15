@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
@@ -37,12 +36,14 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
     val context = LocalContext.current
     val player = remember(validated.videoPath) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated.videoPath), validated.startPositionMs)
-            seekBackIncrement = LocalPlaybackPolicy.SkipIntervalMs
-            seekForwardIncrement = LocalPlaybackPolicy.SkipIntervalMs
-            prepare()
-        }
+        ExoPlayer.Builder(context)
+            .setSeekBackIncrementMs(LocalPlaybackPolicy.SkipIntervalMs)
+            .setSeekForwardIncrementMs(LocalPlaybackPolicy.SkipIntervalMs)
+            .build()
+            .apply {
+                setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated.videoPath), validated.startPositionMs)
+                prepare()
+            }
     }
     DisposableEffect(player) { onDispose { player.release() } }
 
