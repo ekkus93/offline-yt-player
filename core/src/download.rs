@@ -101,14 +101,14 @@ impl DownloadEngine {
         expected_bytes: Option<u64>,
         available_bytes: Option<u64>,
     ) -> Result<(), CoreError> {
-        if let (Some(expected), Some(available)) = (expected_bytes, available_bytes) {
-            if expected > available {
-                return Err(CoreError::new(
-                    ErrorKind::InsufficientStorage,
-                    "Not enough free storage for this download",
-                    false,
-                ));
-            }
+        if let (Some(expected), Some(available)) = (expected_bytes, available_bytes)
+            && expected > available
+        {
+            return Err(CoreError::new(
+                ErrorKind::InsufficientStorage,
+                "Not enough free storage for this download",
+                false,
+            ));
         }
         Ok(())
     }
