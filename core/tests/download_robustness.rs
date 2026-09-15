@@ -20,7 +20,10 @@ fn read_headers(stream: &mut TcpStream) -> String {
             break;
         }
         bytes.extend_from_slice(&buffer[..count]);
-        assert!(bytes.len() < 16 * 1024, "request headers exceeded fixture bound");
+        assert!(
+            bytes.len() < 16 * 1024,
+            "request headers exceeded fixture bound"
+        );
     }
     String::from_utf8_lossy(&bytes).into_owned()
 }
@@ -157,7 +160,10 @@ fn interrupted_transfer_resumes_with_range_request() {
     let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
     assert!(result.resumed);
     assert_eq!(result.bytes, data.len() as u64);
-    assert_eq!(fs::read(temp.path().join(&request.relative_path)).unwrap(), data);
+    assert_eq!(
+        fs::read(temp.path().join(&request.relative_path)).unwrap(),
+        data
+    );
     handle.join().unwrap();
 }
 
@@ -191,6 +197,9 @@ fn retry_executor_recovers_after_retryable_http_failure() {
     let cancel = AtomicBool::new(false);
     let result = execute_with_retry(2, 0, &cancel, |_| engine.transfer(&request, &cancel)).unwrap();
     assert_eq!(result.bytes, data.len() as u64);
-    assert_eq!(fs::read(temp.path().join(&request.relative_path)).unwrap(), data);
+    assert_eq!(
+        fs::read(temp.path().join(&request.relative_path)).unwrap(),
+        data
+    );
     handle.join().unwrap();
 }
