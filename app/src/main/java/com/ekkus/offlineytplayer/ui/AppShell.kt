@@ -155,7 +155,7 @@ private fun SettingToggle(label: String, initial: Boolean) {
 @Composable
 private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?) {
     var url by rememberSaveable(initialSharedUrl) { mutableStateOf(initialSharedUrl.orEmpty()) }
-    var analyzed by rememberSaveable { mutableStateOf(false) }
+    var analyzed by rememberSaveable(initialSharedUrl) { mutableStateOf(!initialSharedUrl.isNullOrBlank()) }
     var advanced by rememberSaveable { mutableStateOf(false) }
     if (advanced) { AdvancedDownloadOptions(padding) { advanced = false }; return }
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
@@ -163,20 +163,22 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?) {
         OutlinedTextField(value = url, onValueChange = { url = it; analyzed = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Paste") }
-            Button(onClick = { analyzed = url.isNotBlank() }, enabled = url.isNotBlank(), modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Analyze") }
+            Button(onClick = { analyzed = DownloadSetupRoute.previewFor(url) != null }, enabled = url.isNotBlank(), modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Analyze") }
         }
         Text("Supports recognized YouTube video URLs. Playlists and channel pages are not supported.")
-        if (analyzed) DownloadSetupPreview { advanced = true }
+        if (analyzed) DownloadSetupRoute.previewFor(url)?.let { DownloadSetupPreview(it) { advanced = true } }
     }
 }
 
 @Composable
-private fun DownloadSetupPreview(onOptions: () -> Unit) {
+private fun DownloadSetupPreview(setup: DownloadSetupState, onOptions: () -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-        Text("Download setup"); Text("Video details will appear here after source resolution.")
+        Text("Download setup")
+        Text(setup.title)
+        Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = onOptions, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }
-            Button(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") }
+            Button(onClick = {}, enabled = setup.readyForDownload, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") }
         }
     }
 }
