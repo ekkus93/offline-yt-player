@@ -120,6 +120,13 @@ impl DownloadEngine {
     ) -> Result<TransferResult, CoreError> {
         validate_http_url(&request.url)?;
         validate_relative_library_path(&request.relative_path)?;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(CoreError::new(
+                ErrorKind::Canceled,
+                "Download canceled",
+                false,
+            ));
+        }
         if request
             .expected_bytes
             .is_some_and(|bytes| bytes > self.policy.max_asset_bytes)
@@ -489,24 +496,19 @@ mod tests {
     }
 
     #[test]
-    fn cancellation_can_remove_partial() {
+    fn pre_canceled_transfer_returns_canceled_without_networking() {
         let temp = tempfile::tempdir().unwrap();
-        let policy = DownloadPolicy {
-            retain_partial_on_cancel: false,
-            ..DownloadPolicy::default()
-        };
-        let engine = DownloadEngine::new(temp.path(), policy).unwrap();
+        let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
         let request = TransferRequest {
             url: "http://127.0.0.1:1/unreachable".into(),
             relative_path: "items/one/video.mp4".into(),
             expected_bytes: None,
             expected_sha256: None,
         };
-        let cancel = AtomicBool::new(true);
-        let error = engine.transfer(&request, &cancel).unwrap_err();
-        assert!(matches!(
-            error.kind,
-            ErrorKind::NetworkUnavailable | ErrorKind::NetworkTimeout
-        ));
+        let error = engine
+            .transfer(&request, &AtomicBool::new(true))
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Canceled);
+        assert!(!temp.path().join("items/one/video.mp4").exists());
     }
 }
