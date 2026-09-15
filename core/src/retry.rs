@@ -73,7 +73,10 @@ mod tests {
         assert_eq!(attempts, 3);
         assert_eq!(waits.len(), 2);
         assert_eq!(waits[0].next_attempt, 2);
-        assert_eq!(sleeps, vec![Duration::from_millis(1_025), Duration::from_millis(2_025)]);
+        assert_eq!(
+            sleeps,
+            vec![Duration::from_millis(1_025), Duration::from_millis(2_025)]
+        );
     }
 
     #[test]
@@ -102,7 +105,11 @@ mod tests {
             0,
             |_| {
                 attempts += 1;
-                Err(CoreError::new(ErrorKind::NetworkUnavailable, "offline", true))
+                Err(CoreError::new(
+                    ErrorKind::NetworkUnavailable,
+                    "offline",
+                    true,
+                ))
             },
             |_| {},
             |_| {},
