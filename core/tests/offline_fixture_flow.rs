@@ -131,7 +131,10 @@ fn deterministic_fixture_flow_survives_restart_and_reconstructs_offline() {
     drop(store_before_restart);
 
     let store_after_restart = LibraryStore::open(&db_path).unwrap();
-    assert_eq!(store_after_restart.load_download_snapshots().unwrap().len(), 1);
+    assert_eq!(
+        store_after_restart.load_download_snapshots().unwrap().len(),
+        1
+    );
 
     let engine = DownloadEngine::new(&library_root, DownloadPolicy::default()).unwrap();
     engine
