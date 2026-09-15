@@ -16,7 +16,7 @@ Android direct dependencies are AndroidX Activity Compose, Compose Foundation/UI
 
 The application packages third-party OSS components from the Rust and Android dependency graphs. Before public distribution, the release process must generate/preserve the notices required by the resolved versions and the repository's own pending license decision must be finalized. The root package metadata deliberately uses `LicenseRef-OYP-Pending`; that placeholder is a release blocker, not an assertion that the project itself is already licensed for redistribution.
 
-For dependency review, maintainers must inspect the exact locked/resolved graph rather than infer licenses from this direct-dependency summary. Useful deterministic inputs are `Cargo.lock`, `cargo tree --locked`, `gradle/libs.versions.toml`, and `./gradlew :app:dependencies`. A dependency change that adds copyleft/native redistribution obligations must be reviewed before release.
+For dependency review, maintainers must inspect the exact locked/resolved graph rather than infer licenses from this direct-dependency summary. Deterministic review inputs are `Cargo.lock`, `cargo tree --locked`, `gradle/libs.versions.toml`, and `./gradlew :app:dependencies`. A dependency change that adds copyleft/native redistribution obligations must be reviewed before release. These commands are inventory inputs; they do not replace a vulnerability-advisory scan when preparing a public release.
 
 ## Extractor/muxer gate
 
