@@ -2,7 +2,7 @@ use crate::domain::{CoreError, ErrorKind, LibraryItem, LocalAsset, SourceIdentit
 use crate::events::DurableDownloadSnapshot;
 use crate::state::DownloadState;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use std::path::Path;
+use std::path::{Component, Path};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub const SCHEMA_VERSION: i64 = 1;
@@ -127,6 +127,7 @@ impl LibraryStore {
     }
 
     pub fn stage_asset(&self, job_id: &str, asset: &LocalAsset) -> Result<(), CoreError> {
+        validate_relative_asset_path(&asset.relative_path)?;
         self.connection()?
             .execute(
                 "INSERT INTO staged_assets(job_id, asset_id, relative_path, bytes, sha256)
@@ -157,6 +158,9 @@ impl LibraryStore {
                 false,
             ));
         }
+        for asset in &item.assets {
+            validate_relative_asset_path(&asset.relative_path)?;
+        }
         let mut connection = self.connection()?;
         let transaction = connection.transaction().map_err(db_error)?;
         upsert_item(&transaction, item)?;
@@ -177,7 +181,7 @@ impl LibraryStore {
 
     pub fn list(&self, query: Option<&str>) -> Result<Vec<LibraryItem>, CoreError> {
         let connection = self.connection()?;
-        let like = query.map(|value| format!("%{}%", value.replace('%', "\\%")));
+        let like = query.map(|value| format!("%{}%", escape_like(value)));
         let mut statement = connection
             .prepare(
                 "SELECT item_id, provider, source_media_id, canonical_url, display_title,
@@ -254,6 +258,39 @@ impl LibraryStore {
                 .map_err(db_error)?;
         }
         Ok(item)
+    }
+
+    pub fn validate_item_assets(
+        &self,
+        library_root: &Path,
+        item_id: &str,
+    ) -> Result<(), CoreError> {
+        let item = self.get(item_id)?.ok_or_else(|| {
+            CoreError::new(
+                ErrorKind::MissingAsset,
+                "library item does not exist",
+                false,
+            )
+        })?;
+        for asset in item.assets {
+            validate_relative_asset_path(&asset.relative_path)?;
+            let path = library_root.join(&asset.relative_path);
+            let metadata = std::fs::metadata(&path).map_err(|_| {
+                CoreError::new(
+                    ErrorKind::MissingAsset,
+                    format!("missing local asset {}", asset.asset_id),
+                    false,
+                )
+            })?;
+            if !metadata.is_file() || metadata.len() != asset.bytes {
+                return Err(CoreError::new(
+                    ErrorKind::CorruptAsset,
+                    format!("local asset {} has unexpected size", asset.asset_id),
+                    false,
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub fn save_download_snapshot(
@@ -354,6 +391,33 @@ impl LibraryStore {
             .map_err(db_error)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
     }
+}
+
+fn escape_like(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
+fn validate_relative_asset_path(value: &str) -> Result<(), CoreError> {
+    let path = Path::new(value);
+    if value.is_empty()
+        || path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(CoreError::new(
+            ErrorKind::InvalidInput,
+            "asset path must be a safe relative library path",
+            false,
+        ));
+    }
+    Ok(())
 }
 
 fn upsert_item(transaction: &Transaction<'_>, item: &LibraryItem) -> Result<(), CoreError> {
@@ -501,6 +565,7 @@ fn json_error(error: serde_json::Error) -> CoreError {
 mod tests {
     use super::*;
     use crate::domain::MediaKind;
+    use tempfile::tempdir;
 
     fn item(completed: bool) -> LibraryItem {
         LibraryItem {
@@ -580,5 +645,50 @@ mod tests {
         };
         store.save_download_snapshot(&snapshot).unwrap();
         assert_eq!(store.load_download_snapshots().unwrap(), vec![snapshot]);
+    }
+
+    #[test]
+    fn search_escapes_sql_like_wildcards() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut percent = item(true);
+        percent.display_title = "100% Offline".into();
+        store.promote_completed("job-1", &percent).unwrap();
+        assert_eq!(store.list(Some("100%")).unwrap().len(), 1);
+        assert!(store.list(Some("100_")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_traversal_asset_paths() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut bad = item(true);
+        bad.assets[0].relative_path = "../escape.mp4".into();
+        assert_eq!(
+            store.promote_completed("job-1", &bad).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+    }
+
+    #[test]
+    fn detects_missing_and_wrong_sized_assets() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store.promote_completed("job-1", &item(true)).unwrap();
+        let root = tempdir().unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(root.path(), "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::MissingAsset
+        );
+        let path = root.path().join("items/item-1");
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(path.join("video.mp4"), [0_u8; 3]).unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(root.path(), "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
     }
 }
