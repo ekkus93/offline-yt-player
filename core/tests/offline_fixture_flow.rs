@@ -135,7 +135,10 @@ fn deterministic_fixture_flow_survives_restart_and_reconstructs_offline() {
 
     let engine = DownloadEngine::new(&library_root, DownloadPolicy::default()).unwrap();
     engine
-        .preflight_space(plan_asset.expected_bytes, Some(media_bytes.len() as u64 + 1024))
+        .preflight_space(
+            plan_asset.expected_bytes,
+            Some(media_bytes.len() as u64 + 1024),
+        )
         .unwrap();
     let transfer = engine
         .transfer(
@@ -194,7 +197,9 @@ fn deterministic_fixture_flow_survives_restart_and_reconstructs_offline() {
 fn deterministic_storage_failure_flow_has_recovery_signal() {
     let root = tempfile::tempdir().unwrap();
     let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
-    let error = engine.preflight_space(Some(4_096), Some(4_095)).unwrap_err();
+    let error = engine
+        .preflight_space(Some(4_096), Some(4_095))
+        .unwrap_err();
     assert_eq!(error.kind, ErrorKind::InsufficientStorage);
     assert!(!error.retryable);
 }
