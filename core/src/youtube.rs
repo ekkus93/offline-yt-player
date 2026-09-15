@@ -1,7 +1,12 @@
 use crate::domain::{CoreError, ErrorKind};
 use url::Url;
 
-const YOUTUBE_HOSTS: &[&str] = &["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"];
+const YOUTUBE_HOSTS: &[&str] = &[
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "music.youtube.com",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YouTubeVideoUrl {
@@ -43,7 +48,10 @@ fn watch_video_id(url: &Url) -> Result<String, CoreError> {
 
 fn short_video_id(url: &Url) -> Result<String, CoreError> {
     let mut segments = url.path_segments().ok_or_else(unsupported)?;
-    let id = segments.next().filter(|value| !value.is_empty()).ok_or_else(unsupported)?;
+    let id = segments
+        .next()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(unsupported)?;
     if segments.next().is_some() {
         return Err(unsupported());
     }
@@ -51,7 +59,10 @@ fn short_video_id(url: &Url) -> Result<String, CoreError> {
 }
 
 fn valid_video_id(id: &str) -> bool {
-    id.len() == 11 && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    id.len() == 11
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
 fn unsupported() -> CoreError {
@@ -68,9 +79,15 @@ mod tests {
 
     #[test]
     fn recognizes_canonical_watch_url() {
-        let parsed = recognize_youtube_video_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share").unwrap();
+        let parsed = recognize_youtube_video_url(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share",
+        )
+        .unwrap();
         assert_eq!(parsed.video_id, "dQw4w9WgXcQ");
-        assert_eq!(parsed.canonical_url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+        assert_eq!(
+            parsed.canonical_url,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        );
     }
 
     #[test]
@@ -81,7 +98,8 @@ mod tests {
 
     #[test]
     fn recognizes_mobile_watch_url() {
-        let parsed = recognize_youtube_video_url("https://m.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
+        let parsed =
+            recognize_youtube_video_url("https://m.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
         assert_eq!(parsed.video_id, "dQw4w9WgXcQ");
     }
 
@@ -93,7 +111,10 @@ mod tests {
             "https://www.youtube.com/shorts/dQw4w9WgXcQ",
             "https://youtu.be/dQw4w9WgXcQ/extra",
         ] {
-            assert_eq!(recognize_youtube_video_url(url).unwrap_err().kind, ErrorKind::UnsupportedSource);
+            assert_eq!(
+                recognize_youtube_video_url(url).unwrap_err().kind,
+                ErrorKind::UnsupportedSource
+            );
         }
     }
 
@@ -105,7 +126,10 @@ mod tests {
             "https://www.youtube.com/watch?v=too-short",
             "ftp://www.youtube.com/watch?v=dQw4w9WgXcQ",
         ] {
-            assert_eq!(recognize_youtube_video_url(url).unwrap_err().kind, ErrorKind::UnsupportedSource);
+            assert_eq!(
+                recognize_youtube_video_url(url).unwrap_err().kind,
+                ErrorKind::UnsupportedSource
+            );
         }
     }
 }
