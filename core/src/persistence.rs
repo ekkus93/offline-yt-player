@@ -260,9 +260,17 @@ impl LibraryStore {
         Ok(item)
     }
 
-    pub fn validate_item_assets(&self, library_root: &Path, item_id: &str) -> Result<(), CoreError> {
+    pub fn validate_item_assets(
+        &self,
+        library_root: &Path,
+        item_id: &str,
+    ) -> Result<(), CoreError> {
         let item = self.get(item_id)?.ok_or_else(|| {
-            CoreError::new(ErrorKind::MissingAsset, "library item does not exist", false)
+            CoreError::new(
+                ErrorKind::MissingAsset,
+                "library item does not exist",
+                false,
+            )
         })?;
         for asset in item.assets {
             validate_relative_asset_path(&asset.relative_path)?;
