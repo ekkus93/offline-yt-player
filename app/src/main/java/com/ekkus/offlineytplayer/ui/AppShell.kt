@@ -18,6 +18,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -37,12 +38,17 @@ internal enum class AppDestination(val label: String, val accessibilityLabel: St
     Add("Add", "Add a video"), Settings("Settings", "Open settings"),
 }
 
+internal enum class SettingsSection(val label: String) {
+    Downloads("Downloads"), Playback("Playback"), Storage("Storage"), Appearance("Appearance"), About("About")
+}
+
 internal object PortraitLayoutPolicy {
     const val BottomDestinationCount = 4
     const val CompactPortraitHeightDp = 640
     const val LargeFontScale = 1.30f
     const val PrimarySetupControlCount = 4
     const val SettingsHubRowCount = 5
+    const val MaxSettingsRows = 5
     fun primaryControlsFit(heightDp: Int, fontScale: Float): Boolean {
         val reservedChrome = 64 + 80
         val minimumContent = if (fontScale >= LargeFontScale) 180 else 160
@@ -72,7 +78,7 @@ internal fun FixedRegionScaffold(title: String, destination: AppDestination, onD
 private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?) {
     when (destination) {
         AppDestination.Add -> AddScreen(padding, initialSharedUrl)
-        AppDestination.Settings -> SettingsHub(padding)
+        AppDestination.Settings -> SettingsScreen(padding)
         else -> Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.SpaceBetween) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (destination == AppDestination.Library) "No offline videos yet" else "No downloads yet", textAlign = TextAlign.Center) }
             if (destination == AppDestination.Library) Button(onClick = {}, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Add video") }
@@ -81,13 +87,79 @@ private fun DestinationContent(destination: AppDestination, padding: PaddingValu
 }
 
 @Composable
-private fun SettingsHub(padding: PaddingValues) {
-    val sections = listOf("Downloads", "Playback", "Storage", "Appearance", "About")
+private fun SettingsScreen(padding: PaddingValues) {
+    var section by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
+    if (section == null) SettingsHub(padding) { section = it } else SettingsPage(padding, section!!) { section = null }
+}
+
+@Composable
+private fun SettingsHub(padding: PaddingValues, onOpen: (SettingsSection) -> Unit) {
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Choose a settings category. Primary settings stay on dedicated fixed-layout pages.")
-        sections.forEach { section ->
-            OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth().weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(section) }
+        SettingsSection.entries.forEach { section ->
+            OutlinedButton(onClick = { onOpen(section) }, modifier = Modifier.fillMaxWidth().weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(section.label) }
         }
+    }
+}
+
+@Composable
+private fun SettingsPage(padding: PaddingValues, section: SettingsSection, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(section.label)
+            OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") }
+        }
+        when (section) {
+            SettingsSection.Downloads -> {
+                SettingValue("Default quality", "Best compatible")
+                SettingToggle("Wi-Fi only", true)
+                SettingValue("Concurrent downloads", "2")
+                SettingValue("Subtitles", "Preferred language")
+                SettingValue("Retry", "Automatic")
+            }
+            SettingsSection.Playback -> {
+                SettingToggle("Remember position", true)
+                SettingValue("Default speed", "1.0×")
+                SettingValue("Skip interval", "10 seconds")
+                SettingValue("Subtitles", "Remember selection")
+                SettingValue("Audio", "Default track")
+            }
+            SettingsSection.Storage -> {
+                SettingValue("Storage location", "App media directory")
+                SettingValue("Used / free", "Calculated on device")
+                SettingValue("Thumbnail cache", "Manage")
+                SettingValue("Incomplete files", "Clean up")
+            }
+            SettingsSection.Appearance -> {
+                SettingValue("Theme", "Dark · Light · System")
+                SettingValue("Default", "Dark")
+                SettingValue("Library layout", "List")
+            }
+            SettingsSection.About -> {
+                SettingValue("Version / build", "0.1.0")
+                SettingValue("Licenses", "Open-source notices")
+                SettingValue("Privacy", "Local-first")
+                SettingValue("Diagnostics", "Export when enabled")
+                SettingValue("Source-service notice", "Review before public release")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingValue(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label)
+        Text(value, textAlign = TextAlign.End)
+    }
+}
+
+@Composable
+private fun SettingToggle(label: String, initial: Boolean) {
+    var checked by rememberSaveable(label) { mutableStateOf(initial) }
+    Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label)
+        Switch(checked = checked, onCheckedChange = { checked = it })
     }
 }
 

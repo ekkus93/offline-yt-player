@@ -2,6 +2,7 @@ package com.ekkus.offlineytplayer
 
 import com.ekkus.offlineytplayer.ui.AppDestination
 import com.ekkus.offlineytplayer.ui.PortraitLayoutPolicy
+import com.ekkus.offlineytplayer.ui.SettingsSection
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,5 +31,12 @@ class PortraitShellTest {
     @Test
     fun settingsHubHasExactlyFiveFixedCategories() {
         assertEquals(5, PortraitLayoutPolicy.SettingsHubRowCount)
+        assertEquals(listOf("Downloads", "Playback", "Storage", "Appearance", "About"), SettingsSection.entries.map { it.label })
+    }
+
+    @Test
+    fun settingsSubpagesStayWithinFixedRowBudget() {
+        assertEquals(5, PortraitLayoutPolicy.MaxSettingsRows)
+        assertTrue(SettingsSection.entries.size <= PortraitLayoutPolicy.MaxSettingsRows)
     }
 }
