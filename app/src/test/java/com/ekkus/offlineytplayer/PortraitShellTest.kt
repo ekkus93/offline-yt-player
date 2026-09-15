@@ -18,20 +18,17 @@ class PortraitShellTest {
 
     @Test
     fun bottomNavigationIsFixedToRequiredDestinations() {
-        assertEquals(
-            listOf("Library", "Downloads", "Add", "Settings"),
-            AppDestination.entries.map { it.label },
-        )
+        assertEquals(listOf("Library", "Downloads", "Add", "Settings"), AppDestination.entries.map { it.label })
         assertEquals(4, PortraitLayoutPolicy.BottomDestinationCount)
     }
 
     @Test
     fun compactPortraitBudgetKeepsPrimaryControlsVisibleAtLargeFont() {
-        assertTrue(
-            PortraitLayoutPolicy.primaryControlsFit(
-                PortraitLayoutPolicy.CompactPortraitHeightDp,
-                PortraitLayoutPolicy.LargeFontScale,
-            ),
-        )
+        assertTrue(PortraitLayoutPolicy.primaryControlsFit(PortraitLayoutPolicy.CompactPortraitHeightDp, PortraitLayoutPolicy.LargeFontScale))
+    }
+
+    @Test
+    fun settingsHubHasExactlyFiveFixedCategories() {
+        assertEquals(5, PortraitLayoutPolicy.SettingsHubRowCount)
     }
 }

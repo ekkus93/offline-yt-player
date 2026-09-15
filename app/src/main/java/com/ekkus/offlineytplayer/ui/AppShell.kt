@@ -42,6 +42,7 @@ internal object PortraitLayoutPolicy {
     const val CompactPortraitHeightDp = 640
     const val LargeFontScale = 1.30f
     const val PrimarySetupControlCount = 4
+    const val SettingsHubRowCount = 5
     fun primaryControlsFit(heightDp: Int, fontScale: Float): Boolean {
         val reservedChrome = 64 + 80
         val minimumContent = if (fontScale >= LargeFontScale) 180 else 160
@@ -71,11 +72,21 @@ internal fun FixedRegionScaffold(title: String, destination: AppDestination, onD
 private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?) {
     when (destination) {
         AppDestination.Add -> AddScreen(padding, initialSharedUrl)
+        AppDestination.Settings -> SettingsHub(padding)
         else -> Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.SpaceBetween) {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(when (destination) {
-                AppDestination.Library -> "No offline videos yet"; AppDestination.Downloads -> "No downloads yet"; AppDestination.Settings -> "Downloads · Playback · Storage · Appearance · About"; AppDestination.Add -> ""
-            }, textAlign = TextAlign.Center) }
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (destination == AppDestination.Library) "No offline videos yet" else "No downloads yet", textAlign = TextAlign.Center) }
             if (destination == AppDestination.Library) Button(onClick = {}, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Add video") }
+        }
+    }
+}
+
+@Composable
+private fun SettingsHub(padding: PaddingValues) {
+    val sections = listOf("Downloads", "Playback", "Storage", "Appearance", "About")
+    Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+        Text("Choose a settings category. Primary settings stay on dedicated fixed-layout pages.")
+        sections.forEach { section ->
+            OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth().weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(section) }
         }
     }
 }
