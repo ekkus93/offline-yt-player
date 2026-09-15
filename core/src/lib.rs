@@ -11,6 +11,7 @@ pub mod security;
 pub mod source;
 pub mod state;
 pub mod youtube;
+pub mod youtube_extract;
 
 pub use domain::*;
 pub use download::*;
@@ -21,6 +22,7 @@ pub use security::*;
 pub use source::*;
 pub use state::*;
 pub use youtube::*;
+pub use youtube_extract::*;
 
 uniffi::setup_scaffolding!();
 
