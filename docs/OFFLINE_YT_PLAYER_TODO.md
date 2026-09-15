@@ -588,9 +588,11 @@ Evidence: `docs/USER_GUIDE.md` documents the v1 offline workflow, storage/downlo
 ## OYP-2200 — Cross-platform readiness
 
 ### OYP-2201 — Core portability audit
-- [ ] No Android-specific types in portable domain layer.
-- [ ] Platform filesystem/network assumptions abstracted where required.
-- [ ] FFI API suitable for future Swift/desktop bindings.
+- [x] No Android-specific types in portable domain layer.
+- [x] Platform filesystem/network assumptions abstracted where required.
+- [x] FFI API suitable for future Swift/desktop bindings.
+
+Evidence: `docs/CORE_PORTABILITY_AUDIT.md` records the v1 portability audit covering Android type isolation, platform-owned filesystem/network policy boundaries, and the coarse UniFFI contract's suitability for future Swift/desktop wrappers.
 
 ### OYP-2202 — Portable library-format contract
 - [x] Document database/media directory semantics.
