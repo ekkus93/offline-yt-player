@@ -148,11 +148,7 @@ mod tests {
 
     #[test]
     fn errors_map_to_kotlin_safe_categories() {
-        let core = CoreError::new(
-            ErrorKind::InsufficientStorage,
-            "not enough space",
-            false,
-        );
+        let core = CoreError::new(ErrorKind::InsufficientStorage, "not enough space", false);
         let ffi = FfiError::from(&core);
         assert_eq!(ffi.kind, FfiErrorKind::InsufficientStorage);
         assert!(!ffi.retryable);
