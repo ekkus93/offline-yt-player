@@ -574,10 +574,10 @@ Acceptance:
 - [ ] Portrait-only UI ADR.
 
 ### OYP-2103 — User-facing documentation
-- [ ] Offline workflow.
-- [ ] Download/storage behavior.
-- [ ] Privacy.
-- [ ] Troubleshooting.
+- [x] Offline workflow.
+- [x] Download/storage behavior.
+- [x] Privacy.
+- [x] Troubleshooting.
 
 ---
 
