@@ -40,6 +40,47 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-features
 
+  ffi:
+    name: UniFFI Kotlin and Android ABI
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup target add aarch64-linux-android
+      - name: Setup Android SDK command-line tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: "false"
+      - name: Install pinned Android NDK
+        run: sdkmanager "ndk;30.0.16248370"
+      - name: Generate Kotlin bindings
+        run: |
+          cargo build -p offline-yt-core
+          rm -rf target/uniffi-kotlin
+          cargo run -p uniffi-bindgen -- \
+            generate target/debug/liboffline_yt_core.so \
+            --language kotlin \
+            --out-dir target/uniffi-kotlin
+          test -n "$(find target/uniffi-kotlin -type f -name '*.kt' -print -quit)"
+          grep -R "package com.ekkus.offlineytplayer.core" target/uniffi-kotlin
+      - name: Build representative Android ABI
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/30.0.16248370
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          CC_aarch64_linux_android: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          AR_aarch64_linux_android: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+        run: |
+          cargo build -p offline-yt-core --target aarch64-linux-android
+          test -f target/aarch64-linux-android/debug/liboffline_yt_core.so
+
   android:
     name: Android lint unit build
     runs-on: ubuntu-24.04

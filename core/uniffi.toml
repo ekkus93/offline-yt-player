@@ -1,0 +1,4 @@
+[bindings.kotlin]
+package_name = "com.ekkus.offlineytplayer.core"
+generate_immutable_records = true
+android = true
