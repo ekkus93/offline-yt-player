@@ -205,24 +205,23 @@ impl DownloadEngine {
         file.sync_all().map_err(io_error)?;
         drop(file);
 
-        if let Some(expected) = request.expected_bytes {
-            if total != expected {
-                return Err(CoreError::new(
-                    ErrorKind::IntegrityFailure,
-                    format!("Downloaded {total} bytes but expected {expected}"),
-                    true,
-                ));
-            }
+        if let Some(expected) = request.expected_bytes
+            && total != expected
+        {
+            return Err(CoreError::new(
+                ErrorKind::IntegrityFailure,
+                format!("Downloaded {total} bytes but expected {expected}"),
+                true,
+            ));
         }
-        if let Some(body_bytes) = declared_body {
-            let received_body = total.saturating_sub(start);
-            if received_body != body_bytes {
-                return Err(CoreError::new(
-                    ErrorKind::IntegrityFailure,
-                    "Response body was shorter than its declared content length",
-                    true,
-                ));
-            }
+        if let Some(body_bytes) = declared_body
+            && total.saturating_sub(start) != body_bytes
+        {
+            return Err(CoreError::new(
+                ErrorKind::IntegrityFailure,
+                "Response body was shorter than its declared content length",
+                true,
+            ));
         }
         let digest = sha256_file(&partial_path)?;
         if request
