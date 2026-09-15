@@ -3,13 +3,17 @@
 //! Android-specific presentation, lifecycle, notifications, and playback stay outside this crate.
 
 pub mod domain;
+pub mod download;
 pub mod events;
+pub mod persistence;
 pub mod security;
 pub mod source;
 pub mod state;
 
 pub use domain::*;
+pub use download::*;
 pub use events::*;
+pub use persistence::*;
 pub use security::*;
 pub use source::*;
 pub use state::*;
