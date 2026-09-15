@@ -3,6 +3,10 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+val sourceRevision = providers.environmentVariable("GITHUB_SHA").orElse("local").get()
+val releaseVersionName = providers.environmentVariable("OYP_VERSION_NAME").orElse("0.1.0-dev").get()
+val releaseVersionCode = providers.environmentVariable("OYP_VERSION_CODE").orElse("1").get().toInt()
+
 android {
     namespace = "com.ekkus.offlineytplayer"
     compileSdk = 37
@@ -11,8 +15,9 @@ android {
         applicationId = "com.ekkus.offlineytplayer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
+        buildConfigField("String", "SOURCE_REVISION", "\"$sourceRevision\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
