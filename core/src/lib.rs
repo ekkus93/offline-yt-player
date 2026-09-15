@@ -2,6 +2,7 @@
 //!
 //! Android-specific presentation, lifecycle, notifications, and playback stay outside this crate.
 
+pub mod asset_validation;
 pub mod domain;
 pub mod download;
 pub mod events;
@@ -13,6 +14,7 @@ pub mod state;
 pub mod youtube;
 pub mod youtube_extract;
 
+pub use asset_validation::*;
 pub use domain::*;
 pub use download::*;
 pub use events::*;
