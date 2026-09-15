@@ -51,12 +51,14 @@ pub fn subtitle_request(
         kind: MediaKind::Subtitle,
         url: url.into(),
         relative_path,
-        mime_type: Some(if extension == "srt" {
-            "application/x-subrip"
-        } else {
-            "text/vtt"
-        }
-        .into()),
+        mime_type: Some(
+            if extension == "srt" {
+                "application/x-subrip"
+            } else {
+                "text/vtt"
+            }
+            .into(),
+        ),
     })
 }
 
