@@ -567,17 +567,21 @@ Acceptance:
 - [x] Current limitations.
 
 ### OYP-2102 — Architecture decisions
-- [ ] Rust/Kotlin boundary ADR.
-- [ ] FFI ADR.
-- [ ] Source-adapter ADR.
-- [ ] Media/muxing ADR.
-- [ ] Portrait-only UI ADR.
+- [x] Rust/Kotlin boundary ADR.
+- [x] FFI ADR.
+- [x] Source-adapter ADR.
+- [x] Media/muxing ADR.
+- [x] Portrait-only UI ADR.
+
+Evidence: `docs/ARCHITECTURE_DECISIONS.md` records accepted ADR-001 through ADR-005 for each required boundary/decision.
 
 ### OYP-2103 — User-facing documentation
-- [ ] Offline workflow.
-- [ ] Download/storage behavior.
-- [ ] Privacy.
-- [ ] Troubleshooting.
+- [x] Offline workflow.
+- [x] Download/storage behavior.
+- [x] Privacy.
+- [x] Troubleshooting.
+
+Evidence: `docs/USER_GUIDE.md` documents the v1 offline workflow, storage/download semantics, privacy/diagnostic behavior, troubleshooting, portrait-only behavior, and current release limitations.
 
 ---
 
