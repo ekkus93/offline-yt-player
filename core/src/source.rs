@@ -189,10 +189,7 @@ impl MediaSource for DirectFixtureSource {
                     asset_id: "combined".into(),
                     kind: MediaKind::Video,
                     url: fixture.media_url.clone(),
-                    relative_path: format!(
-                        "items/{}/{file}",
-                        sanitize_filename(&fixture.media_id)
-                    ),
+                    relative_path: format!("items/{}/{file}", sanitize_filename(&fixture.media_id)),
                     expected_bytes: fixture.bytes,
                     expected_sha256: None,
                     mime_type: Some("video/mp4".into()),
