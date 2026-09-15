@@ -8,6 +8,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import kotlin.math.pow
 
 object MidnightTransit {
     val Background = Color(0xFF0B0F17)
@@ -20,6 +21,13 @@ object MidnightTransit {
     val Success = Color(0xFF4FD1A1)
     val Warning = Color(0xFFF2B66D)
     val Error = Color(0xFFFF6B7A)
+
+    // Semantic interaction tokens keep state communication consistent and never color-only.
+    val DisabledContent = TextSecondary.copy(alpha = 0.38f)
+    val DisabledContainer = TextSecondary.copy(alpha = 0.12f)
+    val PressedOverlay = TextPrimary.copy(alpha = 0.12f)
+    val FocusIndicator = Accent
+    val ErrorContainer = Error.copy(alpha = 0.16f)
 
     val SmallRadius = 14.dp
     val LargeRadius = 18.dp
@@ -40,6 +48,9 @@ private val DarkColors = darkColorScheme(
     onSurface = MidnightTransit.TextPrimary,
     onSurfaceVariant = MidnightTransit.TextSecondary,
     error = MidnightTransit.Error,
+    errorContainer = MidnightTransit.ErrorContainer,
+    onError = MidnightTransit.Background,
+    onErrorContainer = MidnightTransit.TextPrimary,
 )
 
 private val LightColors = lightColorScheme(
@@ -55,6 +66,25 @@ private val LightColors = lightColorScheme(
 )
 
 enum class ThemePreference { Dark, Light, System }
+
+internal object ThemeContrastPolicy {
+    const val NormalTextMinimum = 4.5
+    const val LargeTextAndUiMinimum = 3.0
+
+    fun ratio(foreground: Color, background: Color): Double {
+        val lighter = maxOf(luminance(foreground), luminance(background))
+        val darker = minOf(luminance(foreground), luminance(background))
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    private fun luminance(color: Color): Double {
+        fun channel(value: Float): Double {
+            val c = value.toDouble()
+            return if (c <= 0.04045) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)
+        }
+        return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+    }
+}
 
 @Composable
 fun OfflineYTPlayerTheme(
