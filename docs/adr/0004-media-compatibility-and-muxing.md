@@ -1,51 +1,38 @@
-# ADR 0004: Media compatibility, adaptive assets, and muxing
+# ADR 0004: Android media compatibility and muxing gate
 
 Status: accepted for v1
 
 ## Context
 
-YouTube and future sources may expose combined audio/video streams or separate adaptive streams. Offline YT Player must prefer reliable Android Media3 playback without automatically accepting a large native muxing dependency.
+Offline YT Player may receive combined streams or adaptive video/audio streams. The portable core must describe those assets without assuming that every source can provide a single directly playable file. Android playback is implemented with Media3, while any future muxing implementation would materially affect binary size, licensing, maintenance, and the attack surface exposed to untrusted media.
 
-## Direct-play compatibility policy
+## Decision
 
-The portable core classifies normalized formats; Android Media3 remains the playback authority for the actual device. For v1, preferred choices are directly playable combinations with broad Android support:
+The resolver ranks directly playable Android formats ahead of formats that require transformation when the quality tradeoff is reasonable. For v1, the preferred compatibility set is:
 
-- MP4 containing H.264/AVC video plus AAC audio;
-- MP4 H.264 video-only paired with M4A/MP4 AAC audio;
-- WebM VP9 video-only paired with WebM Opus audio where the target device reports support.
+- MP4 with H.264/AVC video and AAC audio for combined assets.
+- MP4 with H.264/AVC for video-only adaptive assets.
+- M4A/MP4 with AAC for audio-only adaptive assets.
+- WebM VP9 video and WebM Opus audio may be retained as separate directly playable assets when Media3/device capability permits them.
 
-A combined MP4 H.264/AAC stream is preferred over an adaptive alternative when the quality difference is modest because it minimizes failure modes, storage bookkeeping, and playback coordination. Curated quality choices must expose compatibility rather than provider-specific format IDs to the UI.
+The portable domain model continues to represent stream role and compatibility explicitly. Separate audio/video files remain separate local assets linked to one library item; Android Media3 is responsible for coordinated local playback when that combination is supported. Persisted records use relative paths and media metadata rather than Android-only URI types.
 
-## Separate adaptive assets
+## Muxing gate
 
-Separate video and audio are first-class local assets, not temporary implementation details. A download plan may contain coordinated video and audio assets for one library item. Persistence records their common item identity and distinct asset roles. Media3 playback should construct one local playback presentation from those assets when the platform path is qualified; no network URL is required after completion.
+A muxer is required only when qualification demonstrates that a desired quality cannot be played reliably as either a compatible combined asset or coordinated local adaptive assets. We will not add FFmpeg or another native muxing stack speculatively.
 
-Until coordinated local adaptive playback is proven in Android instrumentation/E2E qualification, such choices remain `RequiresSeparateAssets` rather than `Preferred`.
+Before introducing a muxer, the change must record:
 
-## When muxing is required
+1. A reproducible Media3/device compatibility failure that cannot be solved by selecting another acceptable source format.
+2. APK/AAB size impact for every supported Android ABI.
+3. License inventory and redistribution obligations for the exact build configuration, including codec/library licensing implications.
+4. Security and update implications of parsing untrusted media in the added native dependency.
+5. Deterministic tests proving the muxed output is playable offline and that incomplete output is never promoted into the library.
 
-Muxing is considered required only when a desired quality cannot be played reliably as either a directly playable combined file or a qualified coordinated local audio/video pair. Examples include incompatible container/codec combinations, a device/API limitation preventing coordinated local playback, or a release requirement for a single-file artifact that cannot otherwise be met.
-
-Transcoding is out of scope for the initial decision and must not be silently substituted for muxing.
-
-## Muxer decision
-
-Do **not** add FFmpeg or another muxer to v1 yet. The current normalized model can represent combined and separate assets, and there is not yet test evidence demonstrating that a muxer is necessary for the supported compatibility envelope.
-
-If qualification later proves muxing necessary, evaluate alternatives before adding a dependency. The evaluation must record:
-
-1. APK/AAB size impact per supported ABI;
-2. native-code maintenance and Android API/ABI support;
-3. license of the exact build/configuration and redistribution obligations (including whether enabled codecs alter those obligations);
-4. security/update surface and reproducible-build implications;
-5. whether a smaller container-specific native or pure-Rust implementation satisfies the tested need.
-
-FFmpeg is therefore an evaluated architectural option, not an approved dependency. No muxer may be added merely to simplify implementation.
+FFmpeg is an evaluation candidate, not an approved dependency. Smaller purpose-built/native alternatives may be evaluated against the same gate. No muxer dependency is approved until the gate above is satisfied.
 
 ## Consequences
 
-- `Compatibility::Preferred` is reserved for directly playable choices with the supported codec/container policy.
-- `Compatibility::RequiresSeparateAssets` signals a coordinated local playback path that still requires Media3 qualification.
-- `Compatibility::RequiresMuxing` is retained so unsupported raw formats are not falsely advertised as directly playable.
-- The database/library contract must preserve relationships among assets belonging to one item.
-- Adding a muxer requires a follow-up ADR with measured compatibility evidence and license/size analysis.
+Quality-choice curation should prefer `Compatibility::Preferred`, then `Compatibility::RequiresSeparateAssets`, and expose `Compatibility::RequiresMuxing` only when the application can actually satisfy the muxing requirement. Download planning must preserve the relationship between adaptive assets so the library and player can reconstruct one logical item without provider-specific types leaking into the UI.
+
+This decision keeps the first Android release smaller and easier to audit while preserving a documented path to muxing if measured playback compatibility requires it.
