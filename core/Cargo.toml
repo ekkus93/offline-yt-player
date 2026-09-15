@@ -21,6 +21,7 @@ uniffi = "0.31"
 url = { version = "2.5", features = ["serde"] }
 
 [dev-dependencies]
+futures = "0.3"
 tempfile = "3.20"
 tiny_http = "0.12"
 
