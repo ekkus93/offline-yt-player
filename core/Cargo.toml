@@ -10,5 +10,10 @@ repository.workspace = true
 name = "offline_yt_core"
 crate-type = ["lib", "cdylib"]
 
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
+url = { version = "2.5", features = ["serde"] }
+
 [lints]
 workspace = true

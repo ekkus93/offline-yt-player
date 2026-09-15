@@ -2,7 +2,19 @@
 //!
 //! Android-specific presentation, lifecycle, notifications, and playback stay outside this crate.
 
-/// Returns a stable human-readable identifier used by bootstrap tests and diagnostics.
+pub mod domain;
+pub mod events;
+pub mod security;
+pub mod source;
+pub mod state;
+
+pub use domain::*;
+pub use events::*;
+pub use security::*;
+pub use source::*;
+pub use state::*;
+
+/// Returns a stable human-readable identifier used by diagnostics.
 #[must_use]
 pub const fn core_identity() -> &'static str {
     "offline-yt-core"
