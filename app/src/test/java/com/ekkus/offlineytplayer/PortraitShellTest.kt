@@ -39,4 +39,10 @@ class PortraitShellTest {
         assertEquals(5, PortraitLayoutPolicy.MaxSettingsRows)
         assertTrue(SettingsSection.entries.size <= PortraitLayoutPolicy.MaxSettingsRows)
     }
+
+    @Test
+    fun advancedDownloadOptionsUseDedicatedFixedPage() {
+        assertEquals(4, PortraitLayoutPolicy.AdvancedOptionsRowCount)
+        assertTrue(PortraitLayoutPolicy.AdvancedOptionsRowCount <= PortraitLayoutPolicy.MaxSettingsRows)
+    }
 }

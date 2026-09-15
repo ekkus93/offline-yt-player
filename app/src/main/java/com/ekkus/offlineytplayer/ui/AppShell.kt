@@ -47,6 +47,7 @@ internal object PortraitLayoutPolicy {
     const val CompactPortraitHeightDp = 640
     const val LargeFontScale = 1.30f
     const val PrimarySetupControlCount = 4
+    const val AdvancedOptionsRowCount = 4
     const val SettingsHubRowCount = 5
     const val MaxSettingsRows = 5
     fun primaryControlsFit(heightDp: Int, fontScale: Float): Boolean {
@@ -167,6 +168,11 @@ private fun SettingToggle(label: String, initial: Boolean) {
 private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?) {
     var url by rememberSaveable(initialSharedUrl) { mutableStateOf(initialSharedUrl.orEmpty()) }
     var analyzed by rememberSaveable { mutableStateOf(false) }
+    var advanced by rememberSaveable { mutableStateOf(false) }
+    if (advanced) {
+        AdvancedDownloadOptions(padding) { advanced = false }
+        return
+    }
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Download a supported video for offline playback.")
         OutlinedTextField(value = url, onValueChange = { url = it; analyzed = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
@@ -175,18 +181,38 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?) {
             Button(onClick = { analyzed = url.isNotBlank() }, enabled = url.isNotBlank(), modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Analyze") }
         }
         Text("Supports recognized YouTube video URLs. Playlists and channel pages are not supported.")
-        if (analyzed) DownloadSetupPreview()
+        if (analyzed) DownloadSetupPreview { advanced = true }
     }
 }
 
 @Composable
-private fun DownloadSetupPreview() {
+private fun DownloadSetupPreview(onOptions: () -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Download setup")
         Text("Video details will appear here after source resolution.")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-            OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }
+            OutlinedButton(onClick = onOptions, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }
             Button(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") }
         }
+    }
+}
+
+@Composable
+private fun AdvancedDownloadOptions(padding: PaddingValues, onBack: () -> Unit) {
+    var subtitles by rememberSaveable { mutableStateOf(true) }
+    Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Download options")
+            OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") }
+        }
+        SettingValue("Audio track", "Default")
+        Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Download subtitles")
+            Switch(checked = subtitles, onCheckedChange = { subtitles = it })
+        }
+        SettingValue("Subtitle language", "Preferred")
+        SettingValue("Container strategy", "Best compatible")
+        Box(Modifier.weight(1f))
+        Button(onClick = onBack, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Apply options") }
     }
 }
