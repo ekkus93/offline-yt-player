@@ -1,5 +1,5 @@
 use crate::domain::{CoreError, ErrorKind};
-use crate::download::{classify_error, retry_delay, FailureClass};
+use crate::download::{FailureClass, classify_error, retry_delay};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
