@@ -10,6 +10,7 @@ pub mod persistence;
 pub mod security;
 pub mod source;
 pub mod state;
+pub mod youtube;
 
 pub use domain::*;
 pub use download::*;
@@ -19,6 +20,7 @@ pub use persistence::*;
 pub use security::*;
 pub use source::*;
 pub use state::*;
+pub use youtube::*;
 
 uniffi::setup_scaffolding!();
 
