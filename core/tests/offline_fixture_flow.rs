@@ -1,8 +1,7 @@
 use futures::executor::block_on;
 use offline_yt_core::{
     Compatibility, DirectFixtureSource, DownloadEngine, DownloadPolicy, DurableDownloadSnapshot,
-    ErrorKind, FixtureMedia, LibraryItem, LibraryStore, LocalAsset, MediaSource, SourceRegistry,
-    TransferRequest,
+    ErrorKind, FixtureMedia, LibraryItem, LibraryStore, LocalAsset, SourceRegistry, TransferRequest,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
