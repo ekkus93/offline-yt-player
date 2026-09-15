@@ -20,11 +20,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
+import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 
 internal enum class LibraryLayout { List, Grid }
 internal enum class DownloadUiState { Active, Paused, Failed, Completed }
 
-internal data class LibraryRowModel(val id: String, val title: String, val detail: String)
+internal data class LibraryRowModel(
+    val id: String,
+    val title: String,
+    val detail: String,
+    val completed: Boolean = true,
+    val videoPath: String? = null,
+    val audioPath: String? = null,
+    val resumePositionMs: Long = 0,
+)
+
 internal data class DownloadRowModel(
     val id: String,
     val title: String,
@@ -41,8 +52,23 @@ internal object CollectionLayoutPolicy {
     const val HasHorizontalControlScrolling = false
 }
 
+internal object LibraryPlaybackRoute {
+    fun assetFor(row: LibraryRowModel): LocalPlaybackAsset? {
+        if (!row.completed) return null
+        val videoPath = row.videoPath?.takeIf { it.isNotBlank() } ?: return null
+        return LocalPlaybackPolicy.validate(
+            LocalPlaybackAsset(
+                videoPath = videoPath,
+                audioPath = row.audioPath,
+                title = row.title,
+                startPositionMs = row.resumePositionMs,
+            ),
+        )
+    }
+}
+
 @Composable
-internal fun LibraryScreen(onAdd: () -> Unit) {
+internal fun LibraryScreen(onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var layout by rememberSaveable { mutableStateOf(LibraryLayout.List) }
     val allItems = emptyList<LibraryRowModel>()
@@ -79,19 +105,24 @@ internal fun LibraryScreen(onAdd: () -> Unit) {
             ) { Text("Add video") }
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-                items(visibleItems, key = { it.id }) { item -> LibraryItemRow(item) }
+                items(visibleItems, key = { it.id }) { item -> LibraryItemRow(item, onPlay) }
             }
         }
     }
 }
 
 @Composable
-private fun LibraryItemRow(item: LibraryRowModel) {
+private fun LibraryItemRow(item: LibraryRowModel, onPlay: (LocalPlaybackAsset) -> Unit) {
+    val playbackAsset = LibraryPlaybackRoute.assetFor(item)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text(item.title)
         Text(item.detail)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-            Button(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Play") }
+            Button(
+                onClick = { playbackAsset?.let(onPlay) },
+                enabled = playbackAsset != null,
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Play") }
             OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Details") }
             OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Remove") }
         }

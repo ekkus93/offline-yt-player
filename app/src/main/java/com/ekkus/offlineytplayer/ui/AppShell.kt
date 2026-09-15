@@ -24,6 +24,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 
 internal enum class AppDestination(val label: String, val accessibilityLabel: String) {
     Library("Library", "Open offline library"), Downloads("Downloads", "Open downloads"),
@@ -60,8 +62,20 @@ internal object PortraitLayoutPolicy {
 fun OfflineYTPlayerApp(initialSharedUrl: String? = null) {
     OfflineYTPlayerTheme {
         var destination by rememberSaveable(initialSharedUrl) { mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add) }
-        FixedRegionScaffold(destination.label, destination, { destination = it }) { padding ->
-            DestinationContent(destination, padding, initialSharedUrl) { destination = AppDestination.Add }
+        var playbackAsset by remember { mutableStateOf<LocalPlaybackAsset?>(null) }
+        val activePlaybackAsset = playbackAsset
+        if (activePlaybackAsset != null) {
+            PortraitPlayerScreen(activePlaybackAsset) { playbackAsset = null }
+        } else {
+            FixedRegionScaffold(destination.label, destination, { destination = it }) { padding ->
+                DestinationContent(
+                    destination = destination,
+                    padding = padding,
+                    initialSharedUrl = initialSharedUrl,
+                    onAdd = { destination = AppDestination.Add },
+                    onPlay = { playbackAsset = it },
+                )
+            }
         }
     }
 }
@@ -77,10 +91,16 @@ internal fun FixedRegionScaffold(title: String, destination: AppDestination, onD
 }
 
 @Composable
-private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?, onAdd: () -> Unit) {
+private fun DestinationContent(
+    destination: AppDestination,
+    padding: PaddingValues,
+    initialSharedUrl: String?,
+    onAdd: () -> Unit,
+    onPlay: (LocalPlaybackAsset) -> Unit,
+) {
     Box(Modifier.fillMaxSize().padding(padding)) {
         when (destination) {
-            AppDestination.Library -> LibraryScreen(onAdd)
+            AppDestination.Library -> LibraryScreen(onAdd, onPlay)
             AppDestination.Downloads -> DownloadsScreen()
             AppDestination.Add -> AddScreen(PaddingValues(), initialSharedUrl)
             AppDestination.Settings -> SettingsScreen(PaddingValues())

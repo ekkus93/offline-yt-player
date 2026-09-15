@@ -2,9 +2,12 @@ package com.ekkus.offlineytplayer
 
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
+import com.ekkus.offlineytplayer.ui.LibraryPlaybackRoute
+import com.ekkus.offlineytplayer.ui.LibraryRowModel
 import com.ekkus.offlineytplayer.ui.PlayerLayoutPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,5 +34,49 @@ class PlaybackPolicyTest {
     fun nearEndThresholdMarksPlaybackComplete() {
         assertFalse(LocalPlaybackPolicy.completedByPosition(60_000, 120_000))
         assertTrue(LocalPlaybackPolicy.completedByPosition(91_000, 120_000))
+    }
+
+    @Test
+    fun completedLibraryRowsCanOpenLocalPortraitPlayback() {
+        val asset = LibraryPlaybackRoute.assetFor(
+            LibraryRowModel(
+                id = "item-1",
+                title = "Offline fixture",
+                detail = "720p · local",
+                completed = true,
+                videoPath = "/data/user/0/com.ekkus.offlineytplayer/files/items/item-1/video.mp4",
+                resumePositionMs = 12_345,
+            ),
+        )
+        requireNotNull(asset)
+        assertEquals("Offline fixture", asset.title)
+        assertEquals(12_345, asset.startPositionMs)
+        assertFalse(LocalPlaybackPolicy.UsesNetworkUris)
+    }
+
+    @Test
+    fun libraryPlaybackRouteRejectsIncompleteAndRemoteItems() {
+        assertNull(
+            LibraryPlaybackRoute.assetFor(
+                LibraryRowModel(
+                    id = "item-1",
+                    title = "Incomplete",
+                    detail = "downloading",
+                    completed = false,
+                    videoPath = "/data/user/0/com.ekkus.offlineytplayer/files/items/item-1/video.mp4",
+                ),
+            ),
+        )
+        val remote = runCatching {
+            LibraryPlaybackRoute.assetFor(
+                LibraryRowModel(
+                    id = "item-2",
+                    title = "Remote",
+                    detail = "not offline",
+                    videoPath = "https://example.invalid/video.mp4",
+                ),
+            )
+        }
+        assertTrue(remote.isFailure)
     }
 }
