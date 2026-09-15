@@ -36,10 +36,13 @@ pub enum FfiErrorKind {
     UnsupportedSource,
     NetworkUnavailable,
     NetworkTimeout,
+    HttpStatus,
     SourceChanged,
     NoCompatibleFormat,
-    StorageFull,
+    InsufficientStorage,
     IntegrityFailure,
+    MissingAsset,
+    CorruptAsset,
     Persistence,
     Canceled,
     Internal,
@@ -87,10 +90,13 @@ impl From<&CoreError> for FfiError {
                 ErrorKind::UnsupportedSource => FfiErrorKind::UnsupportedSource,
                 ErrorKind::NetworkUnavailable => FfiErrorKind::NetworkUnavailable,
                 ErrorKind::NetworkTimeout => FfiErrorKind::NetworkTimeout,
+                ErrorKind::HttpStatus => FfiErrorKind::HttpStatus,
                 ErrorKind::SourceChanged => FfiErrorKind::SourceChanged,
                 ErrorKind::NoCompatibleFormat => FfiErrorKind::NoCompatibleFormat,
-                ErrorKind::StorageFull => FfiErrorKind::StorageFull,
+                ErrorKind::InsufficientStorage => FfiErrorKind::InsufficientStorage,
                 ErrorKind::IntegrityFailure => FfiErrorKind::IntegrityFailure,
+                ErrorKind::MissingAsset => FfiErrorKind::MissingAsset,
+                ErrorKind::CorruptAsset => FfiErrorKind::CorruptAsset,
                 ErrorKind::Persistence => FfiErrorKind::Persistence,
                 ErrorKind::Canceled => FfiErrorKind::Canceled,
                 ErrorKind::Internal => FfiErrorKind::Internal,
@@ -142,9 +148,13 @@ mod tests {
 
     #[test]
     fn errors_map_to_kotlin_safe_categories() {
-        let core = CoreError::new(ErrorKind::StorageFull, "not enough space", false);
+        let core = CoreError::new(
+            ErrorKind::InsufficientStorage,
+            "not enough space",
+            false,
+        );
         let ffi = FfiError::from(&core);
-        assert_eq!(ffi.kind, FfiErrorKind::StorageFull);
+        assert_eq!(ffi.kind, FfiErrorKind::InsufficientStorage);
         assert!(!ffi.retryable);
     }
 }
