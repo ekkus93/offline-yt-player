@@ -1,0 +1,14 @@
+[package]
+name = "offline-yt-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "offline_yt_core"
+crate-type = ["lib", "cdylib"]
+
+[lints]
+workspace = true
