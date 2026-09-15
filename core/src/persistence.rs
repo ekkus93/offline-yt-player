@@ -1,7 +1,7 @@
 use crate::domain::{CoreError, ErrorKind, LibraryItem, LocalAsset, SourceIdentity};
 use crate::events::DurableDownloadSnapshot;
 use crate::state::DownloadState;
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -54,7 +54,9 @@ impl LibraryStore {
             )
             .map_err(db_error)?;
         let version: i64 = connection
-            .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| row.get(0))
+            .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| {
+                row.get(0)
+            })
             .map_err(db_error)?;
         if version > SCHEMA_VERSION {
             return Err(CoreError::new(
@@ -118,15 +120,13 @@ impl LibraryStore {
 
     pub fn schema_version(&self) -> Result<i64, CoreError> {
         self.connection()?
-            .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| row.get(0))
+            .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| {
+                row.get(0)
+            })
             .map_err(db_error)
     }
 
-    pub fn stage_asset(
-        &self,
-        job_id: &str,
-        asset: &LocalAsset,
-    ) -> Result<(), CoreError> {
+    pub fn stage_asset(&self, job_id: &str, asset: &LocalAsset) -> Result<(), CoreError> {
         self.connection()?
             .execute(
                 "INSERT INTO staged_assets(job_id, asset_id, relative_path, bytes, sha256)
@@ -149,11 +149,7 @@ impl LibraryStore {
 
     /// Atomically promotes the metadata for a verified item and clears its staging records.
     /// Files must already have been durably moved to their final relative paths.
-    pub fn promote_completed(
-        &self,
-        job_id: &str,
-        item: &LibraryItem,
-    ) -> Result<(), CoreError> {
+    pub fn promote_completed(&self, job_id: &str, item: &LibraryItem) -> Result<(), CoreError> {
         if !item.completed {
             return Err(CoreError::new(
                 ErrorKind::IntegrityFailure,
@@ -165,7 +161,10 @@ impl LibraryStore {
         let transaction = connection.transaction().map_err(db_error)?;
         upsert_item(&transaction, item)?;
         transaction
-            .execute("DELETE FROM assets WHERE item_id=?1", [item.item_id.as_str()])
+            .execute(
+                "DELETE FROM assets WHERE item_id=?1",
+                [item.item_id.as_str()],
+            )
             .map_err(db_error)?;
         for asset in &item.assets {
             insert_asset(&transaction, &item.item_id, asset)?;
@@ -307,13 +306,14 @@ impl LibraryStore {
             .query_map([], |row| {
                 let state_json: String = row.get(1)?;
                 let error_json: Option<String> = row.get(6)?;
-                let state = serde_json::from_str::<DownloadState>(&state_json).map_err(|error| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        1,
-                        rusqlite::types::Type::Text,
-                        Box::new(error),
-                    )
-                })?;
+                let state =
+                    serde_json::from_str::<DownloadState>(&state_json).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            1,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        )
+                    })?;
                 let last_error = error_json
                     .map(|value| serde_json::from_str(&value))
                     .transpose()
@@ -336,10 +336,7 @@ impl LibraryStore {
                             Box::new(error),
                         )
                     })?,
-                    retry_at_epoch_ms: row
-                        .get::<_, Option<i64>>(5)?
-                        .map(from_i64)
-                        .transpose()?,
+                    retry_at_epoch_ms: row.get::<_, Option<i64>>(5)?.map(from_i64).transpose()?,
                     last_error,
                 })
             })
@@ -485,7 +482,11 @@ fn from_i64(value: i64) -> rusqlite::Result<u64> {
 }
 
 fn db_error(error: rusqlite::Error) -> CoreError {
-    CoreError::new(ErrorKind::Persistence, format!("database error: {error}"), false)
+    CoreError::new(
+        ErrorKind::Persistence,
+        format!("database error: {error}"),
+        false,
+    )
 }
 
 fn json_error(error: serde_json::Error) -> CoreError {

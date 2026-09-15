@@ -120,7 +120,10 @@ impl DownloadEngine {
     ) -> Result<TransferResult, CoreError> {
         validate_http_url(&request.url)?;
         validate_relative_library_path(&request.relative_path)?;
-        if request.expected_bytes.is_some_and(|bytes| bytes > self.policy.max_asset_bytes) {
+        if request
+            .expected_bytes
+            .is_some_and(|bytes| bytes > self.policy.max_asset_bytes)
+        {
             return Err(CoreError::new(
                 ErrorKind::InvalidInput,
                 "Asset exceeds configured maximum size",
@@ -179,7 +182,11 @@ impl DownloadEngine {
                 if !self.policy.retain_partial_on_cancel {
                     let _ = fs::remove_file(&partial_path);
                 }
-                return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
+                return Err(CoreError::new(
+                    ErrorKind::Canceled,
+                    "Download canceled",
+                    false,
+                ));
             }
             let count = response.read(&mut buffer).map_err(io_error)?;
             if count == 0 {
@@ -387,17 +394,24 @@ mod tests {
                             .unwrap_or(0)
                             .min(body.len());
                         let slice = body[start..].to_vec();
-                        let mut response = TinyResponse::from_data(slice).with_status_code(StatusCode(206));
+                        let mut response =
+                            TinyResponse::from_data(slice).with_status_code(StatusCode(206));
                         response.add_header(
                             Header::from_bytes(
                                 b"Content-Range".as_slice(),
-                                format!("bytes {start}-{}/{}", body.len().saturating_sub(1), body.len()),
+                                format!(
+                                    "bytes {start}-{}/{}",
+                                    body.len().saturating_sub(1),
+                                    body.len()
+                                ),
                             )
                             .unwrap(),
                         );
                         request.respond(response).unwrap();
                     } else {
-                        request.respond(TinyResponse::from_data(body.clone())).unwrap();
+                        request
+                            .respond(TinyResponse::from_data(body.clone()))
+                            .unwrap();
                     }
                 }
             });
@@ -440,7 +454,10 @@ mod tests {
         let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
         assert_eq!(result.bytes, data.len() as u64);
         assert!(!result.resumed);
-        assert_eq!(fs::read(temp.path().join(&request.relative_path)).unwrap(), data);
+        assert_eq!(
+            fs::read(temp.path().join(&request.relative_path)).unwrap(),
+            data
+        );
     }
 
     #[test]
