@@ -62,7 +62,8 @@ jobs:
           test -x "$SDKMANAGER"
           "$SDKMANAGER" --version
       - name: Install pinned Android SDK
-        run: "$SDKMANAGER" "platforms;android-37" "build-tools;36.0.0"
+        run: |
+          "$SDKMANAGER" "platforms;android-37" "build-tools;36.0.0"
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
