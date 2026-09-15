@@ -53,9 +53,7 @@ internal object PortraitLayoutPolicy {
 fun OfflineYTPlayerApp(initialSharedUrl: String? = null) {
     OfflineYTPlayerTheme {
         var destination by rememberSaveable(initialSharedUrl) { mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add) }
-        FixedRegionScaffold(destination.label, destination, { destination = it }) { padding ->
-            DestinationContent(destination, padding, initialSharedUrl)
-        }
+        FixedRegionScaffold(destination.label, destination, { destination = it }) { padding -> DestinationContent(destination, padding, initialSharedUrl) }
     }
 }
 
@@ -77,7 +75,7 @@ private fun DestinationContent(destination: AppDestination, padding: PaddingValu
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(when (destination) {
                 AppDestination.Library -> "No offline videos yet"; AppDestination.Downloads -> "No downloads yet"; AppDestination.Settings -> "Downloads · Playback · Storage · Appearance · About"; AppDestination.Add -> ""
             }, textAlign = TextAlign.Center) }
-            if (destination == AppDestination.Library) Button(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), onClick = {}) { Text("Add video") }
+            if (destination == AppDestination.Library) Button(onClick = {}, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Add video") }
         }
     }
 }
@@ -90,7 +88,7 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?) {
         Text("Download a supported video for offline playback.")
         OutlinedTextField(value = url, onValueChange = { url = it; analyzed = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-            OutlinedButton(onClick = { }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Paste") }
+            OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Paste") }
             Button(onClick = { analyzed = url.isNotBlank() }, enabled = url.isNotBlank(), modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Analyze") }
         }
         Text("Supports recognized YouTube video URLs. Playlists and channel pages are not supported.")
