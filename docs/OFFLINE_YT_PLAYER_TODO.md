@@ -20,52 +20,64 @@ Task IDs are stable. A task is complete only when implementation, automated qual
 ## OYP-000 — Repository and project bootstrap
 
 ### OYP-001 — Establish repository structure
-- [ ] Create Rust workspace.
-- [ ] Create Android Gradle project.
-- [ ] Create `core/`, Android app, test, and documentation boundaries.
-- [ ] Add `.editorconfig`, `.gitignore`, license decision placeholder, and contribution/build notes.
+- [x] Create Rust workspace.
+- [x] Create Android Gradle project.
+- [x] Create `core/`, Android app, test, and documentation boundaries.
+- [x] Add `.editorconfig`, `.gitignore`, license decision placeholder, and contribution/build notes.
 
 Acceptance:
-- [ ] Clean checkout has documented bootstrap commands.
-- [ ] Rust and Android skeletons build in CI.
+- [x] Clean checkout has documented bootstrap commands.
+- [x] Rust and Android skeletons build in CI.
+
+Evidence: `docs/BOOTSTRAP_CI_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
 
 ### OYP-002 — Pin toolchains
-- [ ] Pin Rust toolchain.
-- [ ] Pin Java/JDK version.
-- [ ] Pin Android Gradle Plugin, Kotlin, Compose BOM, and Gradle wrapper.
-- [ ] Document supported Android SDK/minSdk/targetSdk values.
+- [x] Pin Rust toolchain.
+- [x] Pin Java/JDK version.
+- [x] Pin Android Gradle Plugin, Kotlin, Compose BOM, and Gradle wrapper.
+- [x] Document supported Android SDK/minSdk/targetSdk values.
 
 Acceptance:
-- [ ] CI uses the same declared toolchain versions as local documentation.
+- [x] CI uses the same declared toolchain versions as local documentation.
+
+Evidence: `docs/BOOTSTRAP_CI_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
 
 ### OYP-003 — Baseline CI
-- [ ] Add Rust fmt/clippy/test jobs.
-- [ ] Add Android lint/unit/build jobs.
-- [ ] Add exact commit SHA reporting.
-- [ ] Add dependency cache without making correctness cache-dependent.
+- [x] Add Rust fmt/clippy/test jobs.
+- [x] Add Android lint/unit/build jobs.
+- [x] Add exact commit SHA reporting.
+- [x] Add dependency cache without making correctness cache-dependent.
+
+Evidence: `docs/BOOTSTRAP_CI_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
 
 ---
 
 ## OYP-100 — Rust core foundation
 
 ### OYP-101 — Domain models
-- [ ] Define source identity.
-- [ ] Define `MediaInfo`.
-- [ ] Define media/audio/video/subtitle format models.
-- [ ] Define curated quality-choice model distinct from raw streams.
-- [ ] Define local library item model.
-- [ ] Define typed error taxonomy.
+- [x] Define source identity.
+- [x] Define `MediaInfo`.
+- [x] Define media/audio/video/subtitle format models.
+- [x] Define curated quality-choice model distinct from raw streams.
+- [x] Define local library item model.
+- [x] Define typed error taxonomy.
+
+Evidence: `docs/CORE_FOUNDATION_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
 
 ### OYP-102 — Download state machine
-- [ ] Define queued/resolving/downloading/paused/retry-wait/failed/verifying/completed/canceled states.
-- [ ] Define legal transitions.
-- [ ] Reject impossible transitions.
-- [ ] Add exhaustive state-transition tests.
+- [x] Define queued/resolving/downloading/paused/retry-wait/failed/verifying/completed/canceled states.
+- [x] Define legal transitions.
+- [x] Reject impossible transitions.
+- [x] Add exhaustive state-transition tests.
+
+Evidence: `docs/CORE_FOUNDATION_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
 
 ### OYP-103 — Core event model
-- [ ] Define coarse progress/update events for UI consumption.
-- [ ] Prevent high-frequency FFI chatter.
-- [ ] Define durable vs ephemeral state.
+- [x] Define coarse progress/update events for UI consumption.
+- [x] Prevent high-frequency FFI chatter.
+- [x] Define durable vs ephemeral state.
+
+Evidence: `docs/CORE_FOUNDATION_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
 
 ---
 
@@ -103,19 +115,25 @@ Acceptance:
 ## OYP-300 — Rust/Kotlin FFI
 
 ### OYP-301 — Select and configure FFI
-- [ ] Prototype UniFFI.
-- [ ] Confirm Android ABI/build integration.
-- [ ] Document fallback criteria for manual JNI.
+- [x] Prototype UniFFI.
+- [x] Confirm Android ABI/build integration.
+- [x] Document fallback criteria for manual JNI.
+
+Evidence: `docs/FFI_QUALIFICATION_AUDIT.md`; exact-head master CI `35035111202` passed at `4014d03abc6c2d4f789c567939dbf8d827cf7601`.
 
 ### OYP-302 — Stable coarse-grained API
 - [ ] Expose resolve/list choices/enqueue/pause/resume/cancel/library/get/delete operations.
 - [ ] Define async/cancellation semantics.
-- [ ] Map Rust errors into Kotlin-safe typed errors.
+- [x] Map Rust errors into Kotlin-safe typed errors.
+
+Evidence for typed-error mapping: `docs/FFI_QUALIFICATION_AUDIT.md`; exact-head master CI `35035111202` passed at `4014d03abc6c2d4f789c567939dbf8d827cf7601`. The operation surface remains intentionally open.
 
 ### OYP-303 — FFI qualification
-- [ ] Round-trip representative domain types.
+- [x] Round-trip representative domain types.
 - [ ] Test errors and cancellation.
 - [ ] Verify no FFI calls occur on Android main thread when blocking.
+
+Evidence for representative domain round-trip: `docs/FFI_QUALIFICATION_AUDIT.md`; exact-head master CI `35035111202` passed at `4014d03abc6c2d4f789c567939dbf8d827cf7601`. Cancellation and Android dispatcher qualification remain open.
 
 ---
 
@@ -543,16 +561,20 @@ Acceptance:
 - [ ] E2E fixture tests where environment permits.
 
 ### OYP-2002 — Dependency/license checks
-- [ ] Rust dependency audit.
-- [ ] Android dependency audit.
-- [ ] OSS license inventory.
-- [ ] Explicit review for extractor/muxer dependencies.
+- [x] Rust dependency audit.
+- [x] Android dependency audit.
+- [x] OSS license inventory.
+- [x] Explicit review for extractor/muxer dependencies.
+
+Evidence: `docs/DEPENDENCY_LICENSE_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`. Final generated notices and the project's own license choice remain release-gate obligations, not unresolved OYP-2002 audit work.
 
 ### OYP-2003 — Reproducible release metadata
-- [ ] Versioning scheme.
-- [ ] Commit SHA embedded/displayable.
-- [ ] Release build instructions.
-- [ ] Artifact naming.
+- [x] Versioning scheme.
+- [x] Commit SHA embedded/displayable.
+- [x] Release build instructions.
+- [x] Artifact naming.
+
+Evidence: `docs/RELEASE.md`, `BuildMetadata`, and `app/build.gradle.kts`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
 
 ---
 
