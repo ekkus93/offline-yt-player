@@ -91,7 +91,11 @@ fn normalize_stream(stream: &ExtractedStream) -> Result<MediaFormat, CoreError> 
         }
     };
     let compatible_direct_play = matches!(
-        (stream.container.as_str(), stream.video_codec.as_deref(), stream.audio_codec.as_deref()),
+        (
+            stream.container.as_str(),
+            stream.video_codec.as_deref(),
+            stream.audio_codec.as_deref()
+        ),
         ("mp4", Some("h264"), Some("aac"))
             | ("mp4", Some("h264"), None)
             | ("m4a", None, Some("aac"))
@@ -153,10 +157,32 @@ mod tests {
             thumbnail_url: Some("https://i.ytimg.com/example.jpg".into()),
             streams: vec![
                 ExtractedStream {
-                    id: "22".into(), url: "https://media.example/combined.mp4".into(), container: "mp4".into(), mime_type: Some("video/mp4".into()), bitrate_bps: Some(1_500_000), content_length: Some(2_000_000), width: Some(1280), height: Some(720), fps: Some(30), video_codec: Some("h264".into()), audio_codec: Some("aac".into()), audio_channels: Some(2),
+                    id: "22".into(),
+                    url: "https://media.example/combined.mp4".into(),
+                    container: "mp4".into(),
+                    mime_type: Some("video/mp4".into()),
+                    bitrate_bps: Some(1_500_000),
+                    content_length: Some(2_000_000),
+                    width: Some(1280),
+                    height: Some(720),
+                    fps: Some(30),
+                    video_codec: Some("h264".into()),
+                    audio_codec: Some("aac".into()),
+                    audio_channels: Some(2),
                 },
                 ExtractedStream {
-                    id: "137".into(), url: "https://media.example/video.mp4".into(), container: "mp4".into(), mime_type: Some("video/mp4".into()), bitrate_bps: Some(3_000_000), content_length: Some(4_000_000), width: Some(1920), height: Some(1080), fps: Some(30), video_codec: Some("h264".into()), audio_codec: None, audio_channels: None,
+                    id: "137".into(),
+                    url: "https://media.example/video.mp4".into(),
+                    container: "mp4".into(),
+                    mime_type: Some("video/mp4".into()),
+                    bitrate_bps: Some(3_000_000),
+                    content_length: Some(4_000_000),
+                    width: Some(1920),
+                    height: Some(1080),
+                    fps: Some(30),
+                    video_codec: Some("h264".into()),
+                    audio_codec: None,
+                    audio_channels: None,
                 },
             ],
         }
@@ -174,21 +200,36 @@ mod tests {
 
     #[test]
     fn curates_provider_independent_quality_choices() {
-        let media = normalize_extracted_media("https://www.youtube.com/watch?v=dQw4w9WgXcQ", &fixture()).unwrap();
+        let media =
+            normalize_extracted_media("https://www.youtube.com/watch?v=dQw4w9WgXcQ", &fixture())
+                .unwrap();
         let choices = curate_quality_choices(&media);
         assert_eq!(choices.len(), 2);
         assert_eq!(choices[0].label, "720p");
         assert_eq!(choices[0].compatibility, Compatibility::Preferred);
-        assert_eq!(choices[1].compatibility, Compatibility::RequiresSeparateAssets);
+        assert_eq!(
+            choices[1].compatibility,
+            Compatibility::RequiresSeparateAssets
+        );
     }
 
     #[test]
     fn rejects_empty_or_malformed_extraction() {
         let mut extracted = fixture();
         extracted.streams.clear();
-        assert_eq!(normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &extracted).unwrap_err().kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &extracted)
+                .unwrap_err()
+                .kind,
+            ErrorKind::SourceChanged
+        );
         let mut extracted = fixture();
         extracted.streams[0].url = "javascript:alert(1)".into();
-        assert_eq!(normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &extracted).unwrap_err().kind, ErrorKind::InvalidInput);
+        assert_eq!(
+            normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &extracted)
+                .unwrap_err()
+                .kind,
+            ErrorKind::InvalidInput
+        );
     }
 }
