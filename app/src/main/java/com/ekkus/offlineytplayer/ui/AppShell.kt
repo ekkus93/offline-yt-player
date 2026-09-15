@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 
 internal enum class AppDestination(val label: String, val accessibilityLabel: String) {
     Library("Library", "Open offline library"), Downloads("Downloads", "Open downloads"),
@@ -61,7 +60,9 @@ internal object PortraitLayoutPolicy {
 fun OfflineYTPlayerApp(initialSharedUrl: String? = null) {
     OfflineYTPlayerTheme {
         var destination by rememberSaveable(initialSharedUrl) { mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add) }
-        FixedRegionScaffold(destination.label, destination, { destination = it }) { padding -> DestinationContent(destination, padding, initialSharedUrl) }
+        FixedRegionScaffold(destination.label, destination, { destination = it }) { padding ->
+            DestinationContent(destination, padding, initialSharedUrl) { destination = AppDestination.Add }
+        }
     }
 }
 
@@ -76,13 +77,13 @@ internal fun FixedRegionScaffold(title: String, destination: AppDestination, onD
 }
 
 @Composable
-private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?) {
-    when (destination) {
-        AppDestination.Add -> AddScreen(padding, initialSharedUrl)
-        AppDestination.Settings -> SettingsScreen(padding)
-        else -> Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.SpaceBetween) {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (destination == AppDestination.Library) "No offline videos yet" else "No downloads yet", textAlign = TextAlign.Center) }
-            if (destination == AppDestination.Library) Button(onClick = {}, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Add video") }
+private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?, onAdd: () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(padding)) {
+        when (destination) {
+            AppDestination.Library -> LibraryScreen(onAdd)
+            AppDestination.Downloads -> DownloadsScreen()
+            AppDestination.Add -> AddScreen(PaddingValues(), initialSharedUrl)
+            AppDestination.Settings -> SettingsScreen(PaddingValues())
         }
     }
 }
@@ -111,57 +112,24 @@ private fun SettingsPage(padding: PaddingValues, section: SettingsSection, onBac
             OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") }
         }
         when (section) {
-            SettingsSection.Downloads -> {
-                SettingValue("Default quality", "Best compatible")
-                SettingToggle("Wi-Fi only", true)
-                SettingValue("Concurrent downloads", "2")
-                SettingValue("Subtitles", "Preferred language")
-                SettingValue("Retry", "Automatic")
-            }
-            SettingsSection.Playback -> {
-                SettingToggle("Remember position", true)
-                SettingValue("Default speed", "1.0×")
-                SettingValue("Skip interval", "10 seconds")
-                SettingValue("Subtitles", "Remember selection")
-                SettingValue("Audio", "Default track")
-            }
-            SettingsSection.Storage -> {
-                SettingValue("Storage location", "App media directory")
-                SettingValue("Used / free", "Calculated on device")
-                SettingValue("Thumbnail cache", "Manage")
-                SettingValue("Incomplete files", "Clean up")
-            }
-            SettingsSection.Appearance -> {
-                SettingValue("Theme", "Dark · Light · System")
-                SettingValue("Default", "Dark")
-                SettingValue("Library layout", "List")
-            }
-            SettingsSection.About -> {
-                SettingValue("Version / build", "0.1.0")
-                SettingValue("Licenses", "Open-source notices")
-                SettingValue("Privacy", "Local-first")
-                SettingValue("Diagnostics", "Export when enabled")
-                SettingValue("Source-service notice", "Review before public release")
-            }
+            SettingsSection.Downloads -> { SettingValue("Default quality", "Best compatible"); SettingToggle("Wi-Fi only", true); SettingValue("Concurrent downloads", "2"); SettingValue("Subtitles", "Preferred language"); SettingValue("Retry", "Automatic") }
+            SettingsSection.Playback -> { SettingToggle("Remember position", true); SettingValue("Default speed", "1.0×"); SettingValue("Skip interval", "10 seconds"); SettingValue("Subtitles", "Remember selection"); SettingValue("Audio", "Default track") }
+            SettingsSection.Storage -> { SettingValue("Storage location", "App media directory"); SettingValue("Used / free", "Calculated on device"); SettingValue("Thumbnail cache", "Manage"); SettingValue("Incomplete files", "Clean up") }
+            SettingsSection.Appearance -> { SettingValue("Theme", "Dark · Light · System"); SettingValue("Default", "Dark"); SettingValue("Library layout", "List") }
+            SettingsSection.About -> { SettingValue("Version / build", "0.1.0"); SettingValue("Licenses", "Open-source notices"); SettingValue("Privacy", "Local-first"); SettingValue("Diagnostics", "Export when enabled"); SettingValue("Source-service notice", "Review before public release") }
         }
     }
 }
 
 @Composable
 private fun SettingValue(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label)
-        Text(value, textAlign = TextAlign.End)
-    }
+    Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Text(value, textAlign = TextAlign.End) }
 }
 
 @Composable
 private fun SettingToggle(label: String, initial: Boolean) {
     var checked by rememberSaveable(label) { mutableStateOf(initial) }
-    Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label)
-        Switch(checked = checked, onCheckedChange = { checked = it })
-    }
+    Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Switch(checked = checked, onCheckedChange = { checked = it }) }
 }
 
 @Composable
@@ -169,10 +137,7 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?) {
     var url by rememberSaveable(initialSharedUrl) { mutableStateOf(initialSharedUrl.orEmpty()) }
     var analyzed by rememberSaveable { mutableStateOf(false) }
     var advanced by rememberSaveable { mutableStateOf(false) }
-    if (advanced) {
-        AdvancedDownloadOptions(padding) { advanced = false }
-        return
-    }
+    if (advanced) { AdvancedDownloadOptions(padding) { advanced = false }; return }
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Download a supported video for offline playback.")
         OutlinedTextField(value = url, onValueChange = { url = it; analyzed = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
@@ -188,8 +153,7 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?) {
 @Composable
 private fun DownloadSetupPreview(onOptions: () -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-        Text("Download setup")
-        Text("Video details will appear here after source resolution.")
+        Text("Download setup"); Text("Video details will appear here after source resolution.")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = onOptions, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }
             Button(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") }
@@ -201,18 +165,10 @@ private fun DownloadSetupPreview(onOptions: () -> Unit) {
 private fun AdvancedDownloadOptions(padding: PaddingValues, onBack: () -> Unit) {
     var subtitles by rememberSaveable { mutableStateOf(true) }
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Download options")
-            OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") }
-        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Download options"); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }
         SettingValue("Audio track", "Default")
-        Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Download subtitles")
-            Switch(checked = subtitles, onCheckedChange = { subtitles = it })
-        }
-        SettingValue("Subtitle language", "Preferred")
-        SettingValue("Container strategy", "Best compatible")
-        Box(Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Download subtitles"); Switch(checked = subtitles, onCheckedChange = { subtitles = it }) }
+        SettingValue("Subtitle language", "Preferred"); SettingValue("Container strategy", "Best compatible"); Box(Modifier.weight(1f))
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Apply options") }
     }
 }
