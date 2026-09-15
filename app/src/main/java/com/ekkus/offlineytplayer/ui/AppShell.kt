@@ -49,15 +49,17 @@ internal object PortraitLayoutPolicy {
 }
 
 @Composable
-fun OfflineYTPlayerApp() {
+fun OfflineYTPlayerApp(initialSharedUrl: String? = null) {
     OfflineYTPlayerTheme {
-        var destination by rememberSaveable { mutableStateOf(AppDestination.Library) }
+        var destination by rememberSaveable(initialSharedUrl) {
+            mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add)
+        }
         FixedRegionScaffold(
             title = destination.label,
             destination = destination,
             onDestinationSelected = { destination = it },
         ) { contentPadding ->
-            DestinationContent(destination, contentPadding)
+            DestinationContent(destination, contentPadding, initialSharedUrl)
         }
     }
 }
@@ -103,7 +105,11 @@ internal fun FixedRegionScaffold(
 }
 
 @Composable
-private fun DestinationContent(destination: AppDestination, padding: PaddingValues) {
+private fun DestinationContent(
+    destination: AppDestination,
+    padding: PaddingValues,
+    initialSharedUrl: String?,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -121,7 +127,7 @@ private fun DestinationContent(destination: AppDestination, padding: PaddingValu
                 text = when (destination) {
                     AppDestination.Library -> "No offline videos yet"
                     AppDestination.Downloads -> "No downloads yet"
-                    AppDestination.Add -> "Paste or share a supported video URL"
+                    AppDestination.Add -> initialSharedUrl ?: "Paste or share a supported video URL"
                     AppDestination.Settings -> "Downloads · Playback · Storage · Appearance · About"
                 },
                 textAlign = TextAlign.Center,
