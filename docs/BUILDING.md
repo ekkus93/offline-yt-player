@@ -8,13 +8,14 @@
 - Gradle: 9.6.0
 - Kotlin / Compose compiler plugin: 2.4.20
 - Compose BOM: 2026.08.00
-- compileSdk / targetSdk: 36
+- compileSdk: 37 (SDK package `platforms;android-37.0`)
+- targetSdk: 36
 - minSdk: 26
-- Android build tools: 36.0.0
+- Android build tools: 37.0.0
 
 The checked-in `gradlew`/`gradlew.bat` bootstrap scripts download the exact Gradle distribution named by `gradle/wrapper/gradle-wrapper.properties` and verify its SHA-256 before execution. This repository intentionally keeps the bootstrap path text-only; no build depends on a machine-global Gradle install.
 
-API 36 is the v1 stable Android baseline. Android 17/API 37 support is intentionally not a bootstrap dependency while that SDK remains preview/minor-versioned in command-line tooling; adopting it later should be a deliberate toolchain update with CI evidence.
+The app compiles against API 37 because the current stable Compose dependency line requires it, while v1 deliberately targets API 36. The command-line SDK publishes the compile platform under the minor-versioned package name `platforms;android-37.0`; CI pins that exact package.
 
 ## Clean checkout bootstrap
 
@@ -32,7 +33,7 @@ Windows PowerShell / cmd:
 gradlew.bat lintDebug testDebugUnitTest assembleDebug
 ```
 
-Android builds require Android SDK platform 36 and build-tools 36.0.0. CI installs those exact packages before invoking Gradle.
+Android builds require SDK package `platforms;android-37.0` and build-tools 37.0.0. CI installs those exact packages before invoking Gradle.
 
 ## Repository boundaries
 
