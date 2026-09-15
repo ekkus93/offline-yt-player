@@ -559,12 +559,12 @@ Acceptance:
 ## OYP-2100 — Documentation
 
 ### OYP-2101 — README
-- [ ] Product summary.
-- [ ] Architecture.
-- [ ] Build prerequisites.
-- [ ] Local development.
-- [ ] Test commands.
-- [ ] Current limitations.
+- [x] Product summary.
+- [x] Architecture.
+- [x] Build prerequisites.
+- [x] Local development.
+- [x] Test commands.
+- [x] Current limitations.
 
 ### OYP-2102 — Architecture decisions
 - [ ] Rust/Kotlin boundary ADR.
