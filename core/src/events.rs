@@ -45,13 +45,26 @@ pub struct ProgressCoalescer {
 impl ProgressCoalescer {
     #[must_use]
     pub const fn new(min_interval_ms: u64, min_byte_delta: u64) -> Self {
-        Self { min_interval_ms, min_byte_delta, last_emit_epoch_ms: None, last_emit_bytes: 0 }
+        Self {
+            min_interval_ms,
+            min_byte_delta,
+            last_emit_epoch_ms: None,
+            last_emit_bytes: 0,
+        }
     }
 
-    pub fn should_emit(&mut self, now_epoch_ms: u64, bytes_downloaded: u64, finished: bool) -> bool {
+    pub fn should_emit(
+        &mut self,
+        now_epoch_ms: u64,
+        bytes_downloaded: u64,
+        finished: bool,
+    ) -> bool {
         let first = self.last_emit_epoch_ms.is_none();
-        let interval_elapsed = self.last_emit_epoch_ms.is_some_and(|last| now_epoch_ms.saturating_sub(last) >= self.min_interval_ms);
-        let bytes_advanced = bytes_downloaded.saturating_sub(self.last_emit_bytes) >= self.min_byte_delta;
+        let interval_elapsed = self
+            .last_emit_epoch_ms
+            .is_some_and(|last| now_epoch_ms.saturating_sub(last) >= self.min_interval_ms);
+        let bytes_advanced =
+            bytes_downloaded.saturating_sub(self.last_emit_bytes) >= self.min_byte_delta;
         let emit = first || finished || (interval_elapsed && bytes_advanced);
         if emit {
             self.last_emit_epoch_ms = Some(now_epoch_ms);
@@ -62,7 +75,9 @@ impl ProgressCoalescer {
 }
 
 impl Default for ProgressCoalescer {
-    fn default() -> Self { Self::new(250, 256 * 1024) }
+    fn default() -> Self {
+        Self::new(250, 256 * 1024)
+    }
 }
 
 #[cfg(test)]

@@ -22,12 +22,18 @@ impl DownloadState {
 
     #[must_use]
     pub const fn can_transition_to(self, next: Self) -> bool {
-        use DownloadState::{Canceled, Completed, Downloading, Failed, Paused, Queued, Resolving, RetryWait, Verifying};
+        use DownloadState::{
+            Canceled, Completed, Downloading, Failed, Paused, Queued, Resolving, RetryWait,
+            Verifying,
+        };
         matches!(
             (self, next),
             (Queued, Resolving | Canceled)
                 | (Resolving, Downloading | Failed | RetryWait | Canceled)
-                | (Downloading, Paused | RetryWait | Failed | Verifying | Canceled)
+                | (
+                    Downloading,
+                    Paused | RetryWait | Failed | Verifying | Canceled
+                )
                 | (Paused, Downloading | Canceled)
                 | (RetryWait, Resolving | Downloading | Failed | Canceled)
                 | (Failed, Queued | Resolving | Canceled)
@@ -43,7 +49,9 @@ pub struct DownloadStateMachine {
 
 impl Default for DownloadStateMachine {
     fn default() -> Self {
-        Self { state: DownloadState::Queued }
+        Self {
+            state: DownloadState::Queued,
+        }
     }
 }
 
@@ -95,7 +103,11 @@ mod tests {
                 let mut machine = DownloadStateMachine::new(from);
                 let actual = machine.transition(to).is_ok();
                 assert_eq!(actual, expected, "transition {from:?} -> {to:?}");
-                if actual { assert_eq!(machine.state(), to); } else { assert_eq!(machine.state(), from); }
+                if actual {
+                    assert_eq!(machine.state(), to);
+                } else {
+                    assert_eq!(machine.state(), from);
+                }
             }
         }
     }
@@ -103,7 +115,9 @@ mod tests {
     #[test]
     fn completed_and_canceled_are_terminal() {
         for state in [DownloadState::Completed, DownloadState::Canceled] {
-            for next in STATES { assert!(!state.can_transition_to(next)); }
+            for next in STATES {
+                assert!(!state.can_transition_to(next));
+            }
         }
     }
 
