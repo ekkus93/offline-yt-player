@@ -35,13 +35,17 @@ fn staged_assets_survive_restart_and_promote_atomically() {
 
     {
         let store = LibraryStore::open(&db).unwrap();
-        store.stage_asset("job-restart", &complete.assets[0]).unwrap();
+        store
+            .stage_asset("job-restart", &complete.assets[0])
+            .unwrap();
         assert_eq!(store.staged_job_ids().unwrap(), vec!["job-restart"]);
     }
 
     let reopened = LibraryStore::open(&db).unwrap();
     assert_eq!(reopened.staged_job_ids().unwrap(), vec!["job-restart"]);
-    reopened.promote_completed("job-restart", &complete).unwrap();
+    reopened
+        .promote_completed("job-restart", &complete)
+        .unwrap();
     assert!(reopened.staged_job_ids().unwrap().is_empty());
     assert_eq!(reopened.get("item-restart").unwrap(), Some(complete));
 }
@@ -55,8 +59,14 @@ fn failed_incomplete_promotion_leaves_staging_recoverable() {
 
     {
         let store = LibraryStore::open(&db).unwrap();
-        store.stage_asset("job-restart", &incomplete.assets[0]).unwrap();
-        assert!(store.promote_completed("job-restart", &incomplete).is_err());
+        store
+            .stage_asset("job-restart", &incomplete.assets[0])
+            .unwrap();
+        assert!(
+            store
+                .promote_completed("job-restart", &incomplete)
+                .is_err()
+        );
     }
 
     let reopened = LibraryStore::open(&db).unwrap();
@@ -79,7 +89,9 @@ fn newer_database_version_is_rejected_without_mutation() {
     assert!(LibraryStore::open(&db).is_err());
     let connection = Connection::open(&db).unwrap();
     let version: i64 = connection
-        .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| row.get(0))
+        .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| {
+            row.get(0)
+        })
         .unwrap();
     assert_eq!(version, 999);
 }
