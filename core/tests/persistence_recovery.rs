@@ -62,11 +62,7 @@ fn failed_incomplete_promotion_leaves_staging_recoverable() {
         store
             .stage_asset("job-restart", &incomplete.assets[0])
             .unwrap();
-        assert!(
-            store
-                .promote_completed("job-restart", &incomplete)
-                .is_err()
-        );
+        assert!(store.promote_completed("job-restart", &incomplete).is_err());
     }
 
     let reopened = LibraryStore::open(&db).unwrap();
