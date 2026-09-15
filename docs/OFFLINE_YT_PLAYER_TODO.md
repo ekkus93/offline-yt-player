@@ -593,9 +593,11 @@ Evidence: `docs/USER_GUIDE.md` documents the v1 offline workflow, storage/downlo
 - [ ] FFI API suitable for future Swift/desktop bindings.
 
 ### OYP-2202 — Portable library-format contract
-- [ ] Document database/media directory semantics.
-- [ ] Document versioning/migration expectations.
-- [ ] Avoid baking Android-only URIs into portable persisted records.
+- [x] Document database/media directory semantics.
+- [x] Document versioning/migration expectations.
+- [x] Avoid baking Android-only URIs into portable persisted records.
+
+Evidence: `docs/PORTABLE_LIBRARY_FORMAT.md` defines the SQLite/relative-asset contract, schema migration rules, platform-owned library roots, and the prohibition on persisting Android/platform URI identities in portable records.
 
 No iOS/desktop UI is required for v1.
 
