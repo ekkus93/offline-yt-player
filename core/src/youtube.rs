@@ -136,17 +136,16 @@ mod tests {
 
     #[test]
     fn recognizes_short_share_url() {
-        let parsed = parse_youtube_video_url(&format!("https://youtu.be/{VIDEO_ID}?si=tracking"))
-            .unwrap();
+        let parsed =
+            parse_youtube_video_url(&format!("https://youtu.be/{VIDEO_ID}?si=tracking")).unwrap();
         assert_eq!(parsed.video_id, VIDEO_ID);
     }
 
     #[test]
     fn recognizes_mobile_watch_url() {
-        assert!(parse_youtube_video_url(&format!(
-            "https://m.youtube.com/watch?v={VIDEO_ID}"
-        ))
-        .is_ok());
+        assert!(
+            parse_youtube_video_url(&format!("https://m.youtube.com/watch?v={VIDEO_ID}")).is_ok()
+        );
     }
 
     #[test]
