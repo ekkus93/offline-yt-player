@@ -1,6 +1,8 @@
 use offline_yt_core::{
     DownloadEngine, DownloadPolicy, ErrorKind, FailureClass, TransferRequest, classify_error,
 };
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::Duration;
@@ -84,4 +86,32 @@ fn retryable_http_failure_is_classified_for_retry_orchestration() {
     assert_eq!(error.kind, ErrorKind::HttpStatus);
     assert!(error.retryable);
     assert_eq!(classify_error(&error.kind), FailureClass::Retryable);
+}
+
+#[test]
+fn disconnect_with_truncated_declared_body_never_completes() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request_bytes = [0_u8; 1024];
+        let _ = stream.read(&mut request_bytes);
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nshort")
+            .unwrap();
+    });
+    let temp = tempfile::tempdir().unwrap();
+    let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+    let error = engine
+        .transfer(
+            &request(format!("http://{address}/truncated"), None),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+    handle.join().unwrap();
+    assert!(matches!(
+        error.kind,
+        ErrorKind::IntegrityFailure | ErrorKind::NetworkUnavailable
+    ));
+    assert!(!temp.path().join("items/fault/video.mp4").exists());
 }
