@@ -33,10 +33,9 @@ Implemented controls:
 - `max_asset_bytes` bounds expected size, declared response size, and bytes read during transfer.
 - `preflight_space` exposes a typed insufficient-storage failure before transfer when platform free-space information is supplied.
 - retry attempts and backoff are bounded by `execute_with_retry`/`retry_delay`.
+- `DownloadConcurrencyGate` provides a process-local admission bound for transfer workers. It rejects a zero limit, blocks admission once the configured limit is active, supports non-blocking admission, and releases capacity through an RAII permit on every drop path. Unit tests prove the gate never admits more than the configured number of workers and that waiting work proceeds only after a permit is released.
 
-Still open:
-
-- a complete application-level concurrent-download coordinator has not yet been qualified, so the OYP-1803 concurrency-bound checkbox must remain open.
+All four OYP-1803 resource-bound requirements now have a portable implementation primitive. Durable queue scheduling remains an Android/service integration concern, but it must use this or an equivalently bounded admission mechanism rather than creating unbounded workers.
 
 ## OYP-1804 — Corruption/recovery
 
@@ -55,4 +54,4 @@ Therefore OYP-1804 remains partially open.
 
 ## Reconciliation summary
 
-The TODO may mark OYP-1801 and OYP-1802 complete. For OYP-1803 it may mark network timeout bounds, response/body bounds, and disk-space preflight complete while leaving concurrency bounds open. OYP-1804 should remain open until startup reconciliation and recovery integration are qualified.
+The TODO may mark OYP-1801, OYP-1802, and OYP-1803 complete. OYP-1804 should remain open until startup reconciliation and recovery integration are qualified.

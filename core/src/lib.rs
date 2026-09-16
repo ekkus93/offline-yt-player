@@ -2,6 +2,7 @@
 //!
 //! Android-specific presentation, lifecycle, notifications, and playback stay outside this crate.
 
+pub mod concurrency;
 pub mod domain;
 pub mod download;
 pub mod events;
@@ -16,6 +17,7 @@ pub mod youtube;
 pub mod youtube_diagnostics;
 pub mod youtube_extract;
 
+pub use concurrency::*;
 pub use domain::*;
 pub use download::*;
 pub use events::*;
