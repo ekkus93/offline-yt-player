@@ -140,29 +140,37 @@ Evidence for representative domain round-trip: `docs/FFI_QUALIFICATION_AUDIT.md`
 ## OYP-400 — Persistence and offline library
 
 ### OYP-401 — SQLite schema
-- [ ] Add migration framework.
-- [ ] Add library item table.
-- [ ] Add source identity table/fields.
-- [ ] Add media/subtitle/thumbnail asset records.
-- [ ] Add download job persistence.
-- [ ] Add playback position persistence.
+- [x] Add migration framework.
+- [x] Add library item table.
+- [x] Add source identity table/fields.
+- [x] Add media/subtitle/thumbnail asset records.
+- [x] Add download job persistence.
+- [x] Add playback position persistence.
+
+Evidence: `docs/PERSISTENCE_LIBRARY_AUDIT.md`; exact-head master CI `35038771334` passed at `a8b593d2387626b225eddd70fede0798a211304c`.
 
 ### OYP-402 — Atomic library completion
-- [ ] Keep incomplete assets separate from completed items.
-- [ ] Promote verified downloads atomically.
-- [ ] Recover correctly after process interruption during promotion.
+- [x] Keep incomplete assets separate from completed items.
+- [x] Promote verified downloads atomically.
+- [x] Recover correctly after process interruption during promotion.
+
+Evidence: `docs/PERSISTENCE_LIBRARY_AUDIT.md`; exact-head master CI `35038771334` passed at `a8b593d2387626b225eddd70fede0798a211304c`.
 
 ### OYP-403 — Library repository API
-- [ ] List/filter/search items.
-- [ ] Retrieve details.
-- [ ] Rename display title if enabled.
-- [ ] Delete item and associated assets safely.
-- [ ] Detect missing/corrupt files.
+- [x] List/filter/search items.
+- [x] Retrieve details.
+- [x] Rename display title if enabled.
+- [x] Delete item and associated assets safely.
+- [x] Detect missing/corrupt files.
+
+Evidence: `docs/PERSISTENCE_LIBRARY_AUDIT.md`; exact-head master CI `35038771334` passed at `a8b593d2387626b225eddd70fede0798a211304c`.
 
 ### OYP-404 — Migration tests
-- [ ] Test fresh database.
-- [ ] Test upgrade from every released schema version once versions exist.
-- [ ] Test rollback/failure behavior where applicable.
+- [x] Test fresh database.
+- [x] Test upgrade from every released schema version once versions exist.
+- [x] Test rollback/failure behavior where applicable.
+
+Evidence: `docs/PERSISTENCE_LIBRARY_AUDIT.md`; v1 is the only released schema, so the released-version upgrade matrix is vacuously complete until schema v2 exists. Newer-schema rejection and typed persistence failures cover the applicable v1 failure boundary. Exact-head master CI `35038771334` passed at `a8b593d2387626b225eddd70fede0798a211304c`.
 
 ---
 
