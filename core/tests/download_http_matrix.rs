@@ -1,7 +1,7 @@
 use offline_yt_core::{DownloadEngine, DownloadPolicy, TransferRequest, execute_with_retry};
 use std::fs;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tiny_http::{Response, Server, StatusCode};
@@ -13,7 +13,9 @@ struct FixtureServer {
 }
 
 impl FixtureServer {
-    fn start(handler: impl Fn(usize, bool) -> Response<std::io::Cursor<Vec<u8>>> + Send + Sync + 'static) -> Self {
+    fn start(
+        handler: impl Fn(usize, bool) -> Response<std::io::Cursor<Vec<u8>>> + Send + Sync + 'static,
+    ) -> Self {
         let server = Server::http("127.0.0.1:0").unwrap();
         let address = format!("http://{}", server.server_addr());
         let stop = Arc::new(AtomicBool::new(false));
@@ -22,20 +24,31 @@ impl FixtureServer {
         let calls = Arc::new(AtomicUsize::new(0));
         let handle = thread::spawn(move || {
             while !stop_thread.load(Ordering::Relaxed) {
-                let Ok(Some(request)) = server.recv_timeout(Duration::from_millis(50)) else { continue; };
+                let Ok(Some(request)) = server.recv_timeout(Duration::from_millis(50)) else {
+                    continue;
+                };
                 let call = calls.fetch_add(1, Ordering::Relaxed) + 1;
-                let has_range = request.headers().iter().any(|header| header.field.equiv("Range"));
+                let has_range = request
+                    .headers()
+                    .iter()
+                    .any(|header| header.field.equiv("Range"));
                 request.respond(handler(call, has_range)).unwrap();
             }
         });
-        Self { address, stop, handle: Some(handle) }
+        Self {
+            address,
+            stop,
+            handle: Some(handle),
+        }
     }
 }
 
 impl Drop for FixtureServer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.handle.take() { handle.join().unwrap(); }
+        if let Some(handle) = self.handle.take() {
+            handle.join().unwrap();
+        }
     }
 }
 
@@ -56,10 +69,16 @@ fn server_ignoring_range_restarts_from_zero() {
     let temp = tempfile::tempdir().unwrap();
     let final_path = temp.path().join("items/fixture/video.mp4");
     fs::create_dir_all(final_path.parent().unwrap()).unwrap();
-    fs::write(final_path.with_file_name(".video.mp4.partial"), &body[..37]).unwrap();
+    fs::write(
+        final_path.with_file_name(".video.mp4.partial"),
+        &body[..37],
+    )
+    .unwrap();
     let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
 
-    let result = engine.transfer(&request(&server, body.len()), &AtomicBool::new(false)).unwrap();
+    let result = engine
+        .transfer(&request(&server, body.len()), &AtomicBool::new(false))
+        .unwrap();
 
     assert!(!result.resumed);
     assert_eq!(fs::read(final_path).unwrap(), body);
@@ -84,7 +103,8 @@ fn retry_policy_recovers_from_fixture_http_500() {
     let transfer = request(&server, body.len());
     let cancel = AtomicBool::new(false);
 
-    let result = execute_with_retry(2, 0, &cancel, |_| engine.transfer(&transfer, &cancel)).unwrap();
+    let result =
+        execute_with_retry(2, 0, &cancel, |_| engine.transfer(&transfer, &cancel)).unwrap();
 
     assert_eq!(result.bytes, body.len() as u64);
     assert_eq!(seen.lock().unwrap().len(), 2);
