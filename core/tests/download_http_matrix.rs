@@ -1,4 +1,6 @@
-use offline_yt_core::{DownloadEngine, DownloadPolicy, TransferRequest, execute_with_retry};
+use offline_yt_core::{
+    DownloadEngine, DownloadPolicy, ErrorKind, TransferRequest, execute_with_retry,
+};
 use std::fs;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -104,4 +106,25 @@ fn retry_policy_recovers_from_fixture_http_500() {
 
     assert_eq!(result.bytes, body.len() as u64);
     assert_eq!(seen.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn request_timeout_is_reported_as_retryable_network_timeout() {
+    let server = FixtureServer::start(move |_, _| {
+        thread::sleep(Duration::from_millis(150));
+        Response::from_data(b"too late".to_vec())
+    });
+    let temp = tempfile::tempdir().unwrap();
+    let policy = DownloadPolicy {
+        connect_timeout: Duration::from_millis(50),
+        request_timeout: Duration::from_millis(40),
+        ..DownloadPolicy::default()
+    };
+    let engine = DownloadEngine::new(temp.path(), policy).unwrap();
+    let error = engine
+        .transfer(&request(&server, 8), &AtomicBool::new(false))
+        .unwrap_err();
+
+    assert_eq!(error.kind, ErrorKind::NetworkTimeout);
+    assert!(error.retryable);
 }
