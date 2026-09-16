@@ -1,48 +1,94 @@
-# Generic Download Engine Audit
+# Generic download engine audit
 
-This audit maps OYP-501 through OYP-506 to the implementation on `master` as of the source-abstraction closeout. It intentionally distinguishes implemented behavior from qualification that is still missing.
+This audit maps OYP-501 through OYP-506 to the current portable Rust implementation and deliberately distinguishes implemented behavior from remaining qualification gaps.
 
 ## OYP-501 — HTTP transfer foundation
 
 Implemented in `core/src/download.rs`:
 
-- `DownloadPolicy` provides bounded connect and request timeouts.
-- `reqwest::redirect::Policy::limited(8)` bounds redirect following.
-- `TransferRequest` carries expected size and checksum metadata.
-- `DownloadEngine::transfer` validates `Content-Length`, supports `Range`, and validates the starting offset of `Content-Range` before appending.
-- Transfers use hidden sibling `.partial` files and atomically rename only after validation.
-- `validate_relative_library_path` and the source adapter's filename sanitization keep remote metadata from becoming arbitrary filesystem paths.
+- `DownloadPolicy` provides bounded connect and request timeouts; `DownloadEngine::new` applies both to the reqwest client.
+- redirects are bounded with `reqwest::redirect::Policy::limited(8)`.
+- `Content-Length`, `Range`, `206 Partial Content`, and `Content-Range` are handled explicitly.
+- downloads use a sibling dot-prefixed `.partial` path and only rename to the final path after integrity checks.
+- `validate_http_url` and `validate_relative_library_path` reject unsafe input before filesystem/network work.
+- maximum asset size is bounded before and during transfer.
 
-The existing fixture tests cover normal transfer and range resume. The implementation portion of OYP-501 is complete.
+OYP-501 is implemented. Additional adversarial HTTP cases belong to OYP-506 qualification.
 
 ## OYP-502 — Pause/resume
 
-The portable continuation primitive is a durable partial file plus persisted `DurableDownloadSnapshot` state in `LibraryStore`. Existing tests prove that a pre-existing partial is resumed with a ranged request and that the final bytes equal the fixture payload.
+Partially implemented:
 
-When a server does not return `206 Partial Content`, the engine deliberately truncates/restarts the partial rather than appending incompatible bytes. When it does return `206`, the `Content-Range` start must exactly equal the existing partial length or the transfer fails with `IntegrityFailure`.
+- an existing partial file is durable continuation state.
+- a resumed request sends `Range: bytes=<existing>-`.
+- a valid `206` response is appended only when `Content-Range` begins at the expected byte.
+- a server that ignores range and returns a normal success response causes the local partial to be truncated and the transfer to restart safely.
 
-This qualifies safe ranged continuation and fallback behavior. Higher-level pause/resume orchestration through the still-open FFI/download-service surface remains separate work.
+Still open:
+
+- there is no persisted validator (ETag/Last-Modified or equivalent source identity) proving that an existing partial belongs to the same remote representation before append/reuse.
+- pause orchestration is represented in the state machine but is not yet wired as a transfer-level cooperative pause channel.
+
+Therefore OYP-502 must remain open.
 
 ## OYP-503 — Retry policy
 
-`classify_error` separates retryable network/HTTP/source-change categories from permanent failures. `retry_delay` implements bounded exponential backoff with caller-supplied bounded jitter and has deterministic unit coverage. `DurableDownloadSnapshot` contains `RetryWait`, attempt count, retry deadline, and typed last error, making retry state persistable and consumable by UI/service layers.
+Implemented in `core/src/download.rs`, `core/src/retry.rs`, and `core/src/state.rs`:
 
-The policy primitives are implemented. End-to-end retry orchestration remains part of the higher-level service/FFI work.
+- failures are classified as retryable/permanent.
+- `retry_delay` is bounded exponential backoff with bounded caller-provided jitter.
+- `execute_with_retry` has a bounded attempt count and interruptible cancellation-aware backoff.
+- `DownloadState::RetryWait` is durable/UI-visible state in the download state model.
+- unit tests cover retry-to-success, permanent failure, attempt bounds, and cancellation.
+
+OYP-503 is implemented.
 
 ## OYP-504 — Integrity and completion
 
-`transfer` validates expected byte count when known, validates declared response length, computes SHA-256 for every completed transfer, optionally compares an expected SHA-256, and renames `.partial` to the final path only after those checks. `LibraryStore::promote_completed` separately refuses incomplete items. These layers prevent a partial transfer from becoming a completed library record.
+Implemented:
+
+- expected total size is validated when supplied.
+- declared response body length is checked against bytes actually read.
+- optional SHA-256 expectation is supported.
+- SHA-256 is always computed for the completed partial.
+- the final-path rename occurs only after size/body/checksum validation, so incomplete content is not promoted as completed.
+
+OYP-504 is implemented.
 
 ## OYP-505 — Cleanup
 
-Implemented primitives include configurable retain/remove-partial-on-cancel policy, recursive orphan `.partial` cleanup, durable download snapshots/staged asset IDs for startup reconciliation, disk-space preflight, and ENOSPC mapping to `InsufficientStorage`.
+Partially implemented:
 
-One edge remains: a transfer whose cancellation token is already set still constructs/sends the HTTP request before cancellation is observed in the copy loop. That should be hardened with a pre-request cancellation check and deterministic regression test before OYP-505 is fully closed.
+- cancellation has an explicit retain/delete-partial policy.
+- pre-canceled transfers terminate before networking.
+- `cleanup_orphan_partials` recursively removes orphan `.partial` files.
+- `preflight_space` exposes a typed insufficient-storage failure and ENOSPC maps to `InsufficientStorage`.
 
-## OYP-506 — Download test server
+Still open:
 
-The Rust test suite contains a deterministic loopback HTTP fixture server with range support. Current automated tests cover successful transfer and resume. Broader deterministic fault injection for timeout, disconnect, malformed/incorrect content length, and retry orchestration is not yet present, so OYP-506 remains open.
+- startup reconciliation is not yet connected to durable download-job state, so cleanup cannot distinguish resumable partials from true orphans at application startup.
 
-## Closeout status
+OYP-505 remains open until startup reconciliation is wired.
 
-OYP-501 and OYP-504 are implementation-complete. OYP-502 and OYP-503 have the portable primitives but depend on higher-level orchestration for full milestone closeout. OYP-505 needs pre-cancel hardening. OYP-506 needs the remaining fault-injection matrix. This document must not be used to mark those still-open obligations complete without the corresponding code/tests.
+## OYP-506 — Deterministic test server
+
+A deterministic loopback `tiny_http` fixture server already qualifies normal transfer and ranged resume in `core/src/download.rs` tests.
+
+Still open qualification cases required by the TODO:
+
+- interrupted body/disconnect,
+- request timeout,
+- deliberately incorrect `Content-Length`,
+- retry behavior driven by HTTP fixture responses rather than only unit-level retry closures,
+- explicit server-ignores-range fallback coverage.
+
+OYP-506 remains open until this failure matrix is automated.
+
+## Next implementation order
+
+1. Persist and validate resume representation identity before append.
+2. Add cooperative pause semantics around the transfer loop.
+3. Wire startup reconciliation against durable download-job records.
+4. Extend the deterministic HTTP fixture into the complete failure matrix.
+
+This ordering closes correctness risks before broadening UI/service integration.
