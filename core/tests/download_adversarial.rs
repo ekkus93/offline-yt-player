@@ -38,30 +38,50 @@ fn request_timeout_is_bounded_and_retryable() {
         ..DownloadPolicy::default()
     };
     let engine = DownloadEngine::new(root.path(), policy).unwrap();
-    let error = engine.transfer(&request(url), &AtomicBool::new(false)).unwrap_err();
-    assert!(matches!(error.kind, ErrorKind::NetworkTimeout | ErrorKind::NetworkUnavailable));
+    let error = engine
+        .transfer(&request(url), &AtomicBool::new(false))
+        .unwrap_err();
+    assert!(matches!(
+        error.kind,
+        ErrorKind::NetworkTimeout | ErrorKind::NetworkUnavailable
+    ));
     assert!(error.retryable);
 }
 
 #[test]
 fn truncated_declared_body_never_completes() {
     let url = serve_once(|mut stream| {
-        stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nshort").unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nshort")
+            .unwrap();
     });
     let root = tempfile::tempdir().unwrap();
     let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
-    let error = engine.transfer(&request(url), &AtomicBool::new(false)).unwrap_err();
-    assert!(matches!(error.kind, ErrorKind::Internal | ErrorKind::NetworkUnavailable | ErrorKind::IntegrityFailure));
+    let error = engine
+        .transfer(&request(url), &AtomicBool::new(false))
+        .unwrap_err();
+    assert!(matches!(
+        error.kind,
+        ErrorKind::Internal | ErrorKind::NetworkUnavailable | ErrorKind::IntegrityFailure
+    ));
     assert!(!root.path().join("items/adversarial/video.mp4").exists());
 }
 
 #[test]
 fn abrupt_disconnect_never_promotes_partial_content() {
     let url = serve_once(|mut stream| {
-        stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4096\r\nConnection: close\r\n\r\npartial").unwrap();
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 4096\r\nConnection: close\r\n\r\npartial",
+            )
+            .unwrap();
     });
     let root = tempfile::tempdir().unwrap();
     let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
-    assert!(engine.transfer(&request(url), &AtomicBool::new(false)).is_err());
+    assert!(
+        engine
+            .transfer(&request(url), &AtomicBool::new(false))
+            .is_err()
+    );
     assert!(!root.path().join("items/adversarial/video.mp4").exists());
 }
