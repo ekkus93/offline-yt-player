@@ -1,4 +1,5 @@
 use offline_yt_core::{DownloadEngine, DownloadPolicy, ErrorKind, TransferRequest};
+use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::AtomicBool;
@@ -104,4 +105,30 @@ fn server_error_is_explicitly_retryable() {
     assert_eq!(error.kind, ErrorKind::HttpStatus);
     assert!(error.retryable);
     assert!(!root.path().join("items/adversarial/video.mp4").exists());
+}
+
+#[test]
+fn mismatched_content_range_rejects_existing_partial() {
+    let url = serve_once(|mut stream| {
+        stream
+            .write_all(
+                b"HTTP/1.1 206 Partial Content\r\nContent-Length: 4\r\nContent-Range: bytes 0-3/12\r\nConnection: close\r\n\r\ntail",
+            )
+            .unwrap();
+    });
+    let root = tempfile::tempdir().unwrap();
+    let final_path = root.path().join("items/adversarial/video.mp4");
+    fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+    let partial_path = final_path.with_file_name(".video.mp4.partial");
+    fs::write(&partial_path, b"prefix!!").unwrap();
+
+    let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+    let error = engine
+        .transfer(&request(url), &AtomicBool::new(false))
+        .unwrap_err();
+
+    assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+    assert!(error.retryable);
+    assert_eq!(fs::read(&partial_path).unwrap(), b"prefix!!");
+    assert!(!final_path.exists());
 }
