@@ -13,7 +13,7 @@ Implemented in `core/src/download.rs`:
 - `validate_http_url` and `validate_relative_library_path` reject unsafe input before filesystem/network work.
 - maximum asset size is bounded before and during transfer.
 
-OYP-501 is implemented. Additional adversarial HTTP cases belong to OYP-506 qualification.
+OYP-501 is implemented. The adversarial HTTP cases are qualified under OYP-506.
 
 ## OYP-502 — Pause/resume
 
@@ -72,23 +72,24 @@ OYP-505 remains open until startup reconciliation is wired.
 
 ## OYP-506 — Deterministic test server
 
-A deterministic loopback `tiny_http` fixture server already qualifies normal transfer and ranged resume in `core/src/download.rs` tests.
+OYP-506 is now implemented and automated with deterministic loopback HTTP fixtures. The test suite covers:
 
-Still open qualification cases required by the TODO:
+- normal transfer and expected-size verification,
+- ranged resume with `206 Partial Content`,
+- safe restart when a server ignores a range request,
+- retry behavior driven by HTTP fixture responses,
+- bounded request timeout surfaced as `NetworkTimeout`,
+- mid-body interruption/cooperative cancellation,
+- disconnect with deliberately incorrect `Content-Length`,
+- preservation of incomplete data only as a partial file, never promotion to the final library path.
 
-- interrupted body/disconnect,
-- request timeout,
-- deliberately incorrect `Content-Length`,
-- retry behavior driven by HTTP fixture responses rather than only unit-level retry closures,
-- explicit server-ignores-range fallback coverage.
-
-OYP-506 remains open until this failure matrix is automated.
+The final OYP-506 cases landed through PRs #79 and #80. Exact-head `master` CI run `35084986659` passed at `d3f24d2ab284fbb04d2b46ad420da0842d99a8bf` after those fixtures were merged.
 
 ## Next implementation order
 
 1. Persist and validate resume representation identity before append.
 2. Add cooperative pause semantics around the transfer loop.
 3. Wire startup reconciliation against durable download-job records.
-4. Extend the deterministic HTTP fixture into the complete failure matrix.
+4. Reconcile completed OYP-500 checklist items in the canonical TODO once their implementation evidence is merged and green.
 
-This ordering closes correctness risks before broadening UI/service integration.
+This ordering closes the remaining correctness risks before broadening UI/service integration.
