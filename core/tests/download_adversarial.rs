@@ -86,3 +86,22 @@ fn abrupt_disconnect_never_promotes_partial_content() {
     );
     assert!(!root.path().join("items/adversarial/video.mp4").exists());
 }
+
+#[test]
+fn server_error_is_explicitly_retryable() {
+    let url = serve_once(|mut stream| {
+        stream
+            .write_all(
+                b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .unwrap();
+    });
+    let root = tempfile::tempdir().unwrap();
+    let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+    let error = engine
+        .transfer(&request(url), &AtomicBool::new(false))
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::HttpStatus);
+    assert!(error.retryable);
+    assert!(!root.path().join("items/adversarial/video.mp4").exists());
+}
