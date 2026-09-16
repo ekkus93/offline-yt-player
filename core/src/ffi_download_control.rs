@@ -106,7 +106,8 @@ mod tests {
         store
             .save_download_snapshot(&snapshot("job-1", DownloadState::Downloading))
             .unwrap();
-        let service = FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
+        let service =
+            FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
 
         assert!(service.pause("job-1".into()).updated);
         assert_eq!(
@@ -129,7 +130,8 @@ mod tests {
         store
             .save_download_snapshot(&snapshot("done", DownloadState::Completed))
             .unwrap();
-        let service = FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
+        let service =
+            FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
 
         let illegal = service.pause("done".into());
         assert_eq!(illegal.error.unwrap().kind, FfiErrorKind::Internal);
@@ -146,7 +148,8 @@ mod tests {
         store
             .save_download_snapshot(&snapshot("paused", DownloadState::Paused))
             .unwrap();
-        let service = FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
+        let service =
+            FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
 
         let result = service.pause("paused".into());
         assert!(!result.updated);
