@@ -69,11 +69,7 @@ fn server_ignoring_range_restarts_from_zero() {
     let temp = tempfile::tempdir().unwrap();
     let final_path = temp.path().join("items/fixture/video.mp4");
     fs::create_dir_all(final_path.parent().unwrap()).unwrap();
-    fs::write(
-        final_path.with_file_name(".video.mp4.partial"),
-        &body[..37],
-    )
-    .unwrap();
+    fs::write(final_path.with_file_name(".video.mp4.partial"), &body[..37]).unwrap();
     let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
 
     let result = engine
