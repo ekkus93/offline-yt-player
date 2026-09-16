@@ -1,10 +1,12 @@
 //! Stable, coarse-grained UniFFI-facing data boundary.
 //!
 //! The Android layer calls these APIs from background dispatchers. Long-running work is represented
-//! by durable job identifiers so cancellation remains an explicit application-level channel rather
-//! than depending on foreign-future cancellation semantics.
+//! by durable job identifiers and cooperative cancellation tokens so cancellation remains an
+//! explicit application-level channel rather than depending on foreign-future cancellation semantics.
 
 use crate::{CoreError, ErrorKind, MediaInfo, QualityChoice};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FfiSourceIdentity {
@@ -53,6 +55,49 @@ pub struct FfiError {
     pub kind: FfiErrorKind,
     pub message: String,
     pub retryable: bool,
+}
+
+/// Cooperative cancellation channel that can safely cross the UniFFI boundary.
+///
+/// Long-running Rust operations receive a clone of this object and check `is_canceled` at bounded
+/// interruption points. Android may call `cancel` from another thread without blocking the main
+/// thread or relying on foreign-future cancellation behavior.
+#[derive(Debug, uniffi::Object)]
+pub struct FfiCancellationToken {
+    canceled: AtomicBool,
+}
+
+#[uniffi::export]
+impl FfiCancellationToken {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            canceled: AtomicBool::new(false),
+        })
+    }
+
+    pub fn cancel(&self) {
+        self.canceled.store(true, Ordering::Release);
+    }
+
+    pub fn is_canceled(&self) -> bool {
+        self.canceled.load(Ordering::Acquire)
+    }
+}
+
+impl FfiCancellationToken {
+    /// Convert a requested cancellation into the same typed error exposed to Kotlin.
+    pub fn check(&self) -> Result<(), CoreError> {
+        if self.is_canceled() {
+            Err(CoreError::new(
+                ErrorKind::Canceled,
+                "Operation canceled",
+                false,
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl From<&MediaInfo> for FfiMediaSummary {
@@ -151,6 +196,24 @@ mod tests {
         let core = CoreError::new(ErrorKind::InsufficientStorage, "not enough space", false);
         let ffi = FfiError::from(&core);
         assert_eq!(ffi.kind, FfiErrorKind::InsufficientStorage);
+        assert!(!ffi.retryable);
+    }
+
+    #[test]
+    fn cancellation_is_cooperative_sticky_and_typed() {
+        let token = FfiCancellationToken::new();
+        assert!(!token.is_canceled());
+        token.check().unwrap();
+
+        token.cancel();
+        assert!(token.is_canceled());
+        token.cancel();
+        assert!(token.is_canceled());
+
+        let error = token.check().unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Canceled);
+        let ffi = FfiError::from(&error);
+        assert_eq!(ffi.kind, FfiErrorKind::Canceled);
         assert!(!ffi.retryable);
     }
 }
