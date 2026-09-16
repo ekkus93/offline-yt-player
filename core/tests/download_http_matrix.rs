@@ -1,5 +1,9 @@
-use offline_yt_core::{DownloadEngine, DownloadPolicy, TransferRequest, execute_with_retry};
+use offline_yt_core::{
+    DownloadEngine, DownloadPolicy, ErrorKind, TransferRequest, execute_with_retry,
+};
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -32,7 +36,7 @@ impl FixtureServer {
                     .headers()
                     .iter()
                     .any(|header| header.field.equiv("Range"));
-                request.respond(handler(call, has_range)).unwrap();
+                let _ = request.respond(handler(call, has_range));
             }
         });
         Self {
@@ -46,6 +50,38 @@ impl FixtureServer {
 impl Drop for FixtureServer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            handle.join().unwrap();
+        }
+    }
+}
+
+struct RawServer {
+    address: String,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl RawServer {
+    fn short_declared_body() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nabc")
+                .unwrap();
+        });
+        Self {
+            address,
+            handle: Some(handle),
+        }
+    }
+}
+
+impl Drop for RawServer {
+    fn drop(&mut self) {
         if let Some(handle) = self.handle.take() {
             handle.join().unwrap();
         }
@@ -104,4 +140,44 @@ fn retry_policy_recovers_from_fixture_http_500() {
 
     assert_eq!(result.bytes, body.len() as u64);
     assert_eq!(seen.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn request_timeout_is_bounded_and_typed() {
+    let server = FixtureServer::start(|_, _| {
+        thread::sleep(Duration::from_millis(200));
+        Response::from_data(b"late".to_vec())
+    });
+    let temp = tempfile::tempdir().unwrap();
+    let policy = DownloadPolicy {
+        request_timeout: Duration::from_millis(50),
+        ..DownloadPolicy::default()
+    };
+    let engine = DownloadEngine::new(temp.path(), policy).unwrap();
+    let error = engine
+        .transfer(&request(&server, 4), &AtomicBool::new(false))
+        .unwrap_err();
+
+    assert_eq!(error.kind, ErrorKind::NetworkTimeout);
+    assert!(error.retryable);
+}
+
+#[test]
+fn disconnect_with_incorrect_content_length_never_completes() {
+    let server = RawServer::short_declared_body();
+    let temp = tempfile::tempdir().unwrap();
+    let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+    let transfer = TransferRequest {
+        url: format!("{}/media", server.address),
+        relative_path: "items/fixture/video.mp4".into(),
+        expected_bytes: Some(100),
+        expected_sha256: None,
+    };
+
+    let error = engine
+        .transfer(&transfer, &AtomicBool::new(false))
+        .unwrap_err();
+
+    assert!(matches!(error.kind, ErrorKind::IntegrityFailure | ErrorKind::NetworkUnavailable));
+    assert!(!temp.path().join(&transfer.relative_path).exists());
 }
