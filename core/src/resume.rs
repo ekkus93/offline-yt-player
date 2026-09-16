@@ -31,7 +31,9 @@ impl ResumeRepresentation {
     /// otherwise use Last-Modified. Known total length is an additional consistency check.
     #[must_use]
     pub fn matches(&self, current: &Self) -> bool {
-        if self.url != current.url || !self.has_remote_validator() || !current.has_remote_validator()
+        if self.url != current.url
+            || !self.has_remote_validator()
+            || !current.has_remote_validator()
         {
             return false;
         }
@@ -147,8 +149,10 @@ mod tests {
 
     #[test]
     fn last_modified_is_valid_fallback() {
-        assert!(representation(None, Some("Wed, 16 Sep 2026 00:00:00 GMT"))
-            .matches(&representation(None, Some("Wed, 16 Sep 2026 00:00:00 GMT"))));
+        assert!(
+            representation(None, Some("Wed, 16 Sep 2026 00:00:00 GMT"))
+                .matches(&representation(None, Some("Wed, 16 Sep 2026 00:00:00 GMT")))
+        );
     }
 
     #[test]
@@ -168,7 +172,10 @@ mod tests {
         let partial = temp.path().join(".video.mp4.partial");
         let expected = representation(Some("fixture-v1"), None);
         save_resume_representation(&partial, &expected).unwrap();
-        assert_eq!(load_resume_representation(&partial).unwrap(), Some(expected));
+        assert_eq!(
+            load_resume_representation(&partial).unwrap(),
+            Some(expected)
+        );
         clear_resume_representation(&partial).unwrap();
         assert_eq!(load_resume_representation(&partial).unwrap(), None);
     }
