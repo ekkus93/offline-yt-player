@@ -1,4 +1,4 @@
-use crate::{CoreError, DownloadState, DownloadStateMachine, ErrorKind, LibraryStore};
+use crate::{CoreError, DownloadState, DownloadStateMachine, DurableDownloadSnapshot, ErrorKind, LibraryStore};
 use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -29,6 +29,21 @@ impl FfiDownloadControlService {
             })
     }
 
+    /// Persist a new durable queued job. The caller supplies the stable job identifier used by the
+    /// Android service and subsequent pause/resume/cancel operations.
+    pub fn enqueue(&self, job_id: String) -> FfiDownloadControlResult {
+        match self.enqueue_inner(&job_id) {
+            Ok(updated) => FfiDownloadControlResult {
+                updated,
+                error: None,
+            },
+            Err(error) => FfiDownloadControlResult {
+                updated: false,
+                error: Some(crate::ffi::FfiError::from(&error)),
+            },
+        }
+    }
+
     pub fn pause(&self, job_id: String) -> FfiDownloadControlResult {
         self.transition(&job_id, DownloadState::Paused)
     }
@@ -43,6 +58,30 @@ impl FfiDownloadControlService {
 }
 
 impl FfiDownloadControlService {
+    fn enqueue_inner(&self, job_id: &str) -> Result<bool, CoreError> {
+        if job_id.trim().is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "download job id must not be empty",
+                false,
+            ));
+        }
+        let snapshots = self.library.load_download_snapshots()?;
+        if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) {
+            return Ok(false);
+        }
+        self.library.save_download_snapshot(&DurableDownloadSnapshot {
+            job_id: job_id.into(),
+            state: DownloadState::Queued,
+            bytes_downloaded: 0,
+            total_bytes: None,
+            attempt: 0,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        })?;
+        Ok(true)
+    }
+
     fn transition(&self, job_id: &str, next: DownloadState) -> FfiDownloadControlResult {
         match self.transition_inner(job_id, next) {
             Ok(updated) => FfiDownloadControlResult {
@@ -84,7 +123,7 @@ impl FfiDownloadControlService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DurableDownloadSnapshot, FfiErrorKind};
+    use crate::FfiErrorKind;
 
     fn snapshot(job_id: &str, state: DownloadState) -> DurableDownloadSnapshot {
         DurableDownloadSnapshot {
@@ -96,6 +135,41 @@ mod tests {
             retry_at_epoch_ms: None,
             last_error: None,
         }
+    }
+
+    #[test]
+    fn enqueue_persists_a_new_queued_job_and_is_idempotent() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let store = LibraryStore::open(&database).unwrap();
+        let service =
+            FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
+
+        let first = service.enqueue("job-new".into());
+        assert!(first.updated);
+        assert!(first.error.is_none());
+        let saved = store.load_download_snapshots().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].job_id, "job-new");
+        assert_eq!(saved[0].state, DownloadState::Queued);
+        assert_eq!(saved[0].bytes_downloaded, 0);
+
+        let repeated = service.enqueue("job-new".into());
+        assert!(!repeated.updated);
+        assert!(repeated.error.is_none());
+        assert_eq!(store.load_download_snapshots().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn enqueue_rejects_empty_job_id_with_typed_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let service =
+            FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
+
+        let result = service.enqueue("  ".into());
+        assert!(!result.updated);
+        assert_eq!(result.error.unwrap().kind, FfiErrorKind::InvalidInput);
     }
 
     #[test]
