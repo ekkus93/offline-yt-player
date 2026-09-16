@@ -1,35 +1,48 @@
-# Generic download-engine audit
+# Generic Download Engine Audit
 
-This audit maps the current Rust implementation and automated qualification to OYP-501 through OYP-506. Items that are not yet fully demonstrated remain explicitly open.
+This audit maps OYP-501 through OYP-506 to the implementation on `master` as of the source-abstraction closeout. It intentionally distinguishes implemented behavior from qualification that is still missing.
 
 ## OYP-501 — HTTP transfer foundation
 
-`core/src/download.rs` configures bounded connect/request timeouts, an eight-hop redirect limit, Content-Length and Content-Range handling, a 64 GiB default asset bound, hidden `.partial` staging paths, and validated relative library paths. Source-generated filenames/paths pass the sanitizers in `core/src/security.rs`. The transfer code rejects oversized expected or declared bodies and verifies that ranged responses start at the requested offset.
+Implemented in `core/src/download.rs`:
+
+- `DownloadPolicy` provides bounded connect and request timeouts.
+- `reqwest::redirect::Policy::limited(8)` bounds redirect following.
+- `TransferRequest` carries expected size and checksum metadata.
+- `DownloadEngine::transfer` validates `Content-Length`, supports `Range`, and validates the starting offset of `Content-Range` before appending.
+- Transfers use hidden sibling `.partial` files and atomically rename only after validation.
+- `validate_relative_library_path` and the source adapter's filename sanitization keep remote metadata from becoming arbitrary filesystem paths.
+
+The existing fixture tests cover normal transfer and range resume. The implementation portion of OYP-501 is complete.
 
 ## OYP-502 — Pause/resume
 
-Continuation data is represented by the durable download snapshot persisted by `LibraryStore`, while partial bytes remain on disk. `DownloadEngine::transfer` discovers an existing partial, requests `Range: bytes=<existing>-`, and appends only when the server returns 206 with a matching Content-Range start. If a server ignores Range and returns a normal successful response, the engine truncates/restarts rather than appending incompatible bytes. The range-resume unit test proves successful reuse of a deterministic partial.
+The portable continuation primitive is a durable partial file plus persisted `DurableDownloadSnapshot` state in `LibraryStore`. Existing tests prove that a pre-existing partial is resumed with a ranged request and that the final bytes equal the fixture payload.
 
-A separate explicit pause coordinator/UI action remains part of the Android service/FFI milestones; this audit only closes the transfer-level continuation mechanics.
+When a server does not return `206 Partial Content`, the engine deliberately truncates/restarts the partial rather than appending incompatible bytes. When it does return `206`, the `Content-Range` start must exactly equal the existing partial length or the transfer fails with `IntegrityFailure`.
+
+This qualifies safe ranged continuation and fallback behavior. Higher-level pause/resume orchestration through the still-open FFI/download-service surface remains separate work.
 
 ## OYP-503 — Retry policy
 
-`classify_error` separates retryable network/HTTP/source-change failures from permanent failures. `retry_delay` implements bounded exponential delay with bounded caller-supplied jitter. `DownloadState::RetryWait` and durable snapshots expose retry state and retry time to consumers. Unit tests prove the backoff bound.
+`classify_error` separates retryable network/HTTP/source-change categories from permanent failures. `retry_delay` implements bounded exponential backoff with caller-supplied bounded jitter and has deterministic unit coverage. `DurableDownloadSnapshot` contains `RetryWait`, attempt count, retry deadline, and typed last error, making retry state persistable and consumable by UI/service layers.
+
+The policy primitives are implemented. End-to-end retry orchestration remains part of the higher-level service/FFI work.
 
 ## OYP-504 — Integrity and completion
 
-Transfers validate expected size when known, validate declared response length, calculate SHA-256 for every completed asset, optionally enforce an expected SHA-256, fsync the partial file, and rename it to the final path only after verification. Library promotion separately rejects incomplete items, so incomplete bytes cannot become completed library metadata through the supported path.
+`transfer` validates expected byte count when known, validates declared response length, computes SHA-256 for every completed transfer, optionally compares an expected SHA-256, and renames `.partial` to the final path only after those checks. `LibraryStore::promote_completed` separately refuses incomplete items. These layers prevent a partial transfer from becoming a completed library record.
 
 ## OYP-505 — Cleanup
 
-`DownloadPolicy.retain_partial_on_cancel` defines cancellation retention policy; `cleanup_orphan_partials()` recursively removes staged partials. Disk-full errno 28 maps to `InsufficientStorage`, and `preflight_space()` provides deterministic expected-vs-available storage rejection. Pre-canceled transfers are rejected before networking (qualified by the regression merged in PR #50).
+Implemented primitives include configurable retain/remove-partial-on-cancel policy, recursive orphan `.partial` cleanup, durable download snapshots/staged asset IDs for startup reconciliation, disk-space preflight, and ENOSPC mapping to `InsufficientStorage`.
 
-Startup orchestration that decides which persisted jobs/partials to resume or remove remains an OYP-1004/OYP-1804 concern and is not claimed complete here.
+One edge remains: a transfer whose cancellation token is already set still constructs/sends the HTTP request before cancellation is observed in the copy loop. That should be hardened with a pre-request cancellation check and deterministic regression test before OYP-505 is fully closed.
 
-## OYP-506 — Deterministic test server
+## OYP-506 — Download test server
 
-`download.rs` includes a local `tiny_http` fixture server and tests successful transfer plus ranged resume. Broader deterministic E2E fixture coverage has already exercised interruption/resume and storage preflight. Timeout, forced disconnect, malformed Content-Length, and retry-server behavior are not all individually covered by the unit fixture server, so OYP-506 remains partially open until those adversarial server cases are added.
+The Rust test suite contains a deterministic loopback HTTP fixture server with range support. Current automated tests cover successful transfer and resume. Broader deterministic fault injection for timeout, disconnect, malformed/incorrect content length, and retry orchestration is not yet present, so OYP-506 remains open.
 
-## Reconciliation guidance
+## Closeout status
 
-OYP-501, OYP-503, and OYP-504 can be reconciled as implemented. OYP-502 can reconcile its ranged-resume/fallback/verification mechanics while retaining any platform pause-orchestration obligation in the FFI/service tasks. OYP-505 retains startup reconciliation as open. OYP-506 retains the missing adversarial fixture cases as open. This avoids converting audit evidence into false completion claims.
+OYP-501 and OYP-504 are implementation-complete. OYP-502 and OYP-503 have the portable primitives but depend on higher-level orchestration for full milestone closeout. OYP-505 needs pre-cancel hardening. OYP-506 needs the remaining fault-injection matrix. This document must not be used to mark those still-open obligations complete without the corresponding code/tests.
