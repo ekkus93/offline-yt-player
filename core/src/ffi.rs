@@ -358,9 +358,6 @@ mod tests {
         let database = temp.path().join("missing-parent").join("library.sqlite3");
         let error = FfiCoreService::open(database.to_string_lossy().into_owned()).unwrap_err();
 
-        assert!(matches!(
-            error,
-            FfiCoreServiceOpenError::Persistence { .. }
-        ));
+        assert!(matches!(error, FfiCoreServiceOpenError::Persistence { .. }));
     }
 }
