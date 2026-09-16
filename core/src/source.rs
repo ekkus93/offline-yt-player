@@ -1,6 +1,6 @@
 use crate::domain::{
     CoreError, DownloadPlan, DownloadPlanAsset, ErrorKind, MediaFormat, MediaInfo, MediaKind,
-    QualityChoice, SourceIdentity,
+    QualityChoice, SourceIdentity, SubtitleTrack,
 };
 use crate::security::{sanitize_filename, sanitize_title, validate_http_url};
 use std::collections::HashMap;
@@ -17,6 +17,12 @@ pub trait MediaSource: Send + Sync {
     fn resolve<'a>(&'a self, url: &'a str) -> SourceFuture<'a, MediaInfo>;
     fn formats<'a>(&'a self, media: &'a MediaInfo) -> SourceFuture<'a, Vec<MediaFormat>> {
         Box::pin(async move { Ok(media.formats.clone()) })
+    }
+    fn subtitles<'a>(&'a self, media: &'a MediaInfo) -> SourceFuture<'a, Vec<SubtitleTrack>> {
+        Box::pin(async move { Ok(media.subtitles.clone()) })
+    }
+    fn thumbnail_url<'a>(&'a self, media: &'a MediaInfo) -> SourceFuture<'a, Option<String>> {
+        Box::pin(async move { Ok(media.thumbnail_url.clone()) })
     }
     fn choices<'a>(&'a self, media: &'a MediaInfo) -> SourceFuture<'a, Vec<QualityChoice>>;
     fn download_plan<'a>(
