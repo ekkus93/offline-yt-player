@@ -4,7 +4,7 @@
 //! by durable job identifiers and cooperative cancellation tokens so cancellation remains an
 //! explicit application-level channel rather than depending on foreign-future cancellation semantics.
 
-use crate::{CoreError, ErrorKind, MediaInfo, QualityChoice};
+use crate::{CoreError, ErrorKind, LibraryItem, LibraryStore, MediaInfo, QualityChoice};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -32,6 +32,18 @@ pub struct FfiQualityChoice {
     pub audio_only: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiLibraryItem {
+    pub item_id: String,
+    pub source: FfiSourceIdentity,
+    pub display_title: String,
+    pub duration_ms: Option<u64>,
+    pub quality_label: String,
+    pub created_at_epoch_ms: u64,
+    pub playback_position_ms: u64,
+    pub completed: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum FfiErrorKind {
     InvalidInput,
@@ -55,6 +67,84 @@ pub struct FfiError {
     pub kind: FfiErrorKind,
     pub message: String,
     pub retryable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiLibraryListResult {
+    pub items: Vec<FfiLibraryItem>,
+    pub error: Option<FfiError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiLibraryGetResult {
+    pub item: Option<FfiLibraryItem>,
+    pub error: Option<FfiError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiLibraryDeleteResult {
+    pub deleted: bool,
+    pub error: Option<FfiError>,
+}
+
+/// Coarse application service exported through UniFFI.
+///
+/// The service owns portable persistence and exposes operation-sized calls rather than leaking
+/// SQLite handles or repository internals across the language boundary. Android must invoke these
+/// potentially blocking calls through `CoreCallDispatcher`.
+#[derive(Debug, uniffi::Object)]
+pub struct FfiCoreService {
+    library: LibraryStore,
+}
+
+#[uniffi::export]
+impl FfiCoreService {
+    #[uniffi::constructor]
+    pub fn open(database_path: String) -> Arc<Self> {
+        match LibraryStore::open(&database_path) {
+            Ok(library) => Arc::new(Self { library }),
+            Err(error) => panic!("failed to open core database: {}", error.message),
+        }
+    }
+
+    pub fn library_list(&self, query: Option<String>) -> FfiLibraryListResult {
+        match self.library.list(query.as_deref()) {
+            Ok(items) => FfiLibraryListResult {
+                items: items.iter().map(FfiLibraryItem::from).collect(),
+                error: None,
+            },
+            Err(error) => FfiLibraryListResult {
+                items: Vec::new(),
+                error: Some(FfiError::from(&error)),
+            },
+        }
+    }
+
+    pub fn library_get(&self, item_id: String) -> FfiLibraryGetResult {
+        match self.library.get(&item_id) {
+            Ok(item) => FfiLibraryGetResult {
+                item: item.as_ref().map(FfiLibraryItem::from),
+                error: None,
+            },
+            Err(error) => FfiLibraryGetResult {
+                item: None,
+                error: Some(FfiError::from(&error)),
+            },
+        }
+    }
+
+    pub fn library_delete(&self, item_id: String) -> FfiLibraryDeleteResult {
+        match self.library.delete(&item_id) {
+            Ok(item) => FfiLibraryDeleteResult {
+                deleted: item.is_some(),
+                error: None,
+            },
+            Err(error) => FfiLibraryDeleteResult {
+                deleted: false,
+                error: Some(FfiError::from(&error)),
+            },
+        }
+    }
 }
 
 /// Cooperative cancellation channel that can safely cross the UniFFI boundary.
@@ -123,6 +213,25 @@ impl From<&QualityChoice> for FfiQualityChoice {
             estimated_bytes: value.estimated_bytes,
             video_height: value.video_height,
             audio_only: value.audio_only,
+        }
+    }
+}
+
+impl From<&LibraryItem> for FfiLibraryItem {
+    fn from(value: &LibraryItem) -> Self {
+        Self {
+            item_id: value.item_id.clone(),
+            source: FfiSourceIdentity {
+                provider: value.source.provider.clone(),
+                media_id: value.source.media_id.clone(),
+                canonical_url: value.source.canonical_url.clone(),
+            },
+            display_title: value.display_title.clone(),
+            duration_ms: value.duration_ms,
+            quality_label: value.quality_label.clone(),
+            created_at_epoch_ms: value.created_at_epoch_ms,
+            playback_position_ms: value.playback_position_ms,
+            completed: value.completed,
         }
     }
 }
@@ -215,5 +324,24 @@ mod tests {
         let ffi = FfiError::from(&error);
         assert_eq!(ffi.kind, FfiErrorKind::Canceled);
         assert!(!ffi.retryable);
+    }
+
+    #[test]
+    fn core_service_exposes_coarse_library_operations() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let service = FfiCoreService::open(database.to_string_lossy().into_owned());
+
+        let listed = service.library_list(None);
+        assert!(listed.error.is_none());
+        assert!(listed.items.is_empty());
+
+        let missing = service.library_get("missing".into());
+        assert!(missing.error.is_none());
+        assert!(missing.item.is_none());
+
+        let deleted = service.library_delete("missing".into());
+        assert!(deleted.error.is_none());
+        assert!(!deleted.deleted);
     }
 }
