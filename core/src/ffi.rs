@@ -69,6 +69,12 @@ pub struct FfiError {
     pub retryable: bool,
 }
 
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum FfiCoreServiceOpenError {
+    #[error("persistence error: {message}")]
+    Persistence { message: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FfiLibraryListResult {
     pub items: Vec<FfiLibraryItem>,
@@ -100,11 +106,12 @@ pub struct FfiCoreService {
 #[uniffi::export]
 impl FfiCoreService {
     #[uniffi::constructor]
-    pub fn open(database_path: String) -> Arc<Self> {
-        match LibraryStore::open(&database_path) {
-            Ok(library) => Arc::new(Self { library }),
-            Err(error) => panic!("failed to open core database: {}", error.message),
-        }
+    pub fn open(database_path: String) -> Result<Arc<Self>, FfiCoreServiceOpenError> {
+        LibraryStore::open(&database_path)
+            .map(|library| Arc::new(Self { library }))
+            .map_err(|error| FfiCoreServiceOpenError::Persistence {
+                message: error.message,
+            })
     }
 
     pub fn library_list(&self, query: Option<String>) -> FfiLibraryListResult {
@@ -330,7 +337,7 @@ mod tests {
     fn core_service_exposes_coarse_library_operations() {
         let temp = tempfile::tempdir().unwrap();
         let database = temp.path().join("library.sqlite3");
-        let service = FfiCoreService::open(database.to_string_lossy().into_owned());
+        let service = FfiCoreService::open(database.to_string_lossy().into_owned()).unwrap();
 
         let listed = service.library_list(None);
         assert!(listed.error.is_none());
@@ -343,5 +350,17 @@ mod tests {
         let deleted = service.library_delete("missing".into());
         assert!(deleted.error.is_none());
         assert!(!deleted.deleted);
+    }
+
+    #[test]
+    fn core_service_open_failure_is_typed_not_panicking() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("missing-parent").join("library.sqlite3");
+        let error = FfiCoreService::open(database.to_string_lossy().into_owned()).unwrap_err();
+
+        assert!(matches!(
+            error,
+            FfiCoreServiceOpenError::Persistence { .. }
+        ));
     }
 }
