@@ -1,5 +1,5 @@
 use offline_yt_core::{
-    classify_error, DownloadEngine, DownloadPolicy, ErrorKind, FailureClass, TransferRequest,
+    DownloadEngine, DownloadPolicy, ErrorKind, FailureClass, TransferRequest, classify_error,
 };
 use std::sync::atomic::AtomicBool;
 use std::thread;
@@ -21,12 +21,17 @@ fn incorrect_expected_length_is_integrity_failure() {
     let address = format!("http://{}", server.server_addr());
     let handle = thread::spawn(move || {
         let incoming = server.recv().unwrap();
-        incoming.respond(Response::from_data(b"short".to_vec())).unwrap();
+        incoming
+            .respond(Response::from_data(b"short".to_vec()))
+            .unwrap();
     });
     let temp = tempfile::tempdir().unwrap();
     let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
     let error = engine
-        .transfer(&request(format!("{address}/media"), Some(99)), &AtomicBool::new(false))
+        .transfer(
+            &request(format!("{address}/media"), Some(99)),
+            &AtomicBool::new(false),
+        )
         .unwrap_err();
     handle.join().unwrap();
     assert_eq!(error.kind, ErrorKind::IntegrityFailure);
@@ -49,7 +54,10 @@ fn request_timeout_is_bounded_and_retryable() {
     };
     let engine = DownloadEngine::new(temp.path(), policy).unwrap();
     let error = engine
-        .transfer(&request(format!("{address}/slow"), None), &AtomicBool::new(false))
+        .transfer(
+            &request(format!("{address}/slow"), None),
+            &AtomicBool::new(false),
+        )
         .unwrap_err();
     handle.join().unwrap();
     assert_eq!(error.kind, ErrorKind::NetworkTimeout);
@@ -62,14 +70,15 @@ fn retryable_http_failure_is_classified_for_retry_orchestration() {
     let address = format!("http://{}", server.server_addr());
     let handle = thread::spawn(move || {
         let incoming = server.recv().unwrap();
-        incoming
-            .respond(Response::empty(StatusCode(503)))
-            .unwrap();
+        incoming.respond(Response::empty(StatusCode(503))).unwrap();
     });
     let temp = tempfile::tempdir().unwrap();
     let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
     let error = engine
-        .transfer(&request(format!("{address}/busy"), None), &AtomicBool::new(false))
+        .transfer(
+            &request(format!("{address}/busy"), None),
+            &AtomicBool::new(false),
+        )
         .unwrap_err();
     handle.join().unwrap();
     assert_eq!(error.kind, ErrorKind::HttpStatus);
