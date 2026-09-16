@@ -1,4 +1,7 @@
-use crate::{CoreError, DownloadState, DownloadStateMachine, DurableDownloadSnapshot, ErrorKind, LibraryStore};
+use crate::{
+    CoreError, DownloadState, DownloadStateMachine, DurableDownloadSnapshot, ErrorKind,
+    LibraryStore,
+};
 use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -70,15 +73,16 @@ impl FfiDownloadControlService {
         if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) {
             return Ok(false);
         }
-        self.library.save_download_snapshot(&DurableDownloadSnapshot {
-            job_id: job_id.into(),
-            state: DownloadState::Queued,
-            bytes_downloaded: 0,
-            total_bytes: None,
-            attempt: 0,
-            retry_at_epoch_ms: None,
-            last_error: None,
-        })?;
+        self.library
+            .save_download_snapshot(&DurableDownloadSnapshot {
+                job_id: job_id.into(),
+                state: DownloadState::Queued,
+                bytes_downloaded: 0,
+                total_bytes: None,
+                attempt: 0,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            })?;
         Ok(true)
     }
 
