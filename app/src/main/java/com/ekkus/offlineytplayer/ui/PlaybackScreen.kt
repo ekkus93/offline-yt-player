@@ -1,3 +1,5 @@
+@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.ekkus.offlineytplayer.ui
 
 import android.widget.FrameLayout
