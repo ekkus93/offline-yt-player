@@ -4,9 +4,9 @@ This document qualifies the current Android application shell against `docs/OFFL
 
 ## Scope
 
-Audited commit: `bf0a25eda742decb775baf26ea914c22644daf3f`
+Audited commit: `002c90dbbf2b2a16b989921de625f5001954eca1`
 
-The audit covers the portrait-only Compose shell, bottom navigation, fixed-region layout primitives, and deterministic JVM qualification added for those constraints. Device/emulator screenshot and golden tests remain tracked by the later OYP-1700 and OYP-2300 closeout gates; they are not required to establish the shell skeleton.
+The audit covers the portrait-only Compose shell, bottom navigation, fixed-region layout primitives, explicit Midnight Transit typography and semantic tokens, and deterministic JVM qualification for those constraints. Device/emulator screenshot and golden tests remain tracked by the later OYP-1700 and OYP-2300 closeout gates; they are not required to establish the shell skeleton.
 
 ## OYP-201 — Compose application
 
@@ -14,8 +14,8 @@ Qualified by:
 
 - `app/build.gradle.kts` enables the Android application plugin, Compose compiler plugin, Compose build feature, and Material 3/Compose dependencies through the pinned version catalog.
 - `app/src/main/java/com/ekkus/offlineytplayer/MainActivity.kt` calls `setContent { OfflineYTPlayerApp(...) }`.
-- `app/src/main/java/com/ekkus/offlineytplayer/ui/Theme.kt` defines the Midnight Transit semantic palette, interaction tokens, spacing tokens, radius tokens, and minimum touch-target token.
-- `OfflineYTPlayerTheme` wraps the app in Material 3 `MaterialTheme` with dark, light, and system theme selection.
+- `app/src/main/java/com/ekkus/offlineytplayer/ui/Theme.kt` defines the Midnight Transit semantic palette, interaction tokens, spacing tokens, radius tokens, minimum touch-target token, and explicit Material 3 typography tokens.
+- `OfflineYTPlayerTheme` wraps the app in Material 3 `MaterialTheme` with dark, light, and system theme selection and supplies the Midnight Transit typography rather than relying on bare Material defaults.
 
 ## OYP-202 — Portrait-only enforcement
 
@@ -41,7 +41,7 @@ Qualified by:
 Qualified by:
 
 - `FixedRegionScaffold` establishes a fixed top app bar, bounded content callback, safe-drawing insets, and fixed bottom navigation.
-- Primary Add and Download Setup actions are placed in bounded rows, and advanced choices move to a dedicated subpage instead of hiding below the fold.
+- Primary Add and Download Setup actions are placed in bounded rows, and advanced choices move to a dedicated subpage instead of hiding them below the fold.
 - Settings use a hub plus focused subpages, limiting the number of primary rows on any compact portrait screen.
 - `PortraitLayoutPolicy` records the compact portrait and large-font assumptions used by deterministic layout-policy tests.
 - `AndroidShellPolicyTest.compactPortraitPrimaryControlsAreBudgeted` checks compact portrait and large-font budget assumptions.
@@ -49,9 +49,7 @@ Qualified by:
 
 ## Qualification evidence
 
-Automated evidence expected for this audit branch:
+- Android shell qualification branch exact-head CI `35061088299` passed at `788872a04f886895858f177286069839243093fa`.
+- Explicit Midnight Transit typography exact-head master CI `35100367233` passed at `002c90dbbf2b2a16b989921de625f5001954eca1`.
 
-- `./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug`
-- Repository CI exact-head run for the audit commit.
-
-The deterministic JVM test intentionally checks policy-level invariants that can run in ordinary CI. Later OYP-1700/OYP-2303 work must still provide broader screenshot/golden and closeout UX evidence before v1 release.
+OYP-201 through OYP-204 are implementation- and automated-qualification complete. The canonical TODO checkboxes remain a reconciliation step and must only be flipped after this refreshed evidence is merged. Later OYP-1700/OYP-2303 work still owns broader screenshot/golden and final portrait UX evidence before v1 release.
