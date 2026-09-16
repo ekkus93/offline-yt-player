@@ -30,7 +30,8 @@ fn request(url: String) -> TransferRequest {
 fn request_timeout_is_bounded_and_retryable() {
     let url = serve_once(|mut stream| {
         thread::sleep(Duration::from_millis(250));
-        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+        let _ = stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
     });
     let root = tempfile::tempdir().unwrap();
     let policy = DownloadPolicy {
