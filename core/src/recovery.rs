@@ -41,7 +41,10 @@ pub fn plan_startup_recovery(
     snapshots: &[DurableDownloadSnapshot],
     staged_job_ids: &[String],
 ) -> StartupRecoveryPlan {
-    let durable_ids: HashSet<&str> = snapshots.iter().map(|snapshot| snapshot.job_id.as_str()).collect();
+    let durable_ids: HashSet<&str> = snapshots
+        .iter()
+        .map(|snapshot| snapshot.job_id.as_str())
+        .collect();
     let staged_ids: HashSet<&str> = staged_job_ids.iter().map(String::as_str).collect();
 
     let jobs = snapshots
@@ -107,26 +110,50 @@ mod tests {
             snapshot("paused", DownloadState::Paused),
         ];
         let plan = plan_startup_recovery(&snapshots, &[]);
-        assert_eq!(plan.jobs[0].disposition, StartupDisposition::RequeueInterrupted);
-        assert_eq!(plan.jobs[1].disposition, StartupDisposition::RequeueInterrupted);
-        assert_eq!(plan.jobs[2].disposition, StartupDisposition::RequeueInterrupted);
+        assert_eq!(
+            plan.jobs[0].disposition,
+            StartupDisposition::RequeueInterrupted
+        );
+        assert_eq!(
+            plan.jobs[1].disposition,
+            StartupDisposition::RequeueInterrupted
+        );
+        assert_eq!(
+            plan.jobs[2].disposition,
+            StartupDisposition::RequeueInterrupted
+        );
         assert_eq!(plan.jobs[3].disposition, StartupDisposition::PreservePaused);
     }
 
     #[test]
     fn terminal_and_retry_states_are_not_accidentally_restarted() {
-        for state in [DownloadState::Failed, DownloadState::Completed, DownloadState::Canceled] {
+        for state in [
+            DownloadState::Failed,
+            DownloadState::Completed,
+            DownloadState::Canceled,
+        ] {
             let plan = plan_startup_recovery(&[snapshot("job", state)], &[]);
-            assert_eq!(plan.jobs[0].disposition, StartupDisposition::PreserveTerminal);
+            assert_eq!(
+                plan.jobs[0].disposition,
+                StartupDisposition::PreserveTerminal
+            );
         }
         let plan = plan_startup_recovery(&[snapshot("retry", DownloadState::RetryWait)], &[]);
-        assert_eq!(plan.jobs[0].disposition, StartupDisposition::PreserveRetryWait);
+        assert_eq!(
+            plan.jobs[0].disposition,
+            StartupDisposition::PreserveRetryWait
+        );
     }
 
     #[test]
     fn staged_assets_are_correlated_and_orphans_are_reported_deterministically() {
         let snapshots = vec![snapshot("known", DownloadState::Downloading)];
-        let staged = vec!["orphan-b".into(), "known".into(), "orphan-a".into(), "orphan-a".into()];
+        let staged = vec![
+            "orphan-b".into(),
+            "known".into(),
+            "orphan-a".into(),
+            "orphan-a".into(),
+        ];
         let plan = plan_startup_recovery(&snapshots, &staged);
         assert!(plan.jobs[0].has_staged_assets);
         assert_eq!(plan.orphan_staged_job_ids, vec!["orphan-a", "orphan-b"]);
