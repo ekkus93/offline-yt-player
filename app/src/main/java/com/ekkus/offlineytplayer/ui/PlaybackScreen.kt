@@ -1,5 +1,3 @@
-@file:OptIn(androidx.media3.common.util.UnstableApi::class)
-
 package com.ekkus.offlineytplayer.ui
 
 import android.widget.FrameLayout
@@ -38,6 +36,7 @@ internal object PlayerLayoutPolicy {
     const val SupportsSeparateLocalAudioVideo = true
 }
 
+@androidx.media3.common.util.UnstableApi
 @Composable
 internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit) {
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
