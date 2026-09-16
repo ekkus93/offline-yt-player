@@ -64,11 +64,8 @@ mod tests {
 
     #[test]
     fn network_and_source_change_are_distinct() {
-        let network = youtube_diagnostic(&CoreError::new(
-            ErrorKind::NetworkTimeout,
-            "timeout",
-            true,
-        ));
+        let network =
+            youtube_diagnostic(&CoreError::new(ErrorKind::NetworkTimeout, "timeout", true));
         let changed = youtube_diagnostic(&CoreError::new(
             ErrorKind::SourceChanged,
             "player signature changed",
