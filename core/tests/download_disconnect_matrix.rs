@@ -30,13 +30,17 @@ fn transfer_request(address: &str, expected_bytes: Option<u64>) -> TransferReque
 
 #[test]
 fn disconnect_with_incorrect_content_length_never_promotes_partial_content() {
-    let response = b"HTTP/1.1 200 OK\r\nContent-Length: 64\r\nConnection: close\r\n\r\nshort".to_vec();
+    let response =
+        b"HTTP/1.1 200 OK\r\nContent-Length: 64\r\nConnection: close\r\n\r\nshort".to_vec();
     let (address, server) = raw_server(response);
     let temp = tempfile::tempdir().unwrap();
     let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
 
     let error = engine
-        .transfer(&transfer_request(&address, Some(64)), &AtomicBool::new(false))
+        .transfer(
+            &transfer_request(&address, Some(64)),
+            &AtomicBool::new(false),
+        )
         .unwrap_err();
 
     server.join().unwrap();
@@ -45,10 +49,11 @@ fn disconnect_with_incorrect_content_length_never_promotes_partial_content() {
         ErrorKind::IntegrityFailure | ErrorKind::NetworkUnavailable | ErrorKind::Internal
     ));
     assert!(!temp.path().join("items/fixture/video.mp4").exists());
-    assert!(temp
-        .path()
-        .join("items/fixture/.video.mp4.partial")
-        .exists());
+    assert!(
+        temp.path()
+            .join("items/fixture/.video.mp4.partial")
+            .exists()
+    );
 }
 
 #[test]
