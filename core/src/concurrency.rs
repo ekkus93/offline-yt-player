@@ -35,7 +35,10 @@ impl DownloadConcurrencyGate {
     }
 
     pub fn acquire(&self) -> DownloadPermit<'_> {
-        let mut active = self.active.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         while *active >= self.limit {
             active = self
                 .changed
@@ -48,7 +51,10 @@ impl DownloadConcurrencyGate {
 
     #[must_use]
     pub fn try_acquire(&self) -> Option<DownloadPermit<'_>> {
-        let mut active = self.active.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if *active >= self.limit {
             return None;
         }
@@ -58,7 +64,10 @@ impl DownloadConcurrencyGate {
 
     #[must_use]
     pub fn active(&self) -> usize {
-        *self.active.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        *self
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
