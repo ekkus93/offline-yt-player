@@ -18,7 +18,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
@@ -29,19 +33,28 @@ internal object PlayerLayoutPolicy {
     const val SecondaryControlActions = 3
     const val HasScrollingControls = false
     const val HasLandscapeAction = false
+    const val SupportsSeparateLocalAudioVideo = true
 }
 
 @Composable
 internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit) {
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
     val context = LocalContext.current
-    val player = remember(validated.videoPath) {
+    val player = remember(validated.videoPath, validated.audioPath) {
+        val dataSourceFactory = DefaultDataSource.Factory(context)
+        fun progressive(path: String): MediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(LocalPlaybackPolicy.mediaItemFor(path))
+
+        val mediaSource = validated.audioPath?.let { audioPath ->
+            MergingMediaSource(progressive(validated.videoPath), progressive(audioPath))
+        } ?: progressive(validated.videoPath)
+
         ExoPlayer.Builder(context)
             .setSeekBackIncrementMs(LocalPlaybackPolicy.SkipIntervalMs)
             .setSeekForwardIncrementMs(LocalPlaybackPolicy.SkipIntervalMs)
             .build()
             .apply {
-                setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated.videoPath), validated.startPositionMs)
+                setMediaSource(mediaSource, validated.startPositionMs)
                 prepare()
             }
     }
