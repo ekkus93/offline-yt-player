@@ -8,13 +8,13 @@ This audit maps the current Rust implementation and automated qualification to O
 
 ## OYP-502 — Pause/resume
 
-Continuation data is represented by the durable download snapshot persisted by `LibraryStore`, while partial bytes remain on disk. `DownloadEngine::transfer` discovers an existing partial, requests `Range: bytes=<existing>-`, and appends only when the server returns 206 with a matching Content-Range start. If a server ignores Range and returns a normal successful response, the engine truncates/restarts rather than appending incompatible bytes. The range-resume unit test proves successful reuse of a deterministic partial.
+Continuation data is represented by the durable download snapshot persisted by `LibraryStore`, while partial bytes remain on disk. `DownloadEngine::transfer` discovers an existing partial, requests `Range: bytes=<existing>-`, and appends only when the server returns 206 with a matching Content-Range start. If a server ignores Range and returns a normal successful response, the engine truncates/restarts rather than appending incompatible bytes. Deterministic tests prove successful range reuse and reject a mismatched Content-Range without modifying or promoting the existing partial.
 
-A separate explicit pause coordinator/UI action remains part of the Android service/FFI milestones; this audit only closes the transfer-level continuation mechanics.
+A separate explicit pause coordinator/UI action remains part of the Android service/FFI milestones; this audit closes the transfer-level continuation mechanics only.
 
 ## OYP-503 — Retry policy
 
-`classify_error` separates retryable network/HTTP/source-change failures from permanent failures. `retry_delay` implements bounded exponential delay with bounded caller-supplied jitter. `DownloadState::RetryWait` and durable snapshots expose retry state and retry time to consumers. Unit tests prove the backoff bound.
+`classify_error` separates retryable network/HTTP/source-change failures from permanent failures. `retry_delay` implements bounded exponential delay with bounded caller-supplied jitter. `DownloadState::RetryWait` and durable snapshots expose retry state and retry time to consumers. Unit tests prove the backoff bound, and the adversarial fixture proves a server-side 503 is surfaced as an explicitly retryable HTTP failure.
 
 ## OYP-504 — Integrity and completion
 
@@ -28,8 +28,8 @@ Startup orchestration that decides which persisted jobs/partials to resume or re
 
 ## OYP-506 — Deterministic test server
 
-`download.rs` includes a local `tiny_http` fixture server and tests successful transfer plus ranged resume. Broader deterministic E2E fixture coverage has already exercised interruption/resume and storage preflight. Timeout, forced disconnect, malformed Content-Length, and retry-server behavior are not all individually covered by the unit fixture server, so OYP-506 remains partially open until those adversarial server cases are added.
+The Rust suite uses local loopback fixture servers only; it does not depend on live external services. The `tiny_http` fixture covers successful transfer and ranged resume, while `core/tests/download_adversarial.rs` covers bounded timeout, abrupt disconnect, incorrect/truncated Content-Length, retryable HTTP failure, and mismatched Content-Range rejection. The deterministic E2E fixture flow separately exercises interruption/restart and ranged continuation. Together these cover the OYP-506 adversarial server matrix.
 
 ## Reconciliation guidance
 
-OYP-501, OYP-503, and OYP-504 can be reconciled as implemented. OYP-502 can reconcile its ranged-resume/fallback/verification mechanics while retaining any platform pause-orchestration obligation in the FFI/service tasks. OYP-505 retains startup reconciliation as open. OYP-506 retains the missing adversarial fixture cases as open. This avoids converting audit evidence into false completion claims.
+OYP-501, OYP-503, OYP-504, and OYP-506 can be reconciled as implemented. OYP-502 can reconcile its persisted/ranged-resume/fallback/verification mechanics while retaining platform pause-orchestration obligations in the FFI/service tasks. OYP-505 can reconcile cancellation policy, orphan cleanup, and storage-pressure handling; startup reconciliation remains open under OYP-505/OYP-1004/OYP-1804. This avoids converting transfer-layer evidence into false platform-orchestration claims.
