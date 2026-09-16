@@ -70,7 +70,9 @@ impl RawServer {
             let mut request = [0_u8; 2048];
             let _ = stream.read(&mut request);
             stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nabc")
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nabc",
+                )
                 .unwrap();
         });
         Self {
@@ -178,6 +180,9 @@ fn disconnect_with_incorrect_content_length_never_completes() {
         .transfer(&transfer, &AtomicBool::new(false))
         .unwrap_err();
 
-    assert!(matches!(error.kind, ErrorKind::IntegrityFailure | ErrorKind::NetworkUnavailable));
+    assert!(matches!(
+        error.kind,
+        ErrorKind::IntegrityFailure | ErrorKind::NetworkUnavailable
+    ));
     assert!(!temp.path().join(&transfer.relative_path).exists());
 }
