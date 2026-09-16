@@ -5,8 +5,8 @@
 //! explicit application-level channel rather than depending on foreign-future cancellation semantics.
 
 use crate::{CoreError, ErrorKind, MediaInfo, QualityChoice};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FfiSourceIdentity {
