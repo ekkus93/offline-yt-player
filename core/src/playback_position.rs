@@ -105,8 +105,14 @@ mod tests {
         store.promote_completed("job-1", &item()).unwrap();
         let policy = PlaybackPositionPolicy::default();
         assert!(persist_playback_position(&store, "item-1", 25_000, Some(60_000), policy).unwrap());
-        assert_eq!(store.get("item-1").unwrap().unwrap().playback_position_ms, 25_000);
+        assert_eq!(
+            store.get("item-1").unwrap().unwrap().playback_position_ms,
+            25_000
+        );
         assert!(persist_playback_position(&store, "item-1", 55_000, Some(60_000), policy).unwrap());
-        assert_eq!(store.get("item-1").unwrap().unwrap().playback_position_ms, 60_000);
+        assert_eq!(
+            store.get("item-1").unwrap().unwrap().playback_position_ms,
+            60_000
+        );
     }
 }
