@@ -14,11 +14,13 @@ class LocalPlaybackPolicyTest {
                 videoPath = "/library/video-1080p.mp4",
                 audioPath = "/library/audio-128k.m4a",
                 title = "Fixture title",
+                startPositionMs = 42_000L,
             ),
         )
 
         assertEquals("/library/video-1080p.mp4", plan.videoPath)
         assertEquals("/library/audio-128k.m4a", plan.audioPath)
+        assertEquals(42_000L, plan.startPositionMs)
         assertTrue(plan.usesSeparateAudioVideoAssets)
     }
 
@@ -33,6 +35,7 @@ class LocalPlaybackPolicyTest {
 
         assertEquals("/library/combined.mp4", plan.videoPath)
         assertEquals(null, plan.audioPath)
+        assertEquals(0L, plan.startPositionMs)
         assertFalse(plan.usesSeparateAudioVideoAssets)
     }
 

@@ -19,6 +19,7 @@ internal data class LocalPlaybackAsset(
 internal data class LocalPlaybackSourcePlan(
     val videoPath: String,
     val audioPath: String? = null,
+    val startPositionMs: Long = 0,
 ) {
     val usesSeparateAudioVideoAssets: Boolean
         get() = audioPath != null
@@ -47,6 +48,7 @@ internal object LocalPlaybackPolicy {
         return LocalPlaybackSourcePlan(
             videoPath = validated.videoPath,
             audioPath = validated.audioPath,
+            startPositionMs = validated.startPositionMs,
         )
     }
 
