@@ -11,6 +11,46 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.ekkus.offlineytplayer.MainActivity
 
+internal enum class DownloadNetworkPreference {
+    AnyNetwork,
+    WifiOnly,
+}
+
+internal enum class DownloadConnectivity {
+    None,
+    Metered,
+    Unmetered,
+}
+
+internal enum class DownloadNetworkDecision {
+    Allow,
+    PauseForConnectivity,
+}
+
+internal object DownloadNetworkPolicy {
+    const val SupportsWifiOnly = true
+    const val PausesOnConnectivityLoss = true
+    const val SilentPreferenceViolationAllowed = false
+
+    fun decision(
+        preference: DownloadNetworkPreference,
+        connectivity: DownloadConnectivity,
+    ): DownloadNetworkDecision = when (preference) {
+        DownloadNetworkPreference.AnyNetwork -> when (connectivity) {
+            DownloadConnectivity.None -> DownloadNetworkDecision.PauseForConnectivity
+            DownloadConnectivity.Metered,
+            DownloadConnectivity.Unmetered,
+            -> DownloadNetworkDecision.Allow
+        }
+        DownloadNetworkPreference.WifiOnly -> when (connectivity) {
+            DownloadConnectivity.Unmetered -> DownloadNetworkDecision.Allow
+            DownloadConnectivity.None,
+            DownloadConnectivity.Metered,
+            -> DownloadNetworkDecision.PauseForConnectivity
+        }
+    }
+}
+
 internal object DownloadServicePolicy {
     const val ChannelId = "offline_downloads"
     const val NotificationId = 4100
@@ -18,6 +58,7 @@ internal object DownloadServicePolicy {
     const val SupportsPauseResumeCancel = true
     const val ReportsCompletionAndFailure = true
     const val ReconcilesDurableQueueOnStart = true
+    const val HonorsNetworkPreference = true
 }
 
 class DownloadForegroundService : Service() {
@@ -33,7 +74,7 @@ class DownloadForegroundService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_PAUSE, ACTION_RESUME, ACTION_CANCEL -> Unit
+            ACTION_PAUSE, ACTION_RESUME, ACTION_CANCEL, ACTION_CONNECTIVITY_RETRY -> Unit
         }
         startForeground(DownloadServicePolicy.NotificationId, activeNotification())
         return START_STICKY
@@ -87,5 +128,6 @@ class DownloadForegroundService : Service() {
         const val ACTION_RESUME = "com.ekkus.offlineytplayer.download.RESUME"
         const val ACTION_CANCEL = "com.ekkus.offlineytplayer.download.CANCEL"
         const val ACTION_STOP = "com.ekkus.offlineytplayer.download.STOP"
+        const val ACTION_CONNECTIVITY_RETRY = "com.ekkus.offlineytplayer.download.CONNECTIVITY_RETRY"
     }
 }
