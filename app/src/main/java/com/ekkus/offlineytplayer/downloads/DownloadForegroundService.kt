@@ -59,6 +59,8 @@ internal object DownloadServicePolicy {
     const val ReportsCompletionAndFailure = true
     const val ReconcilesDurableQueueOnStart = true
     const val HonorsNetworkPreference = true
+    const val SupportsBootRecovery = true
+    const val FailsInterruptedTransfersExplicitly = true
 }
 
 class DownloadForegroundService : Service() {
@@ -74,7 +76,12 @@ class DownloadForegroundService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_PAUSE, ACTION_RESUME, ACTION_CANCEL, ACTION_CONNECTIVITY_RETRY -> Unit
+            ACTION_PAUSE,
+            ACTION_RESUME,
+            ACTION_CANCEL,
+            ACTION_CONNECTIVITY_RETRY,
+            ACTION_RECONCILE_AFTER_REBOOT,
+            -> Unit
         }
         startForeground(DownloadServicePolicy.NotificationId, activeNotification())
         return START_STICKY
@@ -129,5 +136,6 @@ class DownloadForegroundService : Service() {
         const val ACTION_CANCEL = "com.ekkus.offlineytplayer.download.CANCEL"
         const val ACTION_STOP = "com.ekkus.offlineytplayer.download.STOP"
         const val ACTION_CONNECTIVITY_RETRY = "com.ekkus.offlineytplayer.download.CONNECTIVITY_RETRY"
+        const val ACTION_RECONCILE_AFTER_REBOOT = "com.ekkus.offlineytplayer.download.RECONCILE_AFTER_REBOOT"
     }
 }
