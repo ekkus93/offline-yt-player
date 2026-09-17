@@ -106,7 +106,9 @@ fn incorrect_content_length_is_rejected_before_promotion() {
 fn interruption_retains_partial_without_promoting_it() {
     let server = RawFixture::once(|mut stream| {
         stream
-            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\nETag: \"fixture-v1\"\r\n\r\nfirst-")
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\nETag: \"fixture-v1\"\r\n\r\nfirst-",
+            )
             .unwrap();
         stream.flush().unwrap();
         thread::sleep(Duration::from_millis(120));
@@ -128,5 +130,9 @@ fn interruption_retains_partial_without_promoting_it() {
     trigger.join().unwrap();
     assert_eq!(error.kind, ErrorKind::Canceled);
     assert!(!temp.path().join("items/fixture/video.mp4").exists());
-    assert!(temp.path().join("items/fixture/.video.mp4.partial").exists());
+    assert!(
+        temp.path()
+            .join("items/fixture/.video.mp4.partial")
+            .exists()
+    );
 }
