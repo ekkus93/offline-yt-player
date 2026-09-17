@@ -1,3 +1,7 @@
+//! Portable domain core for Offline YT Player.
+//!
+//! Android-specific presentation, lifecycle, notifications, and playback stay outside this crate.
+
 pub mod concurrency;
 pub mod domain;
 pub mod download;
@@ -5,23 +9,55 @@ pub mod events;
 pub mod ffi;
 pub mod ffi_download_control;
 pub mod ffi_source;
-pub mod fixture_server;
-pub mod integrity;
+pub mod offline_assets;
 pub mod persistence;
 pub mod playback_position;
 pub mod resume;
 pub mod resume_http;
 pub mod retry;
+pub mod security;
 pub mod source;
 pub mod startup_reconciliation;
 pub mod state;
 pub mod youtube;
 pub mod youtube_diagnostics;
-pub mod youtube_metadata;
-pub mod youtube_normalization;
+pub mod youtube_extract;
 
+pub use concurrency::*;
 pub use domain::*;
+pub use download::*;
+pub use events::*;
+pub use ffi::*;
+pub use ffi_download_control::*;
+pub use ffi_source::*;
+pub use offline_assets::*;
 pub use persistence::*;
 pub use playback_position::*;
+pub use resume::*;
+pub use resume_http::*;
+pub use retry::*;
+pub use security::*;
+pub use source::*;
+pub use startup_reconciliation::*;
+pub use state::*;
+pub use youtube::*;
+pub use youtube_diagnostics::*;
+pub use youtube_extract::*;
 
 uniffi::setup_scaffolding!();
+
+/// Returns a stable human-readable identifier used by diagnostics.
+#[must_use]
+pub const fn core_identity() -> &'static str {
+    "offline-yt-core"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identity_is_stable() {
+        assert_eq!(core_identity(), "offline-yt-core");
+    }
+}
