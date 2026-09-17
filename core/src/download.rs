@@ -124,7 +124,11 @@ impl DownloadEngine {
         validate_http_url(&request.url)?;
         validate_relative_library_path(&request.relative_path)?;
         if cancel.load(Ordering::Relaxed) {
-            return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
+            return Err(CoreError::new(
+                ErrorKind::Canceled,
+                "Download canceled",
+                false,
+            ));
         }
         if request
             .expected_bytes
@@ -212,7 +216,11 @@ impl DownloadEngine {
                     let _ = fs::remove_file(&partial_path);
                     clear_resume_representation(&partial_path)?;
                 }
-                return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
+                return Err(CoreError::new(
+                    ErrorKind::Canceled,
+                    "Download canceled",
+                    false,
+                ));
             }
             let count = response.read(&mut buffer).map_err(io_error)?;
             if count == 0 {
@@ -399,7 +407,7 @@ fn io_error(error: std::io::Error) -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resume::{load_resume_representation, resume_metadata_path, ResumeRepresentation};
+    use crate::resume::{ResumeRepresentation, load_resume_representation, resume_metadata_path};
     use std::sync::Arc;
     use std::thread;
     use tiny_http::{Header, Response as TinyResponse, Server, StatusCode};
@@ -434,12 +442,16 @@ mod tests {
                             .unwrap_or(0)
                             .min(body.len());
                         let slice = body[start..].to_vec();
-                        let mut response = TinyResponse::from_data(slice)
-                            .with_status_code(StatusCode(206));
+                        let mut response =
+                            TinyResponse::from_data(slice).with_status_code(StatusCode(206));
                         response.add_header(
                             Header::from_bytes(
                                 b"Content-Range".as_slice(),
-                                format!("bytes {start}-{}/{}", body.len().saturating_sub(1), body.len()),
+                                format!(
+                                    "bytes {start}-{}/{}",
+                                    body.len().saturating_sub(1),
+                                    body.len()
+                                ),
                             )
                             .unwrap(),
                         );
@@ -497,8 +509,14 @@ mod tests {
         let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
         assert_eq!(result.bytes, data.len() as u64);
         assert!(!result.resumed);
-        assert_eq!(fs::read(temp.path().join(&request.relative_path)).unwrap(), data);
-        assert!(!resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path))).exists());
+        assert_eq!(
+            fs::read(temp.path().join(&request.relative_path)).unwrap(),
+            data
+        );
+        assert!(
+            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path)))
+                .exists()
+        );
     }
 
     #[test]
@@ -572,7 +590,9 @@ mod tests {
             expected_bytes: None,
             expected_sha256: None,
         };
-        let error = engine.transfer(&request, &AtomicBool::new(true)).unwrap_err();
+        let error = engine
+            .transfer(&request, &AtomicBool::new(true))
+            .unwrap_err();
         assert_eq!(error.kind, ErrorKind::Canceled);
         assert!(!temp.path().join("items/one/video.mp4").exists());
     }
