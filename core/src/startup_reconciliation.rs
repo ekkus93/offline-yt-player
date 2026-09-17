@@ -86,7 +86,12 @@ mod tests {
             if requires_live_worker(before) {
                 assert_eq!(after.state, DownloadState::Queued);
                 assert!(after.retry_at_epoch_ms.is_none());
-                assert!(after.last_error.as_ref().is_some_and(|error| error.retryable));
+                assert!(
+                    after
+                        .last_error
+                        .as_ref()
+                        .is_some_and(|error| error.retryable)
+                );
             } else {
                 assert_eq!(after.state, before);
                 assert_eq!(after.retry_at_epoch_ms, Some(500));
@@ -101,7 +106,13 @@ mod tests {
         store
             .save_download_snapshot(&snapshot("active", DownloadState::Downloading))
             .unwrap();
-        assert_eq!(reconcile_startup_downloads(&store).unwrap().jobs_requeued, 1);
-        assert_eq!(reconcile_startup_downloads(&store).unwrap().jobs_requeued, 0);
+        assert_eq!(
+            reconcile_startup_downloads(&store).unwrap().jobs_requeued,
+            1
+        );
+        assert_eq!(
+            reconcile_startup_downloads(&store).unwrap().jobs_requeued,
+            0
+        );
     }
 }
