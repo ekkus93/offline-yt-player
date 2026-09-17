@@ -322,12 +322,14 @@ Evidence: `docs/MEDIA_ASSET_STRATEGY_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILI
 Evidence: `docs/LOCAL_PLAYER_INTEGRATION_AUDIT.md`; push CI `35254195590`, PR CI `35256895958`, and post-merge master CI `35257195496` passed at `835c72436bb0ccc5874e770864f9dd7ebf0f233d`. Full device playback behavior remains tracked under OYP-905 and OYP-1900.
 
 ### OYP-902 — Portrait player screen
-- [ ] Fixed full-width 16:9 video surface.
-- [ ] Fixed title/timeline/transport/secondary control regions.
-- [ ] Skip back/play-pause/skip forward.
-- [ ] Speed/subtitles/audio controls.
-- [ ] No rotate/fullscreen-landscape action.
-- [ ] No scrolling required for playback controls.
+- [x] Fixed full-width 16:9 video surface.
+- [x] Fixed title/timeline/transport/secondary control regions.
+- [x] Skip back/play-pause/skip forward.
+- [x] Speed/subtitles/audio controls.
+- [x] No rotate/fullscreen-landscape action.
+- [x] No scrolling required for playback controls.
+
+Evidence: `docs/PORTRAIT_PLAYER_SCREEN_AUDIT.md`; corrected push CI `35259246198`, PR CI `35259549539`, and post-merge master CI `35259858274` passed at `64c0935fa081d94b239336ee36f9f2721adb32a2`.
 
 ### OYP-903 — Playback position
 - [ ] Persist periodically and on lifecycle transitions.
