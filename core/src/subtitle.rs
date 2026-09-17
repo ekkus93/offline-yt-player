@@ -32,7 +32,10 @@ pub fn choose_subtitle_track<'a>(
         .or_else(|| tracks.first())
 }
 
-pub fn subtitle_asset_plan(item_id: &str, track: &SubtitleTrack) -> Result<SubtitleAssetPlan, CoreError> {
+pub fn subtitle_asset_plan(
+    item_id: &str,
+    track: &SubtitleTrack,
+) -> Result<SubtitleAssetPlan, CoreError> {
     let item_id = safe_segment(item_id, "item id")?;
     let track_id = safe_segment(&track.track_id, "subtitle track id")?;
     let language = safe_segment(&track.format.language, "subtitle language")?;
@@ -46,7 +49,7 @@ pub fn subtitle_asset_plan(item_id: &str, track: &SubtitleTrack) -> Result<Subti
                 ErrorKind::InvalidInput,
                 "unsupported local subtitle format",
                 false,
-            ))
+            ));
         }
     };
 
@@ -133,8 +136,18 @@ mod tests {
             track("human-en", "en", "vtt", false),
             track("human-es", "es", "srt", false),
         ];
-        assert_eq!("human-es", choose_subtitle_track(&tracks, Some("human-es"), Some("en")).unwrap().track_id);
-        assert_eq!("human-en", choose_subtitle_track(&tracks, None, Some("en")).unwrap().track_id);
+        assert_eq!(
+            "human-es",
+            choose_subtitle_track(&tracks, Some("human-es"), Some("en"))
+                .unwrap()
+                .track_id
+        );
+        assert_eq!(
+            "human-en",
+            choose_subtitle_track(&tracks, None, Some("en"))
+                .unwrap()
+                .track_id
+        );
     }
 
     #[test]
@@ -171,6 +184,9 @@ mod tests {
             sha256: None,
             mime_type: Some("video/mp4".into()),
         };
-        assert_eq!(vec![&subtitle], local_subtitle_assets(&[subtitle.clone(), video]));
+        assert_eq!(
+            vec![&subtitle],
+            local_subtitle_assets(&[subtitle.clone(), video])
+        );
     }
 }
