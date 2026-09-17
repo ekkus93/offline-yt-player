@@ -11,6 +11,7 @@ name = "offline_yt_core"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
+futures = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -21,7 +22,6 @@ uniffi = "0.31"
 url = { version = "2.5", features = ["serde"] }
 
 [dev-dependencies]
-futures = "0.3"
 tempfile = "3.20"
 tiny_http = "0.12"
 
