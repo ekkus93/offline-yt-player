@@ -71,8 +71,7 @@ mod tests {
         );
         headers.insert(CONTENT_LENGTH, HeaderValue::from_static("100"));
 
-        let representation =
-            representation_from_headers("https://fixture.invalid/media", &headers);
+        let representation = representation_from_headers("https://fixture.invalid/media", &headers);
         assert_eq!(representation.total_bytes, Some(100));
         assert_eq!(
             representation.last_modified.as_deref(),
@@ -85,8 +84,7 @@ mod tests {
     fn missing_or_malformed_validators_fail_closed_for_reuse() {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_RANGE, HeaderValue::from_static("bytes 40-99/*"));
-        let representation =
-            representation_from_headers("https://fixture.invalid/media", &headers);
+        let representation = representation_from_headers("https://fixture.invalid/media", &headers);
         assert_eq!(representation.total_bytes, None);
         assert!(!representation.has_remote_validator());
     }
