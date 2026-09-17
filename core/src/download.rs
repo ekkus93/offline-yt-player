@@ -1,4 +1,8 @@
 use crate::domain::{CoreError, ErrorKind};
+use crate::resume::{
+    clear_resume_representation, prepare_partial_reuse, save_resume_representation,
+};
+use crate::resume_http::representation_from_headers;
 use crate::security::{validate_http_url, validate_relative_library_path};
 use reqwest::blocking::{Client, Response};
 use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
@@ -67,7 +71,6 @@ pub const fn classify_error(kind: &ErrorKind) -> FailureClass {
     }
 }
 
-/// Bounded exponential delay with deterministic job-specific jitter supplied by the caller.
 #[must_use]
 pub fn retry_delay(attempt: u32, jitter_ms: u64) -> Duration {
     let exponent = attempt.saturating_sub(1).min(5);
@@ -89,53 +92,26 @@ impl DownloadEngine {
             .redirect(reqwest::redirect::Policy::limited(8))
             .build()
             .map_err(map_reqwest_error)?;
-        Ok(Self {
-            client,
-            root: root.into(),
-            policy,
-        })
+        Ok(Self { client, root: root.into(), policy })
     }
 
-    pub fn preflight_space(
-        &self,
-        expected_bytes: Option<u64>,
-        available_bytes: Option<u64>,
-    ) -> Result<(), CoreError> {
+    pub fn preflight_space(&self, expected_bytes: Option<u64>, available_bytes: Option<u64>) -> Result<(), CoreError> {
         if let (Some(expected), Some(available)) = (expected_bytes, available_bytes)
             && expected > available
         {
-            return Err(CoreError::new(
-                ErrorKind::InsufficientStorage,
-                "Not enough free storage for this download",
-                false,
-            ));
+            return Err(CoreError::new(ErrorKind::InsufficientStorage, "Not enough free storage for this download", false));
         }
         Ok(())
     }
 
-    pub fn transfer(
-        &self,
-        request: &TransferRequest,
-        cancel: &AtomicBool,
-    ) -> Result<TransferResult, CoreError> {
+    pub fn transfer(&self, request: &TransferRequest, cancel: &AtomicBool) -> Result<TransferResult, CoreError> {
         validate_http_url(&request.url)?;
         validate_relative_library_path(&request.relative_path)?;
         if cancel.load(Ordering::Relaxed) {
-            return Err(CoreError::new(
-                ErrorKind::Canceled,
-                "Download canceled",
-                false,
-            ));
+            return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
         }
-        if request
-            .expected_bytes
-            .is_some_and(|bytes| bytes > self.policy.max_asset_bytes)
-        {
-            return Err(CoreError::new(
-                ErrorKind::InvalidInput,
-                "Asset exceeds configured maximum size",
-                false,
-            ));
+        if request.expected_bytes.is_some_and(|bytes| bytes > self.policy.max_asset_bytes) {
+            return Err(CoreError::new(ErrorKind::InvalidInput, "Asset exceeds configured maximum size", false));
         }
         let final_path = self.root.join(&request.relative_path);
         let partial_path = partial_path(&final_path);
@@ -145,34 +121,34 @@ impl DownloadEngine {
 
         let existing = fs::metadata(&partial_path).map_or(0, |metadata| metadata.len());
         let mut response = self.request(&request.url, existing)?;
-        let append = existing > 0 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
-        if append && !content_range_starts_at(&response, existing) {
-            return Err(CoreError::new(
-                ErrorKind::IntegrityFailure,
-                "Server returned an unexpected resume range",
-                true,
-            ));
-        }
-        if !response.status().is_success() {
-            return Err(CoreError::new(
-                ErrorKind::HttpStatus,
-                format!("Download server returned HTTP {}", response.status()),
-                response.status().is_server_error()
-                    || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS,
-            ));
+        self.require_success(&response)?;
+        let observed = representation_from_headers(&request.url, response.headers());
+
+        let mut append = false;
+        if existing > 0 {
+            let ranged = response.status() == reqwest::StatusCode::PARTIAL_CONTENT
+                && content_range_starts_at(&response, existing);
+            let reusable = prepare_partial_reuse(&partial_path, &observed)?;
+            if ranged && reusable {
+                append = true;
+            } else if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                response = self.request(&request.url, 0)?;
+                self.require_success(&response)?;
+            }
         }
 
-        let declared_body = response
-            .headers()
-            .get(CONTENT_LENGTH)
+        let observed = representation_from_headers(&request.url, response.headers());
+        if observed.has_remote_validator() {
+            save_resume_representation(&partial_path, &observed)?;
+        } else {
+            clear_resume_representation(&partial_path)?;
+        }
+
+        let declared_body = response.headers().get(CONTENT_LENGTH)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse::<u64>().ok());
         if declared_body.is_some_and(|value| value > self.policy.max_asset_bytes) {
-            return Err(CoreError::new(
-                ErrorKind::InvalidInput,
-                "Remote response exceeds configured maximum size",
-                false,
-            ));
+            return Err(CoreError::new(ErrorKind::InvalidInput, "Remote response exceeds configured maximum size", false));
         }
 
         let start = if append { existing } else { 0 };
@@ -188,73 +164,41 @@ impl DownloadEngine {
                 drop(file);
                 if !self.policy.retain_partial_on_cancel {
                     let _ = fs::remove_file(&partial_path);
+                    clear_resume_representation(&partial_path)?;
                 }
-                return Err(CoreError::new(
-                    ErrorKind::Canceled,
-                    "Download canceled",
-                    false,
-                ));
+                return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
             }
             let count = response.read(&mut buffer).map_err(io_error)?;
-            if count == 0 {
-                break;
-            }
+            if count == 0 { break; }
             total = total.saturating_add(count as u64);
             if total > self.policy.max_asset_bytes {
-                return Err(CoreError::new(
-                    ErrorKind::InvalidInput,
-                    "Downloaded asset exceeded configured maximum size",
-                    false,
-                ));
+                return Err(CoreError::new(ErrorKind::InvalidInput, "Downloaded asset exceeded configured maximum size", false));
             }
             file.write_all(&buffer[..count]).map_err(io_error)?;
         }
         file.sync_all().map_err(io_error)?;
         drop(file);
 
-        if let Some(expected) = request.expected_bytes
-            && total != expected
-        {
-            return Err(CoreError::new(
-                ErrorKind::IntegrityFailure,
-                format!("Downloaded {total} bytes but expected {expected}"),
-                true,
-            ));
+        if let Some(expected) = request.expected_bytes && total != expected {
+            return Err(CoreError::new(ErrorKind::IntegrityFailure, format!("Downloaded {total} bytes but expected {expected}"), true));
         }
-        if let Some(body_bytes) = declared_body
-            && total.saturating_sub(start) != body_bytes
-        {
-            return Err(CoreError::new(
-                ErrorKind::IntegrityFailure,
-                "Response body was shorter than its declared content length",
-                true,
-            ));
+        if let Some(body_bytes) = declared_body && total.saturating_sub(start) != body_bytes {
+            return Err(CoreError::new(ErrorKind::IntegrityFailure, "Response body was shorter than its declared content length", true));
         }
         let digest = sha256_file(&partial_path)?;
-        if request
-            .expected_sha256
-            .as_ref()
-            .is_some_and(|expected| !expected.eq_ignore_ascii_case(&digest))
-        {
-            return Err(CoreError::new(
-                ErrorKind::IntegrityFailure,
-                "Downloaded asset checksum did not match",
-                false,
-            ));
+        if request.expected_sha256.as_ref().is_some_and(|expected| !expected.eq_ignore_ascii_case(&digest)) {
+            return Err(CoreError::new(ErrorKind::IntegrityFailure, "Downloaded asset checksum did not match", false));
         }
         fs::rename(&partial_path, &final_path).map_err(io_error)?;
-        Ok(TransferResult {
-            relative_path: request.relative_path.clone(),
-            bytes: total,
-            sha256: digest,
-            resumed: append,
-        })
+        clear_resume_representation(&partial_path)?;
+        Ok(TransferResult { relative_path: request.relative_path.clone(), bytes: total, sha256: digest, resumed: append })
     }
 
     pub fn cleanup_orphan_partials(&self) -> Result<usize, CoreError> {
         let mut removed = 0;
         visit_partials(&self.root, &mut |path| {
             fs::remove_file(path).map_err(io_error)?;
+            clear_resume_representation(path)?;
             removed += 1;
             Ok(())
         })?;
@@ -263,41 +207,33 @@ impl DownloadEngine {
 
     fn request(&self, url: &str, existing: u64) -> Result<Response, CoreError> {
         let mut request = self.client.get(url);
-        if existing > 0 {
-            request = request.header(RANGE, format!("bytes={existing}-"));
-        }
+        if existing > 0 { request = request.header(RANGE, format!("bytes={existing}-")); }
         request.send().map_err(map_reqwest_error)
+    }
+
+    fn require_success(&self, response: &Response) -> Result<(), CoreError> {
+        if response.status().is_success() { return Ok(()); }
+        Err(CoreError::new(
+            ErrorKind::HttpStatus,
+            format!("Download server returned HTTP {}", response.status()),
+            response.status().is_server_error() || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS,
+        ))
     }
 }
 
 fn open_partial(path: &Path, append: bool) -> Result<File, CoreError> {
-    OpenOptions::new()
-        .create(true)
-        .read(true)
-        .write(true)
-        .append(append)
-        .truncate(!append)
-        .open(path)
-        .map_err(io_error)
+    OpenOptions::new().create(true).read(true).write(true).append(append).truncate(!append).open(path).map_err(io_error)
 }
 
 fn partial_path(final_path: &Path) -> PathBuf {
-    let name = final_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("asset");
+    let name = final_path.file_name().and_then(|name| name.to_str()).unwrap_or("asset");
     final_path.with_file_name(format!(".{name}.partial"))
 }
 
 fn content_range_starts_at(response: &Response, expected: u64) -> bool {
-    response
-        .headers()
-        .get(CONTENT_RANGE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("bytes "))
-        .and_then(|value| value.split_once('-'))
-        .and_then(|(start, _)| start.parse::<u64>().ok())
-        == Some(expected)
+    response.headers().get(CONTENT_RANGE).and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("bytes ")).and_then(|value| value.split_once('-'))
+        .and_then(|(start, _)| start.parse::<u64>().ok()) == Some(expected)
 }
 
 fn sha256_file(path: &Path) -> Result<String, CoreError> {
@@ -306,30 +242,19 @@ fn sha256_file(path: &Path) -> Result<String, CoreError> {
     let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
     loop {
         let count = file.read(&mut buffer).map_err(io_error)?;
-        if count == 0 {
-            break;
-        }
+        if count == 0 { break; }
         hasher.update(&buffer[..count]);
     }
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn visit_partials(
-    directory: &Path,
-    visitor: &mut dyn FnMut(&Path) -> Result<(), CoreError>,
-) -> Result<(), CoreError> {
-    if !directory.exists() {
-        return Ok(());
-    }
+fn visit_partials(directory: &Path, visitor: &mut dyn FnMut(&Path) -> Result<(), CoreError>) -> Result<(), CoreError> {
+    if !directory.exists() { return Ok(()); }
     for entry in fs::read_dir(directory).map_err(io_error)? {
         let path = entry.map_err(io_error)?.path();
         if path.is_dir() {
             visit_partials(&path, visitor)?;
-        } else if path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.ends_with(".partial"))
-        {
+        } else if path.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.ends_with(".partial")) {
             visitor(&path)?;
         }
     }
@@ -340,41 +265,26 @@ fn map_reqwest_error(error: reqwest::Error) -> CoreError {
     if error.is_timeout() {
         CoreError::new(ErrorKind::NetworkTimeout, "Network request timed out", true)
     } else if error.is_connect() {
-        CoreError::new(
-            ErrorKind::NetworkUnavailable,
-            "Unable to connect to download server",
-            true,
-        )
+        CoreError::new(ErrorKind::NetworkUnavailable, "Unable to connect to download server", true)
     } else {
-        CoreError::new(
-            ErrorKind::NetworkUnavailable,
-            format!("Network request failed: {error}"),
-            true,
-        )
+        CoreError::new(ErrorKind::NetworkUnavailable, format!("Network request failed: {error}"), true)
     }
 }
 
 fn io_error(error: std::io::Error) -> CoreError {
-    let kind = if error.raw_os_error() == Some(28) {
-        ErrorKind::InsufficientStorage
-    } else {
-        ErrorKind::Internal
-    };
+    let kind = if error.raw_os_error() == Some(28) { ErrorKind::InsufficientStorage } else { ErrorKind::Internal };
     CoreError::new(kind, format!("storage error: {error}"), false)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resume::{load_resume_representation, save_resume_representation, ResumeRepresentation};
     use std::sync::Arc;
     use std::thread;
     use tiny_http::{Header, Response as TinyResponse, Server, StatusCode};
 
-    struct FixtureServer {
-        address: String,
-        stop: Arc<AtomicBool>,
-        handle: Option<thread::JoinHandle<()>>,
-    }
+    struct FixtureServer { address: String, stop: Arc<AtomicBool>, handle: Option<thread::JoinHandle<()>> }
 
     impl FixtureServer {
         fn start(body: Vec<u8>) -> Self {
@@ -384,57 +294,32 @@ mod tests {
             let stop_thread = Arc::clone(&stop);
             let handle = thread::spawn(move || {
                 while !stop_thread.load(Ordering::Relaxed) {
-                    let Ok(Some(request)) = server.recv_timeout(Duration::from_millis(50)) else {
-                        continue;
-                    };
-                    let range = request
-                        .headers()
-                        .iter()
-                        .find(|header| header.field.equiv("Range"))
+                    let Ok(Some(request)) = server.recv_timeout(Duration::from_millis(50)) else { continue; };
+                    let range = request.headers().iter().find(|header| header.field.equiv("Range"))
                         .map(|header| header.value.as_str().to_string());
                     if let Some(range) = range {
-                        let start = range
-                            .strip_prefix("bytes=")
-                            .and_then(|value| value.strip_suffix('-'))
-                            .and_then(|value| value.parse::<usize>().ok())
-                            .unwrap_or(0)
-                            .min(body.len());
+                        let start = range.strip_prefix("bytes=").and_then(|value| value.strip_suffix('-'))
+                            .and_then(|value| value.parse::<usize>().ok()).unwrap_or(0).min(body.len());
                         let slice = body[start..].to_vec();
-                        let mut response =
-                            TinyResponse::from_data(slice).with_status_code(StatusCode(206));
-                        response.add_header(
-                            Header::from_bytes(
-                                b"Content-Range".as_slice(),
-                                format!(
-                                    "bytes {start}-{}/{}",
-                                    body.len().saturating_sub(1),
-                                    body.len()
-                                ),
-                            )
-                            .unwrap(),
-                        );
+                        let mut response = TinyResponse::from_data(slice).with_status_code(StatusCode(206));
+                        response.add_header(Header::from_bytes(b"Content-Range".as_slice(), format!("bytes {start}-{}/{}", body.len().saturating_sub(1), body.len())).unwrap());
+                        response.add_header(Header::from_bytes(b"ETag".as_slice(), b"\"fixture-v1\"".as_slice()).unwrap());
                         request.respond(response).unwrap();
                     } else {
-                        request
-                            .respond(TinyResponse::from_data(body.clone()))
-                            .unwrap();
+                        let mut response = TinyResponse::from_data(body.clone());
+                        response.add_header(Header::from_bytes(b"ETag".as_slice(), b"\"fixture-v1\"".as_slice()).unwrap());
+                        request.respond(response).unwrap();
                     }
                 }
             });
-            Self {
-                address,
-                stop,
-                handle: Some(handle),
-            }
+            Self { address, stop, handle: Some(handle) }
         }
     }
 
     impl Drop for FixtureServer {
         fn drop(&mut self) {
             self.stop.store(true, Ordering::Relaxed);
-            if let Some(handle) = self.handle.take() {
-                handle.join().unwrap();
-            }
+            if let Some(handle) = self.handle.take() { handle.join().unwrap(); }
         }
     }
 
@@ -451,23 +336,16 @@ mod tests {
         let server = FixtureServer::start(data.clone());
         let temp = tempfile::tempdir().unwrap();
         let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
-        let request = TransferRequest {
-            url: format!("{}/media", server.address),
-            relative_path: "items/one/video.mp4".into(),
-            expected_bytes: Some(data.len() as u64),
-            expected_sha256: None,
-        };
+        let request = TransferRequest { url: format!("{}/media", server.address), relative_path: "items/one/video.mp4".into(), expected_bytes: Some(data.len() as u64), expected_sha256: None };
         let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
         assert_eq!(result.bytes, data.len() as u64);
         assert!(!result.resumed);
-        assert_eq!(
-            fs::read(temp.path().join(&request.relative_path)).unwrap(),
-            data
-        );
+        assert_eq!(fs::read(temp.path().join(&request.relative_path)).unwrap(), data);
+        assert_eq!(load_resume_representation(&partial_path(&temp.path().join(&request.relative_path))).unwrap(), None);
     }
 
     #[test]
-    fn resumes_existing_partial_with_range() {
+    fn resumes_existing_partial_only_with_matching_representation() {
         let data = b"range fixture".repeat(100);
         let server = FixtureServer::start(data.clone());
         let temp = tempfile::tempdir().unwrap();
@@ -475,15 +353,28 @@ mod tests {
         fs::create_dir_all(final_path.parent().unwrap()).unwrap();
         let partial = partial_path(&final_path);
         fs::write(&partial, &data[..100]).unwrap();
+        let url = format!("{}/media", server.address);
+        save_resume_representation(&partial, &ResumeRepresentation { url: url.clone(), etag: Some("\"fixture-v1\"".into()), last_modified: None, total_bytes: Some(data.len() as u64) }).unwrap();
         let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
-        let request = TransferRequest {
-            url: format!("{}/media", server.address),
-            relative_path: "items/one/video.mp4".into(),
-            expected_bytes: Some(data.len() as u64),
-            expected_sha256: None,
-        };
+        let request = TransferRequest { url, relative_path: "items/one/video.mp4".into(), expected_bytes: Some(data.len() as u64), expected_sha256: None };
         let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
         assert!(result.resumed);
+        assert_eq!(fs::read(final_path).unwrap(), data);
+        assert_eq!(load_resume_representation(&partial).unwrap(), None);
+    }
+
+    #[test]
+    fn partial_without_sidecar_restarts_full_instead_of_appending() {
+        let data = b"safe restart fixture".repeat(100);
+        let server = FixtureServer::start(data.clone());
+        let temp = tempfile::tempdir().unwrap();
+        let final_path = temp.path().join("items/one/video.mp4");
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        fs::write(partial_path(&final_path), b"stale bytes").unwrap();
+        let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+        let request = TransferRequest { url: format!("{}/media", server.address), relative_path: "items/one/video.mp4".into(), expected_bytes: Some(data.len() as u64), expected_sha256: None };
+        let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
+        assert!(!result.resumed);
         assert_eq!(fs::read(final_path).unwrap(), data);
     }
 
@@ -499,15 +390,8 @@ mod tests {
     fn pre_canceled_transfer_returns_canceled_without_networking() {
         let temp = tempfile::tempdir().unwrap();
         let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
-        let request = TransferRequest {
-            url: "http://127.0.0.1:1/unreachable".into(),
-            relative_path: "items/one/video.mp4".into(),
-            expected_bytes: None,
-            expected_sha256: None,
-        };
-        let error = engine
-            .transfer(&request, &AtomicBool::new(true))
-            .unwrap_err();
+        let request = TransferRequest { url: "http://127.0.0.1:1/unreachable".into(), relative_path: "items/one/video.mp4".into(), expected_bytes: None, expected_sha256: None };
+        let error = engine.transfer(&request, &AtomicBool::new(true)).unwrap_err();
         assert_eq!(error.kind, ErrorKind::Canceled);
         assert!(!temp.path().join("items/one/video.mp4").exists());
     }
