@@ -1,7 +1,9 @@
 package com.ekkus.offlineytplayer.playback
 
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.MediaSource
@@ -38,6 +40,7 @@ internal object LocalPlaybackPolicy {
         return MediaItem.fromUri(Uri.fromFile(File(path)))
     }
 
+    @OptIn(UnstableApi::class)
     fun mediaSourceFor(
         asset: LocalPlaybackAsset,
         mediaSourceFactory: DefaultMediaSourceFactory,
