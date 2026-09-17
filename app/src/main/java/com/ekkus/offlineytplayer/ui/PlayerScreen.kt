@@ -45,12 +45,12 @@ internal object PlayerScreenLayoutPolicy {
     fun videoAspectRatio(): Float = VideoAspectRatioWidth.toFloat() / VideoAspectRatioHeight.toFloat()
 
     fun primaryControlsFit(heightDp: Int, fontScale: Float): Boolean {
-        val videoHeight = heightDp / 3
-        val chromeBudget = 96
-        val titleTimelineBudget = (128 * fontScale).toInt()
-        val transportBudget = (56 * fontScale).toInt()
-        val secondaryBudget = (56 * fontScale).toInt()
-        val paddingBudget = 64
+        val videoHeight = (heightDp * VideoAspectRatioHeight) / (VideoAspectRatioWidth * 2)
+        val chromeBudget = 72
+        val titleTimelineBudget = (112 * fontScale).toInt()
+        val transportBudget = (52 * fontScale).toInt()
+        val secondaryBudget = (52 * fontScale).toInt()
+        val paddingBudget = 48
         return videoHeight + chromeBudget + titleTimelineBudget + transportBudget + secondaryBudget + paddingBudget <= heightDp
     }
 }
