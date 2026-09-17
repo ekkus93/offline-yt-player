@@ -33,15 +33,17 @@ pub fn thumbnail_asset_plan(
     }
     Ok(ThumbnailAssetPlan {
         asset_id: THUMBNAIL_ASSET_ID.into(),
-        relative_path: format!("items/{item_id}/{THUMBNAIL_DIRECTORY}/{THUMBNAIL_ASSET_ID}.{extension}"),
+        relative_path: format!(
+            "items/{item_id}/{THUMBNAIL_DIRECTORY}/{THUMBNAIL_ASSET_ID}.{extension}"
+        ),
         mime_type: mime_type.into(),
     })
 }
 
 pub fn offline_thumbnail_asset(item: &LibraryItem) -> Option<&LocalAsset> {
-    item.assets
-        .iter()
-        .find(|asset| asset.kind == MediaKind::Thumbnail && is_safe_relative_path(&asset.relative_path))
+    item.assets.iter().find(|asset| {
+        asset.kind == MediaKind::Thumbnail && is_safe_relative_path(&asset.relative_path)
+    })
 }
 
 pub fn classify_thumbnail_cleanup(
