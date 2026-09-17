@@ -84,31 +84,33 @@ Evidence: `docs/CORE_FOUNDATION_AUDIT.md`; exact-head master CI `35033596290` pa
 ## OYP-200 — Android portrait-only application shell
 
 ### OYP-201 — Compose application
-- [ ] Create Kotlin application module.
-- [ ] Add Material 3 Compose setup.
-- [ ] Apply Midnight Transit semantic color tokens.
-- [ ] Implement typography/spacing/radius tokens.
+- [x] Create Kotlin application module.
+- [x] Add Material 3 Compose setup.
+- [x] Apply Midnight Transit semantic color tokens.
+- [x] Implement typography/spacing/radius tokens.
 
 ### OYP-202 — Portrait-only enforcement
-- [ ] Lock app activity to portrait orientation.
-- [ ] Remove landscape resource assumptions.
-- [ ] Add automated manifest/configuration test where practical.
-- [ ] Document portrait-only support policy.
+- [x] Lock app activity to portrait orientation.
+- [x] Remove landscape resource assumptions.
+- [x] Add automated manifest/configuration test where practical.
+- [x] Document portrait-only support policy.
 
 Acceptance:
-- [ ] Rotating a test device does not switch the application into a landscape layout.
+- [x] Rotating a test device does not switch the application into a landscape layout.
 
 ### OYP-203 — Navigation shell
-- [ ] Implement fixed bottom navigation: Library, Downloads, Add, Settings.
-- [ ] Library is launch destination.
-- [ ] Preserve destination state appropriately.
-- [ ] No drawer or horizontal nav carousel.
+- [x] Implement fixed bottom navigation: Library, Downloads, Add, Settings.
+- [x] Library is launch destination.
+- [x] Preserve destination state appropriately.
+- [x] No drawer or horizontal nav carousel.
 
 ### OYP-204 — Fixed-region layout primitives
-- [ ] Create reusable scaffold for fixed top bar, bounded content region, fixed actions, and bottom nav.
-- [ ] Support system insets.
-- [ ] Add tests that primary actions remain visible on compact portrait profile.
-- [ ] Add large-font validation.
+- [x] Create reusable scaffold for fixed top bar, bounded content region, fixed actions, and bottom nav.
+- [x] Support system insets.
+- [x] Add tests that primary actions remain visible on compact portrait profile.
+- [x] Add large-font validation.
+
+Evidence: `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head master CI evidence recorded there. Remaining broader screen-specific UI work is tracked under OYP-1300 through OYP-1700.
 
 ---
 
@@ -122,18 +124,18 @@ Acceptance:
 Evidence: `docs/FFI_QUALIFICATION_AUDIT.md`; exact-head master CI `35035111202` passed at `4014d03abc6c2d4f789c567939dbf8d827cf7601`.
 
 ### OYP-302 — Stable coarse-grained API
-- [ ] Expose resolve/list choices/enqueue/pause/resume/cancel/library/get/delete operations.
-- [ ] Define async/cancellation semantics.
+- [x] Expose resolve/list choices/enqueue/pause/resume/cancel/library/get/delete operations.
+- [x] Define async/cancellation semantics.
 - [x] Map Rust errors into Kotlin-safe typed errors.
 
-Evidence for typed-error mapping: `docs/FFI_QUALIFICATION_AUDIT.md`; exact-head master CI `35035111202` passed at `4014d03abc6c2d4f789c567939dbf8d827cf7601`. The operation surface remains intentionally open.
+Evidence: `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head master CI evidence recorded there.
 
 ### OYP-303 — FFI qualification
 - [x] Round-trip representative domain types.
-- [ ] Test errors and cancellation.
-- [ ] Verify no FFI calls occur on Android main thread when blocking.
+- [x] Test errors and cancellation.
+- [x] Verify no FFI calls occur on Android main thread when blocking.
 
-Evidence for representative domain round-trip: `docs/FFI_QUALIFICATION_AUDIT.md`; exact-head master CI `35035111202` passed at `4014d03abc6c2d4f789c567939dbf8d827cf7601`. Cancellation and Android dispatcher qualification remain open.
+Evidence: `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head master CI evidence recorded there.
 
 ---
 
@@ -177,110 +179,136 @@ Evidence: `docs/PERSISTENCE_LIBRARY_AUDIT.md`; v1 is the only released schema, s
 ## OYP-500 — Generic download engine
 
 ### OYP-501 — HTTP transfer foundation
-- [ ] Bounded timeouts.
-- [ ] Redirect handling.
-- [ ] Content length/range handling.
-- [ ] Safe temporary paths.
-- [ ] Filename/path sanitization.
+- [x] Bounded timeouts.
+- [x] Redirect handling.
+- [x] Content length/range handling.
+- [x] Safe temporary paths.
+- [x] Filename/path sanitization.
+
+Evidence: `docs/DOWNLOAD_ENGINE_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head CI evidence recorded there.
 
 ### OYP-502 — Pause/resume
-- [ ] Persist continuation data.
-- [ ] Resume ranged downloads when supported.
-- [ ] Fall back safely when resume is not supported.
-- [ ] Verify partial data before append/reuse.
+- [x] Persist continuation data.
+- [x] Resume ranged downloads when supported.
+- [x] Fall back safely when resume is not supported.
+- [x] Verify partial data before append/reuse.
+
+Evidence: `docs/DOWNLOAD_PAUSE_RESUME_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head CI evidence recorded there.
 
 ### OYP-503 — Retry policy
-- [ ] Classify retryable/non-retryable failures.
-- [ ] Add bounded exponential backoff/jitter.
-- [ ] Make retry state visible to UI.
+- [x] Classify retryable/non-retryable failures.
+- [x] Add bounded exponential backoff/jitter.
+- [x] Make retry state visible to UI.
+
+Evidence: `docs/DOWNLOAD_RETRY_POLICY_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head CI evidence recorded there.
 
 ### OYP-504 — Integrity and completion
-- [ ] Validate expected size when known.
-- [ ] Add optional checksum/integrity hooks.
-- [ ] Never mark incomplete content as completed.
+- [x] Validate expected size when known.
+- [x] Add optional checksum/integrity hooks.
+- [x] Never mark incomplete content as completed.
+
+Evidence: `docs/DOWNLOAD_INTEGRITY_COMPLETION_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head CI evidence recorded there.
 
 ### OYP-505 — Cleanup
-- [ ] Cancel behavior policy.
-- [ ] Orphan partial-file cleanup.
-- [ ] Startup reconciliation.
-- [ ] Storage-pressure failure handling.
+- [x] Cancel behavior policy.
+- [x] Orphan partial-file cleanup.
+- [x] Startup reconciliation.
+- [x] Storage-pressure failure handling.
+
+Evidence: `docs/DOWNLOAD_CLEANUP_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head CI evidence recorded there.
 
 ### OYP-506 — Download test server
-- [ ] Add deterministic local HTTP fixture server.
-- [ ] Test interruption, range resume, timeout, disconnect, incorrect content length, and retry.
+- [x] Add deterministic local HTTP fixture server.
+- [x] Test interruption, range resume, timeout, disconnect, incorrect content length, and retry.
+
+Evidence: `docs/DOWNLOAD_ENGINE_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; exact-head CI evidence recorded there.
 
 ---
 
 ## OYP-600 — Source abstraction
 
 ### OYP-601 — `MediaSource` contract
-- [ ] `can_handle`.
-- [ ] resolve metadata.
-- [ ] enumerate normalized formats.
-- [ ] create download plan.
-- [ ] define optional subtitle/thumbnail hooks.
+- [x] `can_handle`.
+- [x] resolve metadata.
+- [x] enumerate normalized formats.
+- [x] create download plan.
+- [x] define optional subtitle/thumbnail hooks.
 
 ### OYP-602 — Source registry
-- [ ] Select adapter based on URL.
-- [ ] Return unsupported-source error cleanly.
-- [ ] Prevent provider-specific types from leaking into generic UI/domain APIs.
+- [x] Select adapter based on URL.
+- [x] Return unsupported-source error cleanly.
+- [x] Prevent provider-specific types from leaking into generic UI/domain APIs.
 
 ### OYP-603 — Direct/local fixture adapter
-- [ ] Implement non-YouTube adapter usable in CI.
-- [ ] Use it for end-to-end tests without dependence on live external services.
+- [x] Implement non-YouTube adapter usable in CI.
+- [x] Use it for end-to-end tests without dependence on live external services.
+
+Evidence: `docs/SOURCE_ABSTRACTION_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; PR #108 exact-head CI evidence recorded there.
 
 ---
 
 ## OYP-700 — YouTube source adapter
 
 ### OYP-701 — Extraction strategy spike
-- [ ] Evaluate pure-Rust extraction viability.
-- [ ] Evaluate wrapping/embedding an external extractor where licensing/platform constraints permit.
-- [ ] Document Android packaging, updateability, reliability, and legal/policy implications.
-- [ ] Choose initial implementation behind `MediaSource`.
+- [x] Evaluate pure-Rust extraction viability.
+- [x] Evaluate wrapping/embedding an external extractor where licensing/platform constraints permit.
+- [x] Document Android packaging, updateability, reliability, and legal/policy implications.
+- [x] Choose initial implementation behind `MediaSource`.
 
 ### OYP-702 — URL recognition
-- [ ] Handle canonical watch URLs.
-- [ ] Handle share/short URLs.
-- [ ] Reject unsupported/non-video forms explicitly.
+- [x] Handle canonical watch URLs.
+- [x] Handle share/short URLs.
+- [x] Reject unsupported/non-video forms explicitly.
+
+Evidence: `docs/YOUTUBE_EXTRACTION_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; PR #109 exact-head CI evidence recorded there.
 
 ### OYP-703 — Metadata resolution
-- [ ] Resolve title, duration, thumbnail, source ID, and available streams.
-- [ ] Sanitize all remote metadata.
-- [ ] Add fixtures/regression tests.
+- [x] Resolve title, duration, thumbnail, source ID, and available streams.
+- [x] Sanitize all remote metadata.
+- [x] Add fixtures/regression tests.
 
 ### OYP-704 — Format normalization
-- [ ] Normalize video/audio-only/adaptive streams.
-- [ ] Record codecs, container, bitrate, resolution, and compatibility.
-- [ ] Collapse raw formats into curated quality choices.
+- [x] Normalize video/audio-only/adaptive streams.
+- [x] Record codecs, container, bitrate, resolution, and compatibility.
+- [x] Collapse raw formats into curated quality choices.
 
 ### OYP-705 — Adapter diagnostics
-- [ ] Distinguish network failure from extractor incompatibility/source change.
-- [ ] Do not log cookies/tokens/signed URLs.
-- [ ] Provide actionable user-facing failure category.
+- [x] Distinguish network failure from extractor incompatibility/source change.
+- [x] Do not log cookies/tokens/signed URLs.
+- [x] Provide actionable user-facing failure category.
+
+Evidence: `docs/YOUTUBE_ADAPTER_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; PR #110 exact-head CI evidence recorded there.
 
 ### OYP-706 — Policy/legal release gate
-- [ ] Document service terms/app-store considerations.
-- [ ] Define supported-use statement before public release.
-- [ ] Block app-store/public-release milestone until reviewed.
+- [x] Document service terms/app-store considerations.
+- [x] Define supported-use statement before public release.
+- [x] Block app-store/public-release milestone until reviewed.
+
+Evidence: `docs/YOUTUBE_POLICY_RELEASE_GATE.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; PR #111 exact-head CI evidence recorded there. This records the engineering release gate only; it does not assert that a future human policy/legal review has already approved public distribution.
 
 ---
 
 ## OYP-800 — Media format selection and local asset strategy
 
 ### OYP-801 — Compatibility policy
-- [ ] Define preferred codecs/containers for Android Media3/device compatibility.
-- [ ] Prefer directly playable formats where quality tradeoff is acceptable.
+- [x] Define preferred codecs/containers for Android Media3/device compatibility.
+- [x] Prefer directly playable formats where quality tradeoff is acceptable.
+
+Evidence: `docs/MEDIA_ASSET_STRATEGY_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; PR #112 exact-head CI evidence recorded there.
 
 ### OYP-802 — Adaptive audio/video assets
-- [ ] Represent separate local audio/video streams.
-- [ ] Prove Media3 playback of coordinated local assets where supported.
-- [ ] Persist asset relationship in library database.
+- [x] Represent separate local audio/video streams.
+- [x] Prove Media3 playback of coordinated local assets where supported.
+- [x] Persist asset relationship in library database.
+
+Evidence: `docs/ADAPTIVE_LOCAL_PLAYBACK_QUALIFICATION.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; PR #113 and PR #114 exact-head CI evidence recorded there. Full offline player behavior remains tracked under OYP-900 and OYP-1900.
 
 ### OYP-803 — Muxing decision gate
-- [ ] Identify cases that require muxing.
-- [ ] Evaluate FFmpeg/native alternative size and licensing impact.
-- [ ] Do not add muxer dependency unless required by tested compatibility needs.
+- [x] Identify cases that require muxing.
+- [x] Evaluate FFmpeg/native alternative size and licensing impact.
+- [x] Do not add muxer dependency unless required by tested compatibility needs.
+
+Evidence: `docs/MEDIA_ASSET_STRATEGY_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILIATION.md`; PR #112 exact-head CI evidence recorded there.
 
 ---
 
