@@ -1,8 +1,8 @@
 use futures::executor::block_on;
 use offline_yt_core::{
     Compatibility, DirectFixtureSource, DownloadEngine, DownloadPolicy, DurableDownloadSnapshot,
-    ErrorKind, FixtureMedia, LibraryItem, LibraryStore, LocalAsset, SourceRegistry,
-    TransferRequest,
+    ErrorKind, FixtureMedia, LibraryItem, LibraryStore, LocalAsset, ResumeRepresentation,
+    SourceRegistry, TransferRequest, save_resume_representation,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -54,9 +54,18 @@ impl FixtureServer {
                         )
                         .unwrap(),
                     );
+                    response.add_header(
+                        Header::from_bytes(b"ETag".as_slice(), b"\"fixture-e2e-v1\"".as_slice())
+                            .unwrap(),
+                    );
                     request.respond(response).unwrap();
                 } else {
-                    request.respond(Response::from_data(body.clone())).unwrap();
+                    let mut response = Response::from_data(body.clone());
+                    response.add_header(
+                        Header::from_bytes(b"ETag".as_slice(), b"\"fixture-e2e-v1\"".as_slice())
+                            .unwrap(),
+                    );
+                    request.respond(response).unwrap();
                 }
             }
         });
@@ -114,7 +123,18 @@ fn deterministic_fixture_flow_survives_restart_and_reconstructs_offline() {
 
     let final_path = library_root.join(&plan_asset.relative_path);
     fs::create_dir_all(final_path.parent().unwrap()).unwrap();
-    fs::write(partial_path(&final_path), &media_bytes[..256]).unwrap();
+    let partial = partial_path(&final_path);
+    fs::write(&partial, &media_bytes[..256]).unwrap();
+    save_resume_representation(
+        &partial,
+        &ResumeRepresentation {
+            url: plan_asset.url.clone(),
+            etag: Some("\"fixture-e2e-v1\"".into()),
+            last_modified: None,
+            total_bytes: Some(media_bytes.len() as u64),
+        },
+    )
+    .unwrap();
 
     let store_before_restart = LibraryStore::open(&db_path).unwrap();
     store_before_restart
