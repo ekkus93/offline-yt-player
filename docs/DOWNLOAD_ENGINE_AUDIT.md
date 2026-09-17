@@ -19,17 +19,19 @@ OYP-501 is implemented. The adversarial HTTP cases are qualified under OYP-506.
 
 Partially implemented:
 
-- an existing partial file is durable continuation state.
+- an existing partial file is durable byte-level continuation state.
+- `core/src/resume.rs` defines durable `ResumeRepresentation` metadata containing URL, ETag/Last-Modified validators, and optional total length; metadata is serialized beside the partial, requires a remote validator, round-trips across process lifetimes, and rejects corrupt metadata.
+- `ResumeRepresentation::matches` requires an unchanged URL and matching remote validator, with known total length as an additional consistency check.
 - a resumed request sends `Range: bytes=<existing>-`.
 - a valid `206` response is appended only when `Content-Range` begins at the expected byte.
 - a server that ignores range and returns a normal success response causes the local partial to be truncated and the transfer to restart safely.
 
 Still open:
 
-- there is no persisted validator (ETag/Last-Modified or equivalent source identity) proving that an existing partial belongs to the same remote representation before append/reuse.
+- `DownloadEngine::transfer` does not yet load/save `ResumeRepresentation` or condition range reuse on a validator match, so the persisted representation-identity primitive is not yet part of the actual append/reuse decision.
 - pause orchestration is represented in the state machine but is not yet wired as a transfer-level cooperative pause channel.
 
-Therefore OYP-502 must remain open.
+Therefore OYP-502 must remain open. The next implementation must integrate the existing resume-identity primitive into the transfer path rather than inventing a second continuation format.
 
 ## OYP-503 — Retry policy
 
@@ -87,7 +89,7 @@ The final OYP-506 cases landed through PRs #79 and #80. Exact-head `master` CI r
 
 ## Next implementation order
 
-1. Persist and validate resume representation identity before append.
+1. Wire `ResumeRepresentation` into `DownloadEngine::transfer`, capturing response validators and requiring a match before append/reuse.
 2. Add cooperative pause semantics around the transfer loop.
 3. Wire startup reconciliation against durable download-job records.
 4. Reconcile completed OYP-500 checklist items in the canonical TODO once their implementation evidence is merged and green.
