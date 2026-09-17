@@ -1,5 +1,5 @@
 use crate::resume::ResumeRepresentation;
-use reqwest::header::{HeaderMap, CONTENT_LENGTH, CONTENT_RANGE, ETAG, LAST_MODIFIED};
+use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, ETAG, HeaderMap, LAST_MODIFIED};
 
 /// Build the remote representation identity needed to decide whether persisted partial bytes may
 /// be reused. A ranged response's total length comes from Content-Range; a full response falls
