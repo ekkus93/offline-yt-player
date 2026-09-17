@@ -16,6 +16,14 @@ internal data class LocalPlaybackAsset(
     val startPositionMs: Long = 0,
 )
 
+internal data class LocalPlaybackSourcePlan(
+    val videoPath: String,
+    val audioPath: String? = null,
+) {
+    val usesSeparateAudioVideoAssets: Boolean
+        get() = audioPath != null
+}
+
 internal object LocalPlaybackPolicy {
     const val SkipIntervalMs = 10_000L
     const val NearEndCompletedThresholdMs = 30_000L
@@ -34,6 +42,14 @@ internal object LocalPlaybackPolicy {
         return asset
     }
 
+    fun mediaSourcePlanFor(asset: LocalPlaybackAsset): LocalPlaybackSourcePlan {
+        val validated = validate(asset)
+        return LocalPlaybackSourcePlan(
+            videoPath = validated.videoPath,
+            audioPath = validated.audioPath,
+        )
+    }
+
     fun mediaItemFor(path: String): MediaItem {
         require(path.isNotBlank()) { "local path is required" }
         require(!looksRemote(path)) { "remote playback URIs are forbidden" }
@@ -45,9 +61,9 @@ internal object LocalPlaybackPolicy {
         asset: LocalPlaybackAsset,
         mediaSourceFactory: DefaultMediaSourceFactory,
     ): MediaSource {
-        val validated = validate(asset)
-        val videoSource = mediaSourceFactory.createMediaSource(mediaItemFor(validated.videoPath))
-        val audioPath = validated.audioPath ?: return videoSource
+        val plan = mediaSourcePlanFor(asset)
+        val videoSource = mediaSourceFactory.createMediaSource(mediaItemFor(plan.videoPath))
+        val audioPath = plan.audioPath ?: return videoSource
         val audioSource = mediaSourceFactory.createMediaSource(mediaItemFor(audioPath))
         return MergingMediaSource(videoSource, audioSource)
     }
