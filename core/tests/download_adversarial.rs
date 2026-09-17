@@ -108,7 +108,7 @@ fn server_error_is_explicitly_retryable() {
 }
 
 #[test]
-fn mismatched_content_range_rejects_existing_partial() {
+fn unproven_partial_is_discarded_before_restart() {
     let url = serve_once(|mut stream| {
         stream
             .write_all(
@@ -123,12 +123,13 @@ fn mismatched_content_range_rejects_existing_partial() {
     fs::write(&partial_path, b"prefix!!").unwrap();
 
     let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+    // This one-shot fixture cannot serve the engine's safe full restart. The important invariant
+    // is that unproven bytes are discarded before that restart is attempted.
     let error = engine
         .transfer(&request(url), &AtomicBool::new(false))
         .unwrap_err();
 
-    assert_eq!(error.kind, ErrorKind::IntegrityFailure);
-    assert!(error.retryable);
-    assert_eq!(fs::read(&partial_path).unwrap(), b"prefix!!");
+    assert_eq!(error.kind, ErrorKind::NetworkUnavailable);
+    assert!(!partial_path.exists());
     assert!(!final_path.exists());
 }
