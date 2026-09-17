@@ -1,19 +1,27 @@
-# Source Abstraction Qualification Audit
+# OYP-600 Source Abstraction Audit
 
-This audit qualifies OYP-601 through OYP-603 against the portable Rust core.
+This audit qualifies OYP-601 through OYP-603 against the portable Rust source boundary.
 
 ## OYP-601 — `MediaSource` contract
 
-`core/src/source.rs` defines the provider-neutral `MediaSource` trait with `can_handle`, asynchronous metadata `resolve`, normalized `formats`, curated `choices`, `download_plan`, and optional/default subtitle and thumbnail metadata hooks. The trait returns portable domain types only and keeps provider implementation details behind the adapter boundary.
+`core/src/source.rs` defines the provider-neutral `MediaSource` trait. It exposes `can_handle`, asynchronous metadata `resolve`, normalized `formats`, curated `choices`, `download_plan`, and optional/default subtitle and thumbnail hooks. Return values use generic domain records (`MediaInfo`, `MediaFormat`, `QualityChoice`, `DownloadPlan`, `SubtitleTrack`) rather than provider-specific extraction structures.
+
+All five OYP-601 checklist requirements are implemented.
 
 ## OYP-602 — Source registry
 
-`SourceRegistry` owns a collection of `Arc<dyn MediaSource>`, validates incoming HTTP(S) URLs, selects the first adapter whose `can_handle` accepts the URL, and returns the typed `UnsupportedSource` error when no adapter matches. Its public contract exposes only generic core types; no provider-specific type is required by callers.
+`SourceRegistry` owns an ordered collection of `Arc<dyn MediaSource>`. `select` validates the incoming HTTP(S) URL, chooses the first adapter whose `can_handle` contract accepts it, and returns typed `UnsupportedSource` when no adapter accepts the URL. The registry surface exposes only the `MediaSource` trait and generic domain types, preventing provider-specific structures from entering generic UI/domain APIs.
 
-## OYP-603 — deterministic direct fixture adapter
+The unit test `registry_rejects_unknown_sources` qualifies the unsupported-source boundary. All three OYP-602 checklist requirements are implemented.
 
-`DirectFixtureSource` is a non-YouTube adapter backed by deterministic `FixtureMedia` entries. It resolves metadata, supplies a normalized directly-playable H.264/AAC MP4 format, emits a curated 720p choice, and creates a generic `DownloadPlan`. Unit coverage proves provider-independent URL recognition, while the repository's deterministic E2E fixture flow uses the same source abstraction without a live external media service.
+## OYP-603 — Direct/local fixture adapter
+
+`DirectFixtureSource` is explicitly provider-independent and deterministic. Its configured fixture records resolve to normalized `MediaInfo`, a directly playable combined H.264/AAC format, curated quality choice, and generic `DownloadPlan`. It validates media URLs and sanitizes titles, media IDs, filenames, and relative paths through the same generic domain/security boundaries used by production adapters.
+
+`fixture_adapter_is_provider_independent` proves the adapter does not accidentally claim YouTube URLs. `FfiSourceService::with_fixtures` then drives resolve and choice-list operations through the same adapter in CI without contacting a live provider. Its tests qualify successful coarse FFI resolution plus typed unsupported/canceled failures. Download-engine tests independently use loopback fixtures, so the source/download qualification stack does not require external services.
+
+Both OYP-603 checklist requirements are implemented.
 
 ## Qualification
 
-The implementation is covered by Rust unit/E2E tests in the normal CI matrix. Closeout requires exact-head CI for the commit containing this audit/TODO reconciliation; that run is recorded in the TODO evidence after merge.
+The source abstraction is exercised by the workspace Rust suite on every CI run and the coarse source records are additionally covered by the UniFFI Kotlin/Android ABI job. The latest exact-head master qualification before this audit was CI `35215157544`, which passed at `32457a5afa0d50a64d91770dccd8b277a66c5b6b`; subsequent exact-head CI for this audit must also pass before merge.
