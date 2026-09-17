@@ -1,4 +1,8 @@
 use crate::domain::{CoreError, ErrorKind};
+use crate::resume::{
+    clear_resume_representation, prepare_partial_reuse, save_resume_representation,
+};
+use crate::resume_http::representation_from_headers;
 use crate::security::{validate_http_url, validate_relative_library_path};
 use reqwest::blocking::{Client, Response};
 use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
@@ -67,7 +71,6 @@ pub const fn classify_error(kind: &ErrorKind) -> FailureClass {
     }
 }
 
-/// Bounded exponential delay with deterministic job-specific jitter supplied by the caller.
 #[must_use]
 pub fn retry_delay(attempt: u32, jitter_ms: u64) -> Duration {
     let exponent = attempt.saturating_sub(1).min(5);
@@ -121,11 +124,7 @@ impl DownloadEngine {
         validate_http_url(&request.url)?;
         validate_relative_library_path(&request.relative_path)?;
         if cancel.load(Ordering::Relaxed) {
-            return Err(CoreError::new(
-                ErrorKind::Canceled,
-                "Download canceled",
-                false,
-            ));
+            return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
         }
         if request
             .expected_bytes
@@ -137,6 +136,7 @@ impl DownloadEngine {
                 false,
             ));
         }
+
         let final_path = self.root.join(&request.relative_path);
         let partial_path = partial_path(&final_path);
         if let Some(parent) = final_path.parent() {
@@ -145,20 +145,37 @@ impl DownloadEngine {
 
         let existing = fs::metadata(&partial_path).map_or(0, |metadata| metadata.len());
         let mut response = self.request(&request.url, existing)?;
-        let append = existing > 0 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
-        if append && !content_range_starts_at(&response, existing) {
+        ensure_success(&response)?;
+        let mut observed = representation_from_headers(&request.url, response.headers());
+
+        let mut append = false;
+        let mut start = 0;
+        if existing > 0 {
+            let representation_matches = prepare_partial_reuse(&partial_path, &observed)?;
+            if representation_matches
+                && response.status() == reqwest::StatusCode::PARTIAL_CONTENT
+                && content_range_starts_at(&response, existing)
+            {
+                append = true;
+                start = existing;
+            } else {
+                // The ranged response could not prove that the persisted bytes belong to the
+                // same representation. Discard it and restart from byte zero rather than ever
+                // appending unproven content.
+                response = self.request(&request.url, 0)?;
+                ensure_success(&response)?;
+                observed = representation_from_headers(&request.url, response.headers());
+            }
+        } else {
+            // A stale sidecar without bytes is not useful and must not influence this transfer.
+            prepare_partial_reuse(&partial_path, &observed)?;
+        }
+
+        if append && !content_range_starts_at(&response, start) {
             return Err(CoreError::new(
                 ErrorKind::IntegrityFailure,
                 "Server returned an unexpected resume range",
                 true,
-            ));
-        }
-        if !response.status().is_success() {
-            return Err(CoreError::new(
-                ErrorKind::HttpStatus,
-                format!("Download server returned HTTP {}", response.status()),
-                response.status().is_server_error()
-                    || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS,
             ));
         }
 
@@ -175,7 +192,12 @@ impl DownloadEngine {
             ));
         }
 
-        let start = if append { existing } else { 0 };
+        if observed.has_remote_validator() {
+            save_resume_representation(&partial_path, &observed)?;
+        } else {
+            clear_resume_representation(&partial_path)?;
+        }
+
         let mut file = open_partial(&partial_path, append)?;
         if !append {
             file.set_len(0).map_err(io_error)?;
@@ -188,12 +210,9 @@ impl DownloadEngine {
                 drop(file);
                 if !self.policy.retain_partial_on_cancel {
                     let _ = fs::remove_file(&partial_path);
+                    clear_resume_representation(&partial_path)?;
                 }
-                return Err(CoreError::new(
-                    ErrorKind::Canceled,
-                    "Download canceled",
-                    false,
-                ));
+                return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
             }
             let count = response.read(&mut buffer).map_err(io_error)?;
             if count == 0 {
@@ -243,6 +262,7 @@ impl DownloadEngine {
             ));
         }
         fs::rename(&partial_path, &final_path).map_err(io_error)?;
+        clear_resume_representation(&partial_path)?;
         Ok(TransferResult {
             relative_path: request.relative_path.clone(),
             bytes: total,
@@ -255,6 +275,7 @@ impl DownloadEngine {
         let mut removed = 0;
         visit_partials(&self.root, &mut |path| {
             fs::remove_file(path).map_err(io_error)?;
+            clear_resume_representation(path)?;
             removed += 1;
             Ok(())
         })?;
@@ -268,6 +289,18 @@ impl DownloadEngine {
         }
         request.send().map_err(map_reqwest_error)
     }
+}
+
+fn ensure_success(response: &Response) -> Result<(), CoreError> {
+    if response.status().is_success() {
+        return Ok(());
+    }
+    Err(CoreError::new(
+        ErrorKind::HttpStatus,
+        format!("Download server returned HTTP {}", response.status()),
+        response.status().is_server_error()
+            || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS,
+    ))
 }
 
 fn open_partial(path: &Path, append: bool) -> Result<File, CoreError> {
@@ -366,6 +399,7 @@ fn io_error(error: std::io::Error) -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resume::{load_resume_representation, resume_metadata_path, ResumeRepresentation};
     use std::sync::Arc;
     use std::thread;
     use tiny_http::{Header, Response as TinyResponse, Server, StatusCode};
@@ -400,24 +434,27 @@ mod tests {
                             .unwrap_or(0)
                             .min(body.len());
                         let slice = body[start..].to_vec();
-                        let mut response =
-                            TinyResponse::from_data(slice).with_status_code(StatusCode(206));
+                        let mut response = TinyResponse::from_data(slice)
+                            .with_status_code(StatusCode(206));
                         response.add_header(
                             Header::from_bytes(
                                 b"Content-Range".as_slice(),
-                                format!(
-                                    "bytes {start}-{}/{}",
-                                    body.len().saturating_sub(1),
-                                    body.len()
-                                ),
+                                format!("bytes {start}-{}/{}", body.len().saturating_sub(1), body.len()),
                             )
                             .unwrap(),
                         );
+                        response.add_header(
+                            Header::from_bytes(b"ETag".as_slice(), b"\"fixture-v1\"".as_slice())
+                                .unwrap(),
+                        );
                         request.respond(response).unwrap();
                     } else {
-                        request
-                            .respond(TinyResponse::from_data(body.clone()))
-                            .unwrap();
+                        let mut response = TinyResponse::from_data(body.clone());
+                        response.add_header(
+                            Header::from_bytes(b"ETag".as_slice(), b"\"fixture-v1\"".as_slice())
+                                .unwrap(),
+                        );
+                        request.respond(response).unwrap();
                     }
                 }
             });
@@ -460,14 +497,12 @@ mod tests {
         let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
         assert_eq!(result.bytes, data.len() as u64);
         assert!(!result.resumed);
-        assert_eq!(
-            fs::read(temp.path().join(&request.relative_path)).unwrap(),
-            data
-        );
+        assert_eq!(fs::read(temp.path().join(&request.relative_path)).unwrap(), data);
+        assert!(!resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path))).exists());
     }
 
     #[test]
-    fn resumes_existing_partial_with_range() {
+    fn resumes_existing_partial_only_with_matching_persisted_identity() {
         let data = b"range fixture".repeat(100);
         let server = FixtureServer::start(data.clone());
         let temp = tempfile::tempdir().unwrap();
@@ -475,6 +510,38 @@ mod tests {
         fs::create_dir_all(final_path.parent().unwrap()).unwrap();
         let partial = partial_path(&final_path);
         fs::write(&partial, &data[..100]).unwrap();
+        let url = format!("{}/media", server.address);
+        save_resume_representation(
+            &partial,
+            &ResumeRepresentation {
+                url: url.clone(),
+                etag: Some("\"fixture-v1\"".into()),
+                last_modified: None,
+                total_bytes: Some(data.len() as u64),
+            },
+        )
+        .unwrap();
+        let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+        let request = TransferRequest {
+            url,
+            relative_path: "items/one/video.mp4".into(),
+            expected_bytes: Some(data.len() as u64),
+            expected_sha256: None,
+        };
+        let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
+        assert!(result.resumed);
+        assert_eq!(fs::read(final_path).unwrap(), data);
+        assert_eq!(load_resume_representation(&partial).unwrap(), None);
+    }
+
+    #[test]
+    fn partial_without_identity_restarts_from_zero() {
+        let data = b"safe restart fixture".repeat(100);
+        let server = FixtureServer::start(data.clone());
+        let temp = tempfile::tempdir().unwrap();
+        let final_path = temp.path().join("items/one/video.mp4");
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        fs::write(partial_path(&final_path), b"unproven stale bytes").unwrap();
         let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
         let request = TransferRequest {
             url: format!("{}/media", server.address),
@@ -483,7 +550,7 @@ mod tests {
             expected_sha256: None,
         };
         let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
-        assert!(result.resumed);
+        assert!(!result.resumed);
         assert_eq!(fs::read(final_path).unwrap(), data);
     }
 
@@ -505,9 +572,7 @@ mod tests {
             expected_bytes: None,
             expected_sha256: None,
         };
-        let error = engine
-            .transfer(&request, &AtomicBool::new(true))
-            .unwrap_err();
+        let error = engine.transfer(&request, &AtomicBool::new(true)).unwrap_err();
         assert_eq!(error.kind, ErrorKind::Canceled);
         assert!(!temp.path().join("items/one/video.mp4").exists());
     }
