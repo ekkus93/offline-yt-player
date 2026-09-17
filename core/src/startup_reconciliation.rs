@@ -1,4 +1,4 @@
-use crate::{CoreError, DownloadState, DurableDownloadSnapshot, ErrorKind, LibraryStore};
+use crate::{CoreError, DownloadState, ErrorKind, LibraryStore};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StartupReconciliation {
@@ -42,6 +42,7 @@ const fn requires_live_worker(state: DownloadState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DurableDownloadSnapshot;
 
     fn snapshot(job_id: &str, state: DownloadState) -> DurableDownloadSnapshot {
         DurableDownloadSnapshot {
