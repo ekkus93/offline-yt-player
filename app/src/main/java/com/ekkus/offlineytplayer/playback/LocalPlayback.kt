@@ -1,7 +1,12 @@
 package com.ekkus.offlineytplayer.playback
 
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.MediaSource
 import java.io.File
 
 internal data class LocalPlaybackAsset(
@@ -20,7 +25,11 @@ internal object LocalPlaybackPolicy {
     fun validate(asset: LocalPlaybackAsset): LocalPlaybackAsset {
         require(asset.videoPath.isNotBlank()) { "video path is required" }
         require(!looksRemote(asset.videoPath)) { "remote playback URIs are forbidden" }
-        asset.audioPath?.let { require(!looksRemote(it)) { "remote playback URIs are forbidden" } }
+        asset.audioPath?.let {
+            require(it.isNotBlank()) { "audio path must be non-blank when present" }
+            require(!looksRemote(it)) { "remote playback URIs are forbidden" }
+            require(it != asset.videoPath) { "separate audio and video assets must use distinct paths" }
+        }
         require(asset.startPositionMs >= 0) { "start position must be non-negative" }
         return asset
     }
@@ -29,6 +38,18 @@ internal object LocalPlaybackPolicy {
         require(path.isNotBlank()) { "local path is required" }
         require(!looksRemote(path)) { "remote playback URIs are forbidden" }
         return MediaItem.fromUri(Uri.fromFile(File(path)))
+    }
+
+    @OptIn(UnstableApi::class)
+    fun mediaSourceFor(
+        asset: LocalPlaybackAsset,
+        mediaSourceFactory: DefaultMediaSourceFactory,
+    ): MediaSource {
+        val validated = validate(asset)
+        val videoSource = mediaSourceFactory.createMediaSource(mediaItemFor(validated.videoPath))
+        val audioPath = validated.audioPath ?: return videoSource
+        val audioSource = mediaSourceFactory.createMediaSource(mediaItemFor(audioPath))
+        return MergingMediaSource(videoSource, audioSource)
     }
 
     fun completedByPosition(positionMs: Long, durationMs: Long): Boolean {
