@@ -130,7 +130,10 @@ pub fn prepare_partial_reuse(
     }
 
     let stored = load_resume_representation(partial_path)?;
-    if stored.as_ref().is_some_and(|stored| stored.matches(current)) {
+    if stored
+        .as_ref()
+        .is_some_and(|stored| stored.matches(current))
+    {
         return Ok(true);
     }
 
@@ -252,11 +255,9 @@ mod tests {
         let partial = temp.path().join(".video.mp4.partial");
         fs::write(&partial, b"unproven bytes").unwrap();
 
-        assert!(!prepare_partial_reuse(
-            &partial,
-            &representation(Some("fixture-v1"), None)
-        )
-        .unwrap());
+        assert!(
+            !prepare_partial_reuse(&partial, &representation(Some("fixture-v1"), None)).unwrap()
+        );
         assert!(!partial.exists());
     }
 
@@ -266,11 +267,9 @@ mod tests {
         let partial = temp.path().join(".video.mp4.partial");
         save_resume_representation(&partial, &representation(Some("fixture-v1"), None)).unwrap();
 
-        assert!(!prepare_partial_reuse(
-            &partial,
-            &representation(Some("fixture-v1"), None)
-        )
-        .unwrap());
+        assert!(
+            !prepare_partial_reuse(&partial, &representation(Some("fixture-v1"), None)).unwrap()
+        );
         assert_eq!(load_resume_representation(&partial).unwrap(), None);
     }
 }
