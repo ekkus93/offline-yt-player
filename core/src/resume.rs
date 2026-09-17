@@ -113,6 +113,39 @@ pub fn clear_resume_representation(partial_path: &Path) -> Result<(), CoreError>
     }
 }
 
+/// Decide whether an existing partial may be appended to for the currently observed remote
+/// representation. Unsafe or unproven partials are removed together with their sidecar before
+/// returning `false`, so callers cannot accidentally append merely because bytes happen to exist.
+///
+/// Corrupt sidecars remain an explicit integrity failure rather than being silently discarded:
+/// callers should surface/reconcile corruption deliberately instead of converting it into an
+/// apparently clean restart.
+pub fn prepare_partial_reuse(
+    partial_path: &Path,
+    current: &ResumeRepresentation,
+) -> Result<bool, CoreError> {
+    if !partial_path.exists() {
+        clear_resume_representation(partial_path)?;
+        return Ok(false);
+    }
+
+    let stored = load_resume_representation(partial_path)?;
+    if stored
+        .as_ref()
+        .is_some_and(|stored| stored.matches(current))
+    {
+        return Ok(true);
+    }
+
+    match fs::remove_file(partial_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(io_error(error)),
+    }
+    clear_resume_representation(partial_path)?;
+    Ok(false)
+}
+
 fn io_error(error: std::io::Error) -> CoreError {
     CoreError::new(
         ErrorKind::Internal,
@@ -187,5 +220,56 @@ mod tests {
         fs::write(resume_metadata_path(&partial), b"not-json").unwrap();
         let error = load_resume_representation(&partial).unwrap_err();
         assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+    }
+
+    #[test]
+    fn matching_representation_keeps_partial_for_append() {
+        let temp = tempfile::tempdir().unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        let current = representation(Some("fixture-v1"), None);
+        fs::write(&partial, b"partial bytes").unwrap();
+        save_resume_representation(&partial, &current).unwrap();
+
+        assert!(prepare_partial_reuse(&partial, &current).unwrap());
+        assert_eq!(fs::read(&partial).unwrap(), b"partial bytes");
+        assert_eq!(load_resume_representation(&partial).unwrap(), Some(current));
+    }
+
+    #[test]
+    fn changed_representation_discards_partial_and_sidecar() {
+        let temp = tempfile::tempdir().unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        let stored = representation(Some("fixture-v1"), None);
+        let current = representation(Some("fixture-v2"), None);
+        fs::write(&partial, b"stale bytes").unwrap();
+        save_resume_representation(&partial, &stored).unwrap();
+
+        assert!(!prepare_partial_reuse(&partial, &current).unwrap());
+        assert!(!partial.exists());
+        assert_eq!(load_resume_representation(&partial).unwrap(), None);
+    }
+
+    #[test]
+    fn partial_without_sidecar_is_never_reused() {
+        let temp = tempfile::tempdir().unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        fs::write(&partial, b"unproven bytes").unwrap();
+
+        assert!(
+            !prepare_partial_reuse(&partial, &representation(Some("fixture-v1"), None)).unwrap()
+        );
+        assert!(!partial.exists());
+    }
+
+    #[test]
+    fn missing_partial_clears_stale_sidecar() {
+        let temp = tempfile::tempdir().unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        save_resume_representation(&partial, &representation(Some("fixture-v1"), None)).unwrap();
+
+        assert!(
+            !prepare_partial_reuse(&partial, &representation(Some("fixture-v1"), None)).unwrap()
+        );
+        assert_eq!(load_resume_representation(&partial).unwrap(), None);
     }
 }
