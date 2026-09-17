@@ -17,41 +17,6 @@ Task IDs are stable. A task is complete only when implementation, automated qual
 
 ---
 
-## OYP-000 — Repository and project bootstrap
-
-### OYP-001 — Establish repository structure
-- [x] Create Rust workspace.
-- [x] Create Android Gradle project.
-- [x] Create `core/`, Android app, test, and documentation boundaries.
-- [x] Add `.editorconfig`, `.gitignore`, license decision placeholder, and contribution/build notes.
-
-Acceptance:
-- [x] Clean checkout has documented bootstrap commands.
-- [x] Rust and Android skeletons build in CI.
-
-Evidence: `docs/BOOTSTRAP_CI_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
-
-### OYP-002 — Pin toolchains
-- [x] Pin Rust toolchain.
-- [x] Pin Java/JDK version.
-- [x] Pin Android Gradle Plugin, Kotlin, Compose BOM, and Gradle wrapper.
-- [x] Document supported Android SDK/minSdk/targetSdk values.
-
-Acceptance:
-- [x] CI uses the same declared toolchain versions as local documentation.
-
-Evidence: `docs/BOOTSTRAP_CI_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
-
-### OYP-003 — Baseline CI
-- [x] Add Rust fmt/clippy/test jobs.
-- [x] Add Android lint/unit/build jobs.
-- [x] Add exact commit SHA reporting.
-- [x] Add dependency cache without making correctness cache-dependent.
-
-Evidence: `docs/BOOTSTRAP_CI_AUDIT.md`; exact-head master CI `35033596290` passed at `23fc6c047931ebbc82d71be681296a1e07f493e7`.
-
----
-
 ## OYP-100 — Rust core foundation
 
 ### OYP-101 — Domain models
@@ -332,9 +297,11 @@ Evidence: `docs/LOCAL_PLAYER_INTEGRATION_AUDIT.md`; push CI `35254195590`, PR CI
 Evidence: `docs/PORTRAIT_PLAYER_SCREEN_AUDIT.md`; corrected push CI `35259246198`, PR CI `35259549539`, and post-merge master CI `35259858274` passed at `64c0935fa081d94b239336ee36f9f2721adb32a2`.
 
 ### OYP-903 — Playback position
-- [ ] Persist periodically and on lifecycle transitions.
-- [ ] Resume intelligently.
-- [ ] Mark near-end items completed according to defined threshold.
+- [x] Persist periodically and on lifecycle transitions.
+- [x] Resume intelligently.
+- [x] Mark near-end items completed according to defined threshold.
+
+Evidence: `docs/PLAYBACK_POSITION_AUDIT.md`; push CI `35265318615`, PR CI `35265633755`, and post-merge master CI `35265922221` passed; implementation merged via PR #121 at `ffd111ddd5391a76cc5a834e2b0cf5860dc57c8c`.
 
 ### OYP-904 — MediaSession
 - [ ] Lock-screen controls.
@@ -658,7 +625,7 @@ Evidence: `docs/CORE_PORTABILITY_AUDIT.md` records the v1 portability audit cove
 
 ### OYP-2202 — Portable library-format contract
 - [x] Document database/media directory semantics.
-- [x] Document versioning/migration expectations.
+ [x] Document versioning/migration expectations.
 - [x] Avoid baking Android-only URIs into portable persisted records.
 
 Evidence: `docs/PORTABLE_LIBRARY_FORMAT.md` defines the SQLite/relative-asset contract, schema migration rules, platform-owned library roots, and the prohibition on persisting Android/platform URI identities in portable records.
