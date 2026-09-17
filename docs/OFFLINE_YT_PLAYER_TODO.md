@@ -315,9 +315,11 @@ Evidence: `docs/MEDIA_ASSET_STRATEGY_AUDIT.md`, `docs/OYP_200_802_TODO_RECONCILI
 ## OYP-900 — Media3 offline playback
 
 ### OYP-901 — Local player integration
-- [ ] Build Media3 player around local URIs/assets.
-- [ ] No network dependency for completed playback.
-- [ ] Handle single-file and separate audio/video asset plans.
+- [x] Build Media3 player around local URIs/assets.
+- [x] No network dependency for completed playback.
+- [x] Handle single-file and separate audio/video asset plans.
+
+Evidence: `docs/LOCAL_PLAYER_INTEGRATION_AUDIT.md`; push CI `35254195590`, PR CI `35256895958`, and post-merge master CI `35257195496` passed at `835c72436bb0ccc5874e770864f9dd7ebf0f233d`. Full device playback behavior remains tracked under OYP-905 and OYP-1900.
 
 ### OYP-902 — Portrait player screen
 - [ ] Fixed full-width 16:9 video surface.
