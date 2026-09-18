@@ -81,6 +81,7 @@ class DownloadForegroundService : Service() {
             ACTION_CANCEL,
             ACTION_CONNECTIVITY_RETRY,
             ACTION_RECONCILE_AFTER_REBOOT,
+            ACTION_SCHEDULE_WORK,
             -> Unit
         }
         startForeground(DownloadServicePolicy.NotificationId, activeNotification())
@@ -137,5 +138,7 @@ class DownloadForegroundService : Service() {
         const val ACTION_STOP = "com.ekkus.offlineytplayer.download.STOP"
         const val ACTION_CONNECTIVITY_RETRY = "com.ekkus.offlineytplayer.download.CONNECTIVITY_RETRY"
         const val ACTION_RECONCILE_AFTER_REBOOT = "com.ekkus.offlineytplayer.download.RECONCILE_AFTER_REBOOT"
+        const val ACTION_SCHEDULE_WORK = "com.ekkus.offlineytplayer.download.SCHEDULE_WORK"
+        const val EXTRA_QUEUE_ITEM_ID = "queue_item_id"
     }
 }
