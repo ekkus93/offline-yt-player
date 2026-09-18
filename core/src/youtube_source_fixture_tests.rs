@@ -31,11 +31,9 @@ fn combined_fixture_extracts_metadata_and_combined_stream() {
 #[test]
 fn split_fixture_extracts_separate_av_and_subtitles() {
     let media = parse_player(&fixture("split")).unwrap();
-    let normalized = crate::normalize_extracted_media(
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        &media,
-    )
-    .unwrap();
+    let normalized =
+        crate::normalize_extracted_media("https://www.youtube.com/watch?v=dQw4w9WgXcQ", &media)
+            .unwrap();
     assert!(
         normalized
             .formats
