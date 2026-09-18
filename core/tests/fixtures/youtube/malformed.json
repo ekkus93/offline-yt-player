@@ -1,0 +1,1 @@
+{"playabilityStatus":{"status":"OK"},"videoDetails":{"title":"Malformed"},"streamingData":{"formats":[{"itag":22,"url":"javascript:alert(1)","mimeType":"video/mp4; codecs=\"avc1.64001F, mp4a.40.2\""}]}}
