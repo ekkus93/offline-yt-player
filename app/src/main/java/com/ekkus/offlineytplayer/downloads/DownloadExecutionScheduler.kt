@@ -86,8 +86,8 @@ internal class AndroidDownloadExecutionScheduler(
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             builder.setEstimatedNetworkBytes(
-                request.estimatedDownloadBytes ?: JobInfo.NETWORK_BYTES_UNKNOWN,
-                JobInfo.NETWORK_BYTES_UNKNOWN,
+                request.estimatedDownloadBytes ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
+                JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
             )
         }
         if (Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk) {
