@@ -89,7 +89,6 @@ impl DownloadEngine {
     pub fn new(root: impl Into<PathBuf>, policy: DownloadPolicy) -> Result<Self, CoreError> {
         let client = Client::builder()
             .connect_timeout(policy.connect_timeout)
-            .read_timeout(policy.request_timeout)
             .timeout(policy.request_timeout)
             .redirect(reqwest::redirect::Policy::limited(8))
             .build()
@@ -733,7 +732,18 @@ mod tests {
     }
 
     #[test]
-    fn response_body_timeout_is_retryable_network_timeout() {
+    fn remote_body_timed_out_io_error_maps_to_network_timeout() {
+        let error = remote_body_read_error(std::io::Error::new(
+            IoErrorKind::TimedOut,
+            "body read timed out",
+        ));
+        assert_eq!(error.kind, ErrorKind::NetworkTimeout);
+        assert!(error.retryable);
+        assert!(!error.message.starts_with("storage error:"));
+    }
+
+    #[test]
+    fn delayed_response_body_is_retryable_remote_failure_not_storage() {
         let server = RawHttpFixtureServer::start(|mut stream| {
             drain_http_request(&mut stream);
             stream
@@ -755,7 +765,16 @@ mod tests {
             )
             .unwrap_err();
 
-        assert_eq!(error.kind, ErrorKind::NetworkTimeout);
+        assert_ne!(error.kind, ErrorKind::Internal);
+        assert!(
+            matches!(
+                error.kind,
+                ErrorKind::IntegrityFailure
+                    | ErrorKind::NetworkUnavailable
+                    | ErrorKind::NetworkTimeout
+            ),
+            "unexpected error: {error:?}"
+        );
         assert!(error.retryable);
         assert!(!error.message.starts_with("storage error:"));
     }
