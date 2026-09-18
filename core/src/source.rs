@@ -43,6 +43,14 @@ impl SourceRegistry {
         Self::default()
     }
 
+    /// Production registry. Fixture adapters are deliberately not installed here.
+    #[must_use]
+    pub fn production() -> Self {
+        let mut registry = Self::new();
+        registry.register(Arc::new(crate::YouTubeSource::default()));
+        registry
+    }
+
     pub fn register(&mut self, source: Arc<dyn MediaSource>) {
         self.sources.push(source);
     }
@@ -214,6 +222,14 @@ mod tests {
         let registry = SourceRegistry::new();
         let error = registry.select("https://example.com/video").err().unwrap();
         assert_eq!(error.kind, ErrorKind::UnsupportedSource);
+    }
+
+    #[test]
+    fn production_registry_selects_youtube() {
+        let source = SourceRegistry::production()
+            .select("https://youtu.be/dQw4w9WgXcQ")
+            .unwrap();
+        assert_eq!(source.id(), "youtube");
     }
 
     #[test]

@@ -24,6 +24,7 @@ pub mod thumbnail;
 pub mod youtube;
 pub mod youtube_diagnostics;
 pub mod youtube_extract;
+pub mod youtube_source;
 
 pub use concurrency::*;
 pub use domain::*;
@@ -47,6 +48,7 @@ pub use thumbnail::*;
 pub use youtube::*;
 pub use youtube_diagnostics::*;
 pub use youtube_extract::*;
+pub use youtube_source::*;
 
 uniffi::setup_scaffolding!();
 
