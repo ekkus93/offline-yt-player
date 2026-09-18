@@ -92,6 +92,11 @@ jobs:
         run: |
           cargo build -p offline-yt-core --target aarch64-linux-android
           test -f target/aarch64-linux-android/debug/liboffline_yt_core.so
+      - name: Verify APK packages Rust core
+        run: |
+          ./gradlew --no-daemon assembleDebug
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | tee /tmp/apk-files.txt
+          grep -F "lib/arm64-v8a/liboffline_yt_core.so" /tmp/apk-files.txt
 
   android:
     name: Android lint unit build
@@ -113,6 +118,16 @@ jobs:
           log-accepted-android-sdk-licenses: "false"
       - name: Install pinned Android SDK
         run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+      - name: Install pinned Rust Android native library
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup target add aarch64-linux-android
+          sdkmanager "ndk;30.0.16248370"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export CC_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export AR_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          cargo build -p offline-yt-core --target aarch64-linux-android
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
