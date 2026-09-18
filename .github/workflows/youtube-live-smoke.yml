@@ -1,0 +1,28 @@
+name: YouTube live smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      youtube_url:
+        description: Approved public YouTube video URL for controlled qualification
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  live-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+      - name: Controlled live adapter smoke
+        env:
+          OYP_YOUTUBE_LIVE_URL: ${{ inputs.youtube_url }}
+        run: cargo test -p offline-yt-core live_youtube_source_resolves_supported_url -- --ignored --exact
