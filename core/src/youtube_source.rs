@@ -479,6 +479,31 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "manual live YouTube qualification; requires OYP_LIVE_YOUTUBE_VIDEO_ID"]
+    fn live_youtube_resolves_real_metadata_and_formats() {
+        let video_id = std::env::var("OYP_LIVE_YOUTUBE_VIDEO_ID")
+            .expect("set OYP_LIVE_YOUTUBE_VIDEO_ID to an authorized 11-character video ID");
+        assert!(
+            video_id.len() == 11
+                && video_id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-'),
+            "live smoke accepts only a bare 11-character YouTube video ID"
+        );
+        let url = format!("https://www.youtube.com/watch?v={video_id}");
+        let source = YouTubeSource::default();
+        let media = futures::executor::block_on(source.resolve(&url))
+            .expect("live YouTube metadata resolution failed");
+        assert_eq!(media.source.provider, "youtube");
+        assert_eq!(media.source.media_id, video_id);
+        assert!(!media.title.trim().is_empty());
+        assert!(!media.formats.is_empty());
+        let choices = futures::executor::block_on(source.choices(&media))
+            .expect("live YouTube format curation failed");
+        assert!(!choices.is_empty());
+    }
+
+    #[test]
     fn rejects_malformed_caption_track() {
         let player = serde_json::json!({
             "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [
