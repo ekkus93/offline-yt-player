@@ -27,6 +27,8 @@ pub mod youtube_extract;
 pub mod youtube_source;
 
 #[cfg(test)]
+mod youtube_live_smoke;
+#[cfg(test)]
 mod youtube_source_fixture_tests;
 
 pub use concurrency::*;
