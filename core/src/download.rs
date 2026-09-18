@@ -7,6 +7,7 @@ use crate::security::{validate_http_url, validate_relative_library_path};
 use reqwest::blocking::{Client, Response};
 use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use sha2::{Digest, Sha256};
+use std::error::Error as StdError;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -88,6 +89,7 @@ impl DownloadEngine {
     pub fn new(root: impl Into<PathBuf>, policy: DownloadPolicy) -> Result<Self, CoreError> {
         let client = Client::builder()
             .connect_timeout(policy.connect_timeout)
+            .read_timeout(policy.request_timeout)
             .timeout(policy.request_timeout)
             .redirect(reqwest::redirect::Policy::limited(8))
             .build()
@@ -396,12 +398,7 @@ fn map_reqwest_error(error: reqwest::Error) -> CoreError {
 }
 
 fn remote_body_read_error(error: std::io::Error) -> CoreError {
-    let text = error.to_string().to_ascii_lowercase();
-    let timeout_kind = matches!(
-        error.kind(),
-        IoErrorKind::TimedOut | IoErrorKind::WouldBlock
-    );
-    if timeout_kind || text.contains("timed out") || text.contains("timeout") {
+    if io_error_is_timeout(&error) {
         return CoreError::new(
             ErrorKind::NetworkTimeout,
             "Network response body read timed out",
@@ -430,6 +427,34 @@ fn remote_body_read_error(error: std::io::Error) -> CoreError {
             true,
         ),
     }
+}
+
+fn io_error_is_timeout(error: &std::io::Error) -> bool {
+    let timeout_kind = matches!(
+        error.kind(),
+        IoErrorKind::TimedOut | IoErrorKind::WouldBlock
+    );
+    if timeout_kind || looks_like_timeout(&error.to_string()) {
+        return true;
+    }
+
+    let mut source = StdError::source(error);
+    while let Some(cause) = source {
+        if cause
+            .downcast_ref::<reqwest::Error>()
+            .is_some_and(reqwest::Error::is_timeout)
+            || looks_like_timeout(&cause.to_string())
+        {
+            return true;
+        }
+        source = cause.source();
+    }
+    false
+}
+
+fn looks_like_timeout(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("timed out") || lower.contains("timeout") || lower.contains("deadline has elapsed")
 }
 
 fn io_error(error: std::io::Error) -> CoreError {
