@@ -1,8 +1,10 @@
+use crate::youtube_extract::{
+    ExtractedStream, ExtractedSubtitle, ExtractedYouTubeMedia, curate_quality_choices,
+    normalize_extracted_media,
+};
 use crate::{
-    Compatibility, CoreError, DownloadPlan, DownloadPlanAsset, ErrorKind, ExtractedStream,
-    ExtractedSubtitle, ExtractedYouTubeMedia, MediaInfo, MediaKind, MediaSource, QualityChoice,
-    SourceFuture, StreamRole, curate_quality_choices, normalize_extracted_media,
-    recognize_youtube_video_url,
+    Compatibility, CoreError, DownloadPlan, DownloadPlanAsset, ErrorKind, MediaInfo, MediaKind,
+    MediaSource, QualityChoice, SourceFuture, StreamRole, recognize_youtube_video_url,
 };
 use reqwest::blocking::Client;
 use serde_json::Value;

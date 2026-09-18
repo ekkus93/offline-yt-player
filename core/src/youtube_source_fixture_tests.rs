@@ -1,4 +1,5 @@
-use crate::{ErrorKind, ExtractedYouTubeMedia, StreamRole, normalize_extracted_media};
+use crate::youtube_extract::{ExtractedSubtitle, ExtractedYouTubeMedia, normalize_extracted_media};
+use crate::{ErrorKind, StreamRole};
 
 fn fixture(name: &str) -> ExtractedYouTubeMedia {
     let text = match name {
@@ -67,7 +68,7 @@ fn malformed_provider_url_is_rejected() {
 fn subtitle_normalization_is_bounded() {
     let mut extracted = fixture("combined");
     extracted.subtitles = (0..200)
-        .map(|index| crate::ExtractedSubtitle {
+        .map(|index| ExtractedSubtitle {
             id: format!("track-{index}"),
             language: "en".into(),
             label: None,
