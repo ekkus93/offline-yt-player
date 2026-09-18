@@ -104,7 +104,7 @@ mod tests {
                     mime_type: Some("video/mp4".into()),
                 },
                 LocalAsset {
-                    asset_id: "subtitle".into(),
+                    asset_id: "z-subtitle".into(),
                     kind: MediaKind::Subtitle,
                     relative_path: "items/item-1/subtitles/en.vtt".into(),
                     bytes: 3,
