@@ -23,22 +23,26 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-001 — Record reviewed baseline and issue inventory
 
-- [ ] Add the remediation spec and this TODO to `docs/`.
-- [ ] Record baseline SHA `b8aebfd0467de67a2cc0b0a583d91f9a1783da7c`.
-- [ ] Add a short `docs/REMEDIATION_BASELINE_AUDIT.md` mapping each code-review finding to a remediation task ID.
-- [ ] Link the prior detailed TODO from git history for historical acceptance criteria.
-- [ ] Explicitly document that the previous final reconciliation changed checklist state without corresponding implementation for all claimed items.
+- [x] Add the remediation spec and this TODO to `docs/`.
+- [x] Record baseline SHA `b8aebfd0467de67a2cc0b0a583d91f9a1783da7c`.
+- [x] Add a short `docs/REMEDIATION_BASELINE_AUDIT.md` mapping each code-review finding to a remediation task ID.
+- [x] Link the prior detailed TODO from git history for historical acceptance criteria.
+- [x] Explicitly document that the previous final reconciliation changed checklist state without corresponding implementation for all claimed items.
 
 **Acceptance:** every review finding is mapped to at least one unchecked task in this file.
 
+**Evidence (RMD-001):** implementation/docs in `docs/REMEDIATION_BASELINE_AUDIT.md` plus the remediation spec/TODO; implementation SHA `2b11de56304da835808016f8e67ad3709e11a55b`; CI run `35316105685` passed on that exact SHA. Historical detailed checklist: `docs/OFFLINE_YT_PLAYER_TODO.md` at `4c977462a1f0ff885484aa88f6936b8dcc2cbf2f`.
+
 ### RMD-002 — Add anti-false-closeout reconciliation rules
 
-- [ ] Document evidence required before checking a task: implementation path, behavioral test path, exact SHA/run.
-- [ ] Require task reconciliation to reference evidence rather than narrative assertions.
-- [ ] Add a final script/test that fails if the detailed remediation TODO contains unchecked items during a release-closeout workflow.
-- [ ] Ensure that script does not mutate or auto-check the TODO.
+- [x] Document evidence required before checking a task: implementation path, behavioral test path, exact SHA/run.
+- [x] Require task reconciliation to reference evidence rather than narrative assertions.
+- [x] Add a final script/test that fails if the detailed remediation TODO contains unchecked items during a release-closeout workflow.
+- [x] Ensure that script does not mutate or auto-check the TODO.
 
 **Acceptance:** a documentation-only summary cannot make unresolved detailed tasks appear complete.
+
+**Evidence (RMD-002):** `scripts/check_remediation_closeout.py`, `tests/test_check_remediation_closeout.py`, `.github/workflows/remediation-closeout.yml`, and the regular CI governance job; implementation SHA `2b11de56304da835808016f8e67ad3709e11a55b`; CI run `35316105685` passed on that exact SHA. The guard is read-only and fails closeout while any unchecked detailed checklist item remains.
 
 ---
 
