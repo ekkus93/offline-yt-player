@@ -7,7 +7,7 @@ use crate::youtube::recognize_youtube_video_url;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExtractedYouTubeMedia {
+pub(crate) struct ExtractedYouTubeMedia {
     pub title: String,
     pub duration_ms: Option<u64>,
     pub thumbnail_url: Option<String>,
@@ -16,7 +16,7 @@ pub struct ExtractedYouTubeMedia {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExtractedSubtitle {
+pub(crate) struct ExtractedSubtitle {
     pub id: String,
     pub language: String,
     pub label: Option<String>,
@@ -24,7 +24,7 @@ pub struct ExtractedSubtitle {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExtractedStream {
+pub(crate) struct ExtractedStream {
     pub id: String,
     pub url: String,
     pub container: String,
@@ -39,7 +39,7 @@ pub struct ExtractedStream {
     pub audio_channels: Option<u8>,
 }
 
-pub fn normalize_extracted_media(
+pub(crate) fn normalize_extracted_media(
     source_url: &str,
     extracted: &ExtractedYouTubeMedia,
 ) -> Result<MediaInfo, CoreError> {
@@ -139,7 +139,7 @@ fn normalize_stream(stream: &ExtractedStream) -> Result<MediaFormat, CoreError> 
     })
 }
 
-pub fn curate_quality_choices(media: &MediaInfo) -> Vec<QualityChoice> {
+pub(crate) fn curate_quality_choices(media: &MediaInfo) -> Vec<QualityChoice> {
     let mut choices: Vec<_> = media
         .formats
         .iter()
@@ -244,6 +244,25 @@ mod tests {
             choices[1].compatibility,
             Compatibility::RequiresSeparateAssets
         );
+    }
+
+    #[test]
+    fn signed_provider_stream_urls_do_not_cross_normalized_or_ffi_boundary() {
+        let mut extracted = fixture();
+        extracted.streams[0].url =
+            "https://rr.example/videoplayback?sig=SECRET_TOKEN&expire=999".into();
+        let media =
+            normalize_extracted_media("https://www.youtube.com/watch?v=dQw4w9WgXcQ", &extracted)
+                .unwrap();
+
+        let normalized_debug = format!("{media:?}");
+        assert!(!normalized_debug.contains("SECRET_TOKEN"));
+        assert!(!normalized_debug.contains("videoplayback"));
+
+        let summary = crate::FfiMediaSummary::from(&media);
+        let ffi_debug = format!("{summary:?}");
+        assert!(!ffi_debug.contains("SECRET_TOKEN"));
+        assert!(!ffi_debug.contains("videoplayback"));
     }
 
     #[test]
