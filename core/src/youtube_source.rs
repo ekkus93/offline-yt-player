@@ -1,7 +1,8 @@
 use crate::{
     Compatibility, CoreError, DownloadPlan, DownloadPlanAsset, ErrorKind, ExtractedStream,
-    ExtractedYouTubeMedia, MediaInfo, MediaKind, MediaSource, QualityChoice, SourceFuture,
-    StreamRole, curate_quality_choices, normalize_extracted_media, recognize_youtube_video_url,
+    ExtractedSubtitle, ExtractedYouTubeMedia, MediaInfo, MediaKind, MediaSource, QualityChoice,
+    SourceFuture, StreamRole, curate_quality_choices, normalize_extracted_media,
+    recognize_youtube_video_url,
 };
 use reqwest::blocking::Client;
 use serde_json::Value;
@@ -9,6 +10,7 @@ use std::time::Duration;
 
 const MAX_WATCH_BYTES: usize = 4 * 1024 * 1024;
 const MAX_STREAMS: usize = 256;
+const MAX_SUBTITLES: usize = 128;
 
 /// Narrow fail-closed production YouTube adapter described by the extraction ADR.
 #[derive(Debug, Clone)]
@@ -282,12 +284,58 @@ fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError> {
             streams.push(stream);
         }
     }
+    let subtitles = parse_subtitles(v)?;
     Ok(ExtractedYouTubeMedia {
         title,
         duration_ms,
         thumbnail_url,
         streams,
+        subtitles,
     })
+}
+
+fn parse_subtitles(v: &Value) -> Result<Vec<ExtractedSubtitle>, CoreError> {
+    let tracks = v
+        .pointer("/captions/playerCaptionsTracklistRenderer/captionTracks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(MAX_SUBTITLES);
+    let mut subtitles = Vec::new();
+    for (index, track) in tracks.enumerate() {
+        let base_url = track
+            .get("baseUrl")
+            .and_then(Value::as_str)
+            .ok_or_else(|| source_changed("YouTube caption track URL was absent"))?;
+        if base_url.len() > 16 * 1024 {
+            return Err(source_changed("YouTube caption track URL exceeded bound"));
+        }
+        crate::validate_http_url(base_url)
+            .map_err(|_| source_changed("YouTube caption track URL was invalid"))?;
+        let language = track
+            .get("languageCode")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty() && s.len() <= 64)
+            .ok_or_else(|| source_changed("YouTube caption language was invalid"))?;
+        let label = track
+            .pointer("/name/simpleText")
+            .and_then(Value::as_str)
+            .map(|s| s.chars().take(128).collect());
+        let auto_generated = track.get("kind").and_then(Value::as_str) == Some("asr");
+        let id = track
+            .get("vssId")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty() && s.len() <= 256)
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("{language}-{index}"));
+        subtitles.push(ExtractedSubtitle {
+            id,
+            language: language.to_owned(),
+            label,
+            auto_generated,
+        });
+    }
+    Ok(subtitles)
 }
 
 fn parse_stream(v: &Value) -> Result<Option<ExtractedStream>, CoreError> {
@@ -410,5 +458,34 @@ mod tests {
         assert_eq!(planned.relative_path, "items/dQw4w9WgXcQ/video.mp4");
         assert_eq!(planned.expected_bytes, Some(42));
         assert_eq!(planned.mime_type.as_deref(), Some("video/mp4"));
+    }
+
+    #[test]
+    fn parses_manual_and_auto_generated_caption_tracks() {
+        let player = serde_json::json!({
+            "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [
+                {"baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=en", "languageCode": "en", "name": {"simpleText": "English"}, "vssId": ".en"},
+                {"baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=es&kind=asr", "languageCode": "es", "name": {"simpleText": "Spanish (auto-generated)"}, "vssId": "a.es", "kind": "asr"}
+            ]}}
+        });
+        let tracks = parse_subtitles(&player).unwrap();
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(tracks[0].language, "en");
+        assert!(!tracks[0].auto_generated);
+        assert_eq!(tracks[1].language, "es");
+        assert!(tracks[1].auto_generated);
+    }
+
+    #[test]
+    fn rejects_malformed_caption_track() {
+        let player = serde_json::json!({
+            "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [
+                {"baseUrl": "javascript:alert(1)", "languageCode": "en"}
+            ]}}
+        });
+        assert_eq!(
+            parse_subtitles(&player).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
     }
 }

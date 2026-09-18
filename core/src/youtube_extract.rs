@@ -1,6 +1,6 @@
 use crate::domain::{
     AudioFormat, Compatibility, CoreError, ErrorKind, MediaFormat, MediaInfo, QualityChoice,
-    SourceIdentity, StreamRole, VideoFormat,
+    SourceIdentity, StreamRole, SubtitleFormat, SubtitleTrack, VideoFormat,
 };
 use crate::security::{sanitize_title, validate_http_url};
 use crate::youtube::recognize_youtube_video_url;
@@ -12,6 +12,15 @@ pub struct ExtractedYouTubeMedia {
     pub duration_ms: Option<u64>,
     pub thumbnail_url: Option<String>,
     pub streams: Vec<ExtractedStream>,
+    pub subtitles: Vec<ExtractedSubtitle>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractedSubtitle {
+    pub id: String,
+    pub language: String,
+    pub label: Option<String>,
+    pub auto_generated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +59,21 @@ pub fn normalize_extracted_media(
         .iter()
         .map(normalize_stream)
         .collect::<Result<Vec<_>, _>>()?;
+    let subtitles = extracted
+        .subtitles
+        .iter()
+        .take(128)
+        .map(|subtitle| SubtitleTrack {
+            track_id: subtitle.id.clone(),
+            format: SubtitleFormat {
+                language: subtitle.language.clone(),
+                label: subtitle.label.clone(),
+                format: "vtt".into(),
+                auto_generated: subtitle.auto_generated,
+            },
+            estimated_bytes: None,
+        })
+        .collect();
     Ok(MediaInfo {
         source: SourceIdentity {
             provider: "youtube".into(),
@@ -60,7 +84,7 @@ pub fn normalize_extracted_media(
         duration_ms: extracted.duration_ms,
         thumbnail_url: extracted.thumbnail_url.clone(),
         formats,
-        subtitles: Vec::new(),
+        subtitles,
     })
 }
 
@@ -185,17 +209,26 @@ mod tests {
                     audio_channels: None,
                 },
             ],
+            subtitles: vec![ExtractedSubtitle {
+                id: "en".into(),
+                language: "en".into(),
+                label: Some("English".into()),
+                auto_generated: false,
+            }],
         }
     }
 
     #[test]
-    fn normalizes_metadata_and_stream_roles() {
+    fn normalizes_metadata_stream_roles_and_subtitles() {
         let media = normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &fixture()).unwrap();
         assert_eq!(media.source.media_id, "dQw4w9WgXcQ");
         assert_eq!(media.source.provider, "youtube");
         assert_eq!(media.title, "Example Video");
         assert_eq!(media.formats[0].role, StreamRole::Combined);
         assert_eq!(media.formats[1].role, StreamRole::VideoOnly);
+        assert_eq!(media.subtitles.len(), 1);
+        assert_eq!(media.subtitles[0].format.language, "en");
+        assert_eq!(media.subtitles[0].format.label.as_deref(), Some("English"));
     }
 
     #[test]
