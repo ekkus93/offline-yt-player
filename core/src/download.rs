@@ -397,7 +397,7 @@ fn map_reqwest_error(error: reqwest::Error) -> CoreError {
 
 fn remote_body_read_error(error: std::io::Error) -> CoreError {
     let text = error.to_string().to_ascii_lowercase();
-    if error.kind() == IoErrorKind::TimedOut
+    if matches!(error.kind(), IoErrorKind::TimedOut | IoErrorKind::WouldBlock)
         || text.contains("timed out")
         || text.contains("timeout")
     {
