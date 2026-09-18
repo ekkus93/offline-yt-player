@@ -136,7 +136,7 @@ No iOS/desktop UI is required for v1.
 
 ## OYP-2300 — v1 engineering closeout
 - [x] OYP-2301 — TODO reconciliation: every v1 engineering task is reconciled here; there are no stale partial checkbox states.
-- [x] OYP-2302 — Exact-head qualification: the complete CI matrix passed on the pre-closeout candidate `ac986c16f38fb8141b3f230cf987732bb5b3f38f` in run `35306407218`; the closeout audit merge `4c977462a1f0ff885484aa88f6936b8dcc2cbf2f` passed post-merge master CI in run `35307165689`. This reconciliation change must likewise pass push, PR, and post-merge master CI.
+- [x] OYP-2302 — Exact-head qualification: the complete CI matrix passed on candidate `ac986c16f38fb8141b3f230cf987732bb5b3f38f` in run `35306407218`; the closeout audit merge `4c977462a1f0ff885484aa88f6936b8dcc2cbf2f` passed master CI in run `35307165689`; final TODO reconciliation `550c1448dbe7d820630bdb794a5b0c2c27580d73` passed master CI in run `35309929054`.
 - [x] OYP-2303 — Portrait UX audit: portrait-only, no hidden primary controls, no horizontal control scrolling, and bounded content scrolling are covered by deterministic policies/tests.
 - [x] OYP-2304 — Offline acceptance: deterministic fixtures cover reconstruction, local metadata/thumbnail/subtitle availability, and representative local playback with networking unavailable.
 - [x] OYP-2305 — Release gate: known limitations and policy state are documented; public/app-store distribution remains blocked until required human policy/legal review is resolved.
