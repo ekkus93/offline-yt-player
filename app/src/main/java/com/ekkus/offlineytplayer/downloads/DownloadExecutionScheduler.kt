@@ -84,7 +84,7 @@ internal class AndroidDownloadExecutionScheduler(
             )
             .setRequiredNetworkType(DownloadExecutionSchedulerPolicy.requiredNetworkType(request.networkPreference))
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             builder.setEstimatedNetworkBytes(
                 request.estimatedDownloadBytes ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
                 JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
