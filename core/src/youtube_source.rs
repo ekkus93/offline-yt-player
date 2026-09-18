@@ -54,8 +54,7 @@ impl MediaSource for YouTubeSource {
     }
 }
 
-fn asset(format:&crate::MediaFormat, asset_id:&str, kind:MediaKind, media_id:&str)->Result<DownloadPlanAsset,CoreError>{
-    let url=format.mime_type.as_deref().and_then(|_| None); let _=url;
+fn asset(_format:&crate::MediaFormat, asset_id:&str, _kind:MediaKind, media_id:&str)->Result<DownloadPlanAsset,CoreError>{
     Err(source_changed(&format!("Internal stream URL was not retained for {asset_id} of {media_id}")))
 }
 
