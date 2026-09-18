@@ -2,9 +2,9 @@ use crate::domain::{CoreError, ErrorKind};
 
 /// Sanitized provider diagnostic intended for logs/support bundles.
 ///
-/// Deliberately derives output only from the typed error category. The original error message can
-/// contain a signed media URL, token, cookie-derived value, or other provider detail and therefore
-/// must not cross this diagnostic boundary.
+/// Deliberately emits a bounded code/message rather than reflecting the provider error text. The
+/// one message comparison below recognizes the adapter's own fixed unavailable-media sentinel; no
+/// provider-controlled text is copied into the diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct YouTubeDiagnostic {
     pub code: &'static str,
@@ -13,7 +13,7 @@ pub struct YouTubeDiagnostic {
 }
 
 #[must_use]
-pub const fn youtube_diagnostic(error: &CoreError) -> YouTubeDiagnostic {
+pub fn youtube_diagnostic(error: &CoreError) -> YouTubeDiagnostic {
     match error.kind {
         ErrorKind::NetworkUnavailable => YouTubeDiagnostic {
             code: "youtube.network_unavailable",
@@ -30,6 +30,15 @@ pub const fn youtube_diagnostic(error: &CoreError) -> YouTubeDiagnostic {
             user_message: "YouTube rejected or could not complete the request.",
             retryable: error.retryable,
         },
+        ErrorKind::SourceChanged
+            if error.message == "YouTube reports this media is unavailable" =>
+        {
+            YouTubeDiagnostic {
+                code: "youtube.unavailable_media",
+                user_message: "This YouTube video is unavailable or private.",
+                retryable: false,
+            }
+        }
         ErrorKind::SourceChanged => YouTubeDiagnostic {
             code: "youtube.source_changed",
             user_message: "YouTube changed how this video is delivered. An app update may be required.",
@@ -63,7 +72,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn network_and_source_change_are_distinct() {
+    fn unsupported_changed_network_and_unavailable_are_distinct() {
+        let unsupported = youtube_diagnostic(&CoreError::new(
+            ErrorKind::UnsupportedSource,
+            "unsupported",
+            false,
+        ));
         let network =
             youtube_diagnostic(&CoreError::new(ErrorKind::NetworkTimeout, "timeout", true));
         let changed = youtube_diagnostic(&CoreError::new(
@@ -71,10 +85,18 @@ mod tests {
             "player signature changed",
             false,
         ));
+        let unavailable = youtube_diagnostic(&CoreError::new(
+            ErrorKind::SourceChanged,
+            "YouTube reports this media is unavailable",
+            false,
+        ));
+        assert_eq!(unsupported.code, "youtube.unsupported_url");
         assert_eq!(network.code, "youtube.network_timeout");
         assert_eq!(changed.code, "youtube.source_changed");
+        assert_eq!(unavailable.code, "youtube.unavailable_media");
         assert!(network.retryable);
         assert!(!changed.retryable);
+        assert!(!unavailable.retryable);
     }
 
     #[test]
