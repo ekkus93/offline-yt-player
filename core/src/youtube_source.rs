@@ -140,14 +140,20 @@ impl MediaSource for YouTubeSource {
                 .canonical_url
                 .as_deref()
                 .ok_or_else(|| source_changed("Missing canonical YouTube URL"))?;
-            let fresh = normalize_extracted_media(canonical, &self.fetch(canonical)?)?;
+            let extracted = self.fetch(canonical)?;
+            let fresh = normalize_extracted_media(canonical, &extracted)?;
             let video = fresh
                 .formats
                 .iter()
                 .find(|f| f.format_id == selected.format_id)
                 .ok_or_else(|| source_changed("Selected YouTube format changed during planning"))?;
+            let video_stream = extracted
+                .streams
+                .iter()
+                .find(|stream| stream.id == video.format_id)
+                .ok_or_else(|| source_changed("Selected YouTube stream URL was absent"))?;
             let mut assets = vec![asset(
-                video,
+                video_stream,
                 "video",
                 MediaKind::Video,
                 &media.source.media_id,
@@ -165,8 +171,13 @@ impl MediaSource for YouTubeSource {
                             false,
                         )
                     })?;
+                let audio_stream = extracted
+                    .streams
+                    .iter()
+                    .find(|stream| stream.id == audio.format_id)
+                    .ok_or_else(|| source_changed("Selected YouTube audio URL was absent"))?;
                 assets.push(asset(
-                    audio,
+                    audio_stream,
                     "audio",
                     MediaKind::Audio,
                     &media.source.media_id,
@@ -183,14 +194,25 @@ impl MediaSource for YouTubeSource {
 }
 
 fn asset(
-    _format: &crate::MediaFormat,
+    stream: &ExtractedStream,
     asset_id: &str,
-    _kind: MediaKind,
+    kind: MediaKind,
     media_id: &str,
 ) -> Result<DownloadPlanAsset, CoreError> {
-    Err(source_changed(&format!(
-        "Internal stream URL was not retained for {asset_id} of {media_id}"
-    )))
+    crate::validate_http_url(&stream.url)?;
+    let extension = match stream.container.as_str() {
+        "mp4" | "m4a" | "webm" => stream.container.as_str(),
+        _ => "bin",
+    };
+    Ok(DownloadPlanAsset {
+        asset_id: asset_id.to_owned(),
+        kind,
+        url: stream.url.clone(),
+        relative_path: format!("items/{media_id}/{asset_id}.{extension}"),
+        expected_bytes: stream.content_length,
+        expected_sha256: None,
+        mime_type: stream.mime_type.clone(),
+    })
 }
 
 fn extract_player_json(html: &str) -> Result<Value, CoreError> {
@@ -365,5 +387,28 @@ mod tests {
         let source = YouTubeSource::default();
         assert!(source.can_handle("https://youtu.be/dQw4w9WgXcQ"));
         assert!(!source.can_handle("https://example.com/watch?v=dQw4w9WgXcQ"));
+    }
+
+    #[test]
+    fn fresh_stream_becomes_executable_provider_neutral_asset() {
+        let stream = ExtractedStream {
+            id: "22".into(),
+            url: "https://media.example/video.mp4?expire=123".into(),
+            container: "mp4".into(),
+            mime_type: Some("video/mp4".into()),
+            bitrate_bps: Some(1_000_000),
+            content_length: Some(42),
+            width: Some(1280),
+            height: Some(720),
+            fps: Some(30),
+            video_codec: Some("h264".into()),
+            audio_codec: Some("aac".into()),
+            audio_channels: Some(2),
+        };
+        let planned = asset(&stream, "video", MediaKind::Video, "dQw4w9WgXcQ").unwrap();
+        assert_eq!(planned.url, stream.url);
+        assert_eq!(planned.relative_path, "items/dQw4w9WgXcQ/video.mp4");
+        assert_eq!(planned.expected_bytes, Some(42));
+        assert_eq!(planned.mime_type.as_deref(), Some("video/mp4"));
     }
 }
