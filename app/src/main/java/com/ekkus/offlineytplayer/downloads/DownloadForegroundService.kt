@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -63,6 +64,32 @@ internal object DownloadServicePolicy {
     const val FailsInterruptedTransfersExplicitly = true
 }
 
+internal object DownloadForegroundServiceInventory {
+    const val RetainedDataSyncService = "com.ekkus.offlineytplayer.downloads.DownloadForegroundService"
+    const val RetainedMediaProcessingServices = 0
+    const val HandlesAndroid15Timeout = true
+}
+
+internal object DownloadForegroundTimeoutStore {
+    private const val PreferencesName = "download_foreground_timeout"
+    private const val LastStartIdKey = "last_start_id"
+    private const val LastForegroundServiceTypeKey = "last_foreground_service_type"
+    private const val TimeoutCountKey = "timeout_count"
+
+    fun persistTimeout(
+        context: Context,
+        startId: Int,
+        foregroundServiceType: Int,
+    ) {
+        val preferences = context.getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
+        preferences.edit()
+            .putInt(LastStartIdKey, startId)
+            .putInt(LastForegroundServiceTypeKey, foregroundServiceType)
+            .putInt(TimeoutCountKey, preferences.getInt(TimeoutCountKey, 0) + 1)
+            .apply()
+    }
+}
+
 class DownloadForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
@@ -86,6 +113,16 @@ class DownloadForegroundService : Service() {
         }
         startForeground(DownloadServicePolicy.NotificationId, activeNotification())
         return START_STICKY
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        DownloadForegroundTimeoutStore.persistTimeout(
+            context = this,
+            startId = startId,
+            foregroundServiceType = fgsType,
+        )
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf(startId)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
