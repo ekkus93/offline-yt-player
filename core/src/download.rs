@@ -396,12 +396,19 @@ fn map_reqwest_error(error: reqwest::Error) -> CoreError {
 }
 
 fn remote_body_read_error(error: std::io::Error) -> CoreError {
-    match error.kind() {
-        IoErrorKind::TimedOut => CoreError::new(
+    let text = error.to_string().to_ascii_lowercase();
+    if error.kind() == IoErrorKind::TimedOut
+        || text.contains("timed out")
+        || text.contains("timeout")
+    {
+        return CoreError::new(
             ErrorKind::NetworkTimeout,
             "Network response body read timed out",
             true,
-        ),
+        );
+    }
+
+    match error.kind() {
         IoErrorKind::UnexpectedEof => CoreError::new(
             ErrorKind::IntegrityFailure,
             "Network response body ended before the declared content was received",
@@ -604,7 +611,8 @@ mod tests {
             data
         );
         assert!(
-            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path))).exists()
+            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path)))
+                .exists()
         );
     }
 
