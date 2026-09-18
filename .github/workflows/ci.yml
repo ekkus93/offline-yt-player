@@ -73,16 +73,8 @@ jobs:
           log-accepted-android-sdk-licenses: "false"
       - name: Install pinned Android NDK
         run: sdkmanager "ndk;30.0.16248370"
-      - name: Generate Kotlin bindings
-        run: |
-          cargo build -p offline-yt-core
-          rm -rf target/uniffi-kotlin
-          cargo run -p uniffi-bindgen -- \
-            generate target/debug/liboffline_yt_core.so \
-            --language kotlin \
-            --out-dir target/uniffi-kotlin
-          test -n "$(find target/uniffi-kotlin -type f -name '*.kt' -print -quit)"
-          grep -R "package com.ekkus.offlineytplayer.core" target/uniffi-kotlin
+      - name: Verify generated Kotlin bindings
+        run: ./gradlew --no-daemon :app:verifyUniffiKotlinBindings
       - name: Build representative Android ABI
         env:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/30.0.16248370
