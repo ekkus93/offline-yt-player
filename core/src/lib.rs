@@ -2,6 +2,7 @@
 //!
 //! Android-specific presentation, lifecycle, notifications, and playback stay outside this crate.
 
+pub mod asset_integrity;
 pub mod concurrency;
 pub mod deletion;
 pub mod domain;
@@ -30,6 +31,7 @@ pub mod youtube_source;
 #[cfg(test)]
 mod youtube_source_fixture_tests;
 
+pub use asset_integrity::*;
 pub use concurrency::*;
 pub use deletion::*;
 pub use domain::*;
