@@ -714,8 +714,10 @@ mod tests {
             thread::sleep(Duration::from_millis(500));
         });
         let temp = tempfile::tempdir().unwrap();
-        let mut policy = DownloadPolicy::default();
-        policy.request_timeout = Duration::from_millis(75);
+        let policy = DownloadPolicy {
+            request_timeout: Duration::from_millis(75),
+            ..DownloadPolicy::default()
+        };
         let engine = DownloadEngine::new(temp.path(), policy).unwrap();
 
         let error = engine
