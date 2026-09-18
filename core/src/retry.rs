@@ -1,5 +1,7 @@
 use crate::domain::{CoreError, ErrorKind};
-use crate::download::{FailureClass, classify_error, retry_delay};
+use crate::download::{DownloadPolicy, FailureClass, classify_error, retry_delay};
+use crate::events::DurableDownloadSnapshot;
+use crate::state::DownloadState;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
@@ -39,6 +41,62 @@ where
     unreachable!("at least one retry attempt is always executed")
 }
 
+/// Injectable retry timing used when turning a failed durable job snapshot into its next
+/// scheduler-visible state. Production code can provide wall-clock time and bounded jitter, while
+/// tests can keep retry deadlines deterministic.
+pub trait RetryTiming {
+    fn now_epoch_ms(&self) -> u64;
+    fn jitter_ms(&self, next_attempt: u32) -> u64;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FixedRetryTiming {
+    pub now_epoch_ms: u64,
+    pub jitter_ms: u64,
+}
+
+impl RetryTiming for FixedRetryTiming {
+    fn now_epoch_ms(&self) -> u64 {
+        self.now_epoch_ms
+    }
+
+    fn jitter_ms(&self, _next_attempt: u32) -> u64 {
+        self.jitter_ms
+    }
+}
+
+/// Apply the authoritative download retry policy to a durable job snapshot after one failed
+/// attempt. The returned snapshot is ready to persist before process exit: it carries the updated
+/// attempt count, typed error, next retry deadline, and scheduler-visible state.
+///
+/// `DownloadPolicy.max_attempts` is the single bound here and includes the initial attempt.
+/// Retryable errors move to `RetryWait` only while another attempt remains; all other failures
+/// become terminal `Failed`.
+#[must_use]
+pub fn plan_retry_after_failure(
+    mut snapshot: DurableDownloadSnapshot,
+    error: CoreError,
+    policy: &DownloadPolicy,
+    timing: &impl RetryTiming,
+) -> DurableDownloadSnapshot {
+    let next_attempt = snapshot.attempt.saturating_add(1);
+    let max_attempts = policy.max_attempts.max(1);
+    let retryable = is_retryable(&error) && next_attempt < max_attempts;
+
+    snapshot.attempt = next_attempt;
+    snapshot.last_error = Some(error);
+    if retryable {
+        snapshot.state = DownloadState::RetryWait;
+        snapshot.retry_at_epoch_ms = Some(timing.now_epoch_ms().saturating_add(
+            duration_millis_u64(retry_delay(next_attempt, timing.jitter_ms(next_attempt))),
+        ));
+    } else {
+        snapshot.state = DownloadState::Failed;
+        snapshot.retry_at_epoch_ms = None;
+    }
+    snapshot
+}
+
 fn is_retryable(error: &CoreError) -> bool {
     error.retryable && classify_error(&error.kind) == FailureClass::Retryable
 }
@@ -58,6 +116,10 @@ fn interruptible_sleep(
         remaining = remaining.saturating_sub(sleep_for);
     }
     Ok(())
+}
+
+fn duration_millis_u64(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
 fn canceled() -> CoreError {
@@ -165,6 +227,106 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.kind, ErrorKind::NetworkTimeout);
         assert_eq!(calls.load(Ordering::Relaxed), 2);
+    }
+
+    fn durable_snapshot(state: DownloadState, attempt: u32) -> DurableDownloadSnapshot {
+        DurableDownloadSnapshot {
+            job_id: "job-1".into(),
+            state,
+            bytes_downloaded: 512,
+            total_bytes: Some(1024),
+            attempt,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        }
+    }
+
+    #[test]
+    fn retry_policy_persists_attempt_and_next_eligible_deadline() {
+        let policy = DownloadPolicy {
+            max_attempts: 3,
+            ..DownloadPolicy::default()
+        };
+        let timing = FixedRetryTiming {
+            now_epoch_ms: 10_000,
+            jitter_ms: 250,
+        };
+        let planned = plan_retry_after_failure(
+            durable_snapshot(DownloadState::Downloading, 0),
+            CoreError::new(ErrorKind::NetworkTimeout, "timeout", true),
+            &policy,
+            &timing,
+        );
+
+        assert_eq!(planned.state, DownloadState::RetryWait);
+        assert_eq!(planned.attempt, 1);
+        assert_eq!(planned.retry_at_epoch_ms, Some(11_250));
+        assert_eq!(planned.bytes_downloaded, 512);
+        assert_eq!(planned.total_bytes, Some(1024));
+        assert_eq!(planned.last_error.unwrap().kind, ErrorKind::NetworkTimeout);
+    }
+
+    #[test]
+    fn max_attempts_one_fails_after_initial_attempt() {
+        let policy = DownloadPolicy {
+            max_attempts: 1,
+            ..DownloadPolicy::default()
+        };
+        let planned = plan_retry_after_failure(
+            durable_snapshot(DownloadState::Downloading, 0),
+            CoreError::new(ErrorKind::NetworkTimeout, "timeout", true),
+            &policy,
+            &FixedRetryTiming {
+                now_epoch_ms: 10_000,
+                jitter_ms: 0,
+            },
+        );
+
+        assert_eq!(planned.state, DownloadState::Failed);
+        assert_eq!(planned.attempt, 1);
+        assert_eq!(planned.retry_at_epoch_ms, None);
+    }
+
+    #[test]
+    fn nonretryable_failure_clears_retry_deadline() {
+        let mut snapshot = durable_snapshot(DownloadState::RetryWait, 1);
+        snapshot.retry_at_epoch_ms = Some(99_999);
+        let planned = plan_retry_after_failure(
+            snapshot,
+            CoreError::new(ErrorKind::HttpStatus, "HTTP 404", false),
+            &DownloadPolicy::default(),
+            &FixedRetryTiming {
+                now_epoch_ms: 10_000,
+                jitter_ms: 0,
+            },
+        );
+
+        assert_eq!(planned.state, DownloadState::Failed);
+        assert_eq!(planned.attempt, 2);
+        assert_eq!(planned.retry_at_epoch_ms, None);
+    }
+
+    #[test]
+    fn persisted_retry_wait_survives_startup_reconciliation() {
+        let store = crate::LibraryStore::open_in_memory().unwrap();
+        let planned = plan_retry_after_failure(
+            durable_snapshot(DownloadState::Downloading, 0),
+            CoreError::new(ErrorKind::NetworkUnavailable, "offline", true),
+            &DownloadPolicy::default(),
+            &FixedRetryTiming {
+                now_epoch_ms: 50_000,
+                jitter_ms: 0,
+            },
+        );
+        store.save_download_snapshot(&planned).unwrap();
+
+        assert_eq!(
+            crate::reconcile_startup_downloads(&store)
+                .unwrap()
+                .jobs_requeued,
+            0
+        );
+        assert_eq!(store.load_download_snapshots().unwrap(), vec![planned]);
     }
 
     #[test]
