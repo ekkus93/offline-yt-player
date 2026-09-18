@@ -3,6 +3,7 @@
 //! Android-specific presentation, lifecycle, notifications, and playback stay outside this crate.
 
 pub mod concurrency;
+pub mod deletion;
 pub mod domain;
 pub mod download;
 pub mod events;
@@ -30,6 +31,7 @@ pub mod youtube_source;
 mod youtube_source_fixture_tests;
 
 pub use concurrency::*;
+pub use deletion::*;
 pub use domain::*;
 pub use download::*;
 pub use events::*;
