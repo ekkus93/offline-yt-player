@@ -19,10 +19,13 @@ class DownloadForegroundTimeoutPolicyTest {
     @Test
     fun foregroundServiceImplementsTimeoutBeforeStopping() {
         val service = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundService.kt").readText()
-        assertTrue(service.contains("override fun onTimeout(startId: Int, fgsType: Int)"))
-        assertTrue(service.contains("DownloadForegroundTimeoutStore.persistTimeout"))
-        assertTrue(service.indexOf("DownloadForegroundTimeoutStore.persistTimeout") < service.indexOf("stopForeground"))
-        assertTrue(service.indexOf("DownloadForegroundTimeoutStore.persistTimeout") < service.indexOf("stopSelf(startId)"))
+        val timeoutBlock = service.substringAfter("override fun onTimeout(startId: Int, fgsType: Int)")
+            .substringBefore("override fun onBind")
+        assertTrue(timeoutBlock.contains("DownloadForegroundTimeoutStore.persistTimeout"))
+        assertTrue(timeoutBlock.contains("stopForeground(STOP_FOREGROUND_REMOVE)"))
+        assertTrue(timeoutBlock.contains("stopSelf(startId)"))
+        assertTrue(timeoutBlock.indexOf("DownloadForegroundTimeoutStore.persistTimeout") < timeoutBlock.indexOf("stopForeground"))
+        assertTrue(timeoutBlock.indexOf("DownloadForegroundTimeoutStore.persistTimeout") < timeoutBlock.indexOf("stopSelf(startId)"))
     }
 
     @Test
