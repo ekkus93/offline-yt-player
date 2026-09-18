@@ -70,7 +70,7 @@ fn hash_io_error(error: std::io::Error) -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{MediaKind, LocalAsset};
+    use crate::domain::{LocalAsset, MediaKind};
     use tempfile::tempdir;
 
     fn asset(bytes: u64, sha256: Option<String>) -> LocalAsset {
@@ -114,14 +114,11 @@ mod tests {
     fn same_length_corruption_fails_when_stored_hash_exists() {
         let root = tempdir().unwrap();
         write_asset(root.path(), b"abd");
-        let expected_for_abc =
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        let expected_for_abc = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
-        let error = validate_local_asset_integrity(
-            root.path(),
-            &asset(3, Some(expected_for_abc.into())),
-        )
-        .unwrap_err();
+        let error =
+            validate_local_asset_integrity(root.path(), &asset(3, Some(expected_for_abc.into())))
+                .unwrap_err();
 
         assert_eq!(error.kind, ErrorKind::CorruptAsset);
         assert!(error.message.contains("checksum"));
