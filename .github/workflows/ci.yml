@@ -14,6 +14,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  governance:
+    name: Remediation governance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Closeout guard tests
+        run: python3 -m unittest tests/test_check_remediation_closeout.py
+
   rust:
     name: Rust fmt clippy test
     runs-on: ubuntu-24.04
