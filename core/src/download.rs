@@ -454,7 +454,9 @@ fn io_error_is_timeout(error: &std::io::Error) -> bool {
 
 fn looks_like_timeout(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
-    lower.contains("timed out") || lower.contains("timeout") || lower.contains("deadline has elapsed")
+    lower.contains("timed out")
+        || lower.contains("timeout")
+        || lower.contains("deadline has elapsed")
 }
 
 fn io_error(error: std::io::Error) -> CoreError {
