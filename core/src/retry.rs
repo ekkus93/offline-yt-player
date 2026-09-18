@@ -8,6 +8,10 @@ use std::thread;
 /// `max_attempts` includes the initial attempt. Cancellation is checked before
 /// every attempt and during backoff in short slices so callers do not have to
 /// wait for the full delay before a cancel becomes effective.
+///
+/// The error's explicit `retryable` flag is authoritative: an error marked
+/// nonretryable is never promoted to retryable merely because its broad
+/// `ErrorKind` is normally transient.
 pub fn execute_with_retry<T, F>(
     max_attempts: u32,
     jitter_ms: u64,
@@ -25,7 +29,7 @@ where
         match operation(attempt) {
             Ok(value) => return Ok(value),
             Err(error) => {
-                if classify_error(&error.kind) == FailureClass::Permanent || attempt == attempts {
+                if !is_retryable(&error) || attempt == attempts {
                     return Err(error);
                 }
                 interruptible_sleep(retry_delay(attempt, jitter_ms), cancel)?;
@@ -33,6 +37,10 @@ where
         }
     }
     unreachable!("at least one retry attempt is always executed")
+}
+
+fn is_retryable(error: &CoreError) -> bool {
+    error.retryable && classify_error(&error.kind) == FailureClass::Retryable
 }
 
 fn interruptible_sleep(
@@ -62,7 +70,7 @@ mod tests {
     use std::sync::atomic::AtomicU32;
 
     #[test]
-    fn retries_retryable_failure_until_success() {
+    fn retries_retryable_transient_network_failure_until_success() {
         let calls = AtomicU32::new(0);
         let result = execute_with_retry(3, 0, &AtomicBool::new(false), |_| {
             let call = calls.fetch_add(1, Ordering::Relaxed) + 1;
@@ -78,11 +86,69 @@ mod tests {
     }
 
     #[test]
+    fn retries_retryable_transient_http_failure() {
+        let calls = AtomicU32::new(0);
+        let result = execute_with_retry(3, 0, &AtomicBool::new(false), |_| {
+            let call = calls.fetch_add(1, Ordering::Relaxed) + 1;
+            if call < 2 {
+                Err(CoreError::new(ErrorKind::HttpStatus, "HTTP 503", true))
+            } else {
+                Ok("done")
+            }
+        })
+        .unwrap();
+        assert_eq!(result, "done");
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn nonretryable_http_status_is_not_retried() {
+        let calls = AtomicU32::new(0);
+        let error = execute_with_retry(4, 0, &AtomicBool::new(false), |_| {
+            calls.fetch_add(1, Ordering::Relaxed);
+            Err::<(), _>(CoreError::new(ErrorKind::HttpStatus, "HTTP 404", false))
+        })
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::HttpStatus);
+        assert!(!error.retryable);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn nonretryable_source_change_is_not_retried() {
+        let calls = AtomicU32::new(0);
+        let error = execute_with_retry(4, 0, &AtomicBool::new(false), |_| {
+            calls.fetch_add(1, Ordering::Relaxed);
+            Err::<(), _>(CoreError::new(
+                ErrorKind::SourceChanged,
+                "provider response changed",
+                false,
+            ))
+        })
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::SourceChanged);
+        assert!(!error.retryable);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
     fn permanent_failure_is_not_retried() {
         let calls = AtomicU32::new(0);
         let error = execute_with_retry(4, 0, &AtomicBool::new(false), |_| {
             calls.fetch_add(1, Ordering::Relaxed);
             Err::<(), _>(CoreError::new(ErrorKind::InvalidInput, "bad input", false))
+        })
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn retryable_flag_does_not_promote_permanent_error_kind() {
+        let calls = AtomicU32::new(0);
+        let error = execute_with_retry(4, 0, &AtomicBool::new(false), |_| {
+            calls.fetch_add(1, Ordering::Relaxed);
+            Err::<(), _>(CoreError::new(ErrorKind::InvalidInput, "bad input", true))
         })
         .unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
