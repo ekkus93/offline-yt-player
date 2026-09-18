@@ -13,11 +13,14 @@ fn fixture(name: &str) -> ExtractedYouTubeMedia {
 
 #[test]
 fn combined_fixture_extracts_metadata_and_combined_stream() {
-    let media = normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &fixture("combined"))
-        .unwrap();
+    let media =
+        normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &fixture("combined")).unwrap();
     assert_eq!(media.title, "Fixture Combined");
     assert_eq!(media.duration_ms, Some(42_000));
-    assert_eq!(media.thumbnail_url.as_deref(), Some("https://i.example/combined.jpg"));
+    assert_eq!(
+        media.thumbnail_url.as_deref(),
+        Some("https://i.example/combined.jpg")
+    );
     assert_eq!(media.formats.len(), 1);
     assert_eq!(media.formats[0].role, StreamRole::Combined);
 }
@@ -29,30 +32,34 @@ fn split_fixture_extracts_separate_av_and_subtitles() {
         &fixture("split"),
     )
     .unwrap();
-    assert!(media.formats.iter().any(|format| format.role == StreamRole::VideoOnly));
-    assert!(media.formats.iter().any(|format| format.role == StreamRole::AudioOnly));
+    assert!(
+        media
+            .formats
+            .iter()
+            .any(|format| format.role == StreamRole::VideoOnly)
+    );
+    assert!(
+        media
+            .formats
+            .iter()
+            .any(|format| format.role == StreamRole::AudioOnly)
+    );
     assert_eq!(media.subtitles.len(), 1);
     assert_eq!(media.subtitles[0].format.language, "en");
 }
 
 #[test]
 fn unavailable_fixture_fails_closed() {
-    let error = normalize_extracted_media(
-        "https://youtu.be/dQw4w9WgXcQ",
-        &fixture("unavailable"),
-    )
-    .unwrap_err();
+    let error = normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &fixture("unavailable"))
+        .unwrap_err();
     assert_eq!(error.kind, ErrorKind::SourceChanged);
     assert!(!error.retryable);
 }
 
 #[test]
 fn malformed_provider_url_is_rejected() {
-    let error = normalize_extracted_media(
-        "https://youtu.be/dQw4w9WgXcQ",
-        &fixture("malformed"),
-    )
-    .unwrap_err();
+    let error = normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &fixture("malformed"))
+        .unwrap_err();
     assert_eq!(error.kind, ErrorKind::InvalidInput);
 }
 
