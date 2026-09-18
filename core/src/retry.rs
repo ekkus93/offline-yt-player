@@ -1,5 +1,5 @@
 use crate::domain::{CoreError, ErrorKind};
-use crate::download::{classify_error, retry_delay, DownloadPolicy, FailureClass};
+use crate::download::{DownloadPolicy, FailureClass, classify_error, retry_delay};
 use crate::events::DurableDownloadSnapshot;
 use crate::state::DownloadState;
 use std::sync::atomic::{AtomicBool, Ordering};
