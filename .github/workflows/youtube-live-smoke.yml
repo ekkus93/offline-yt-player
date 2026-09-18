@@ -1,0 +1,42 @@
+name: YouTube live smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: "Authorized public/test YouTube video ID (11 characters, no URL/query string)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    name: Manual YouTube live-source smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Validate bounded video ID input
+        env:
+          OYP_LIVE_YOUTUBE_VIDEO_ID: ${{ inputs.video_id }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          value = os.environ["OYP_LIVE_YOUTUBE_VIDEO_ID"]
+          if re.fullmatch(r"[A-Za-z0-9_-]{11}", value) is None:
+              raise SystemExit("video_id must be a bare 11-character YouTube video ID")
+          PY
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+      - name: Run ignored live-source smoke
+        env:
+          OYP_LIVE_YOUTUBE_VIDEO_ID: ${{ inputs.video_id }}
+        run: |
+          cargo test -p offline-yt-core live_youtube_resolves_real_metadata_and_formats -- --ignored --nocapture
