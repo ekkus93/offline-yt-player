@@ -8,7 +8,7 @@ use reqwest::blocking::{Client, Response};
 use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -222,7 +222,7 @@ impl DownloadEngine {
                     false,
                 ));
             }
-            let count = response.read(&mut buffer).map_err(io_error)?;
+            let count = response.read(&mut buffer).map_err(remote_body_read_error)?;
             if count == 0 {
                 break;
             }
@@ -395,6 +395,35 @@ fn map_reqwest_error(error: reqwest::Error) -> CoreError {
     }
 }
 
+fn remote_body_read_error(error: std::io::Error) -> CoreError {
+    match error.kind() {
+        IoErrorKind::TimedOut => CoreError::new(
+            ErrorKind::NetworkTimeout,
+            "Network response body read timed out",
+            true,
+        ),
+        IoErrorKind::UnexpectedEof => CoreError::new(
+            ErrorKind::IntegrityFailure,
+            "Network response body ended before the declared content was received",
+            true,
+        ),
+        IoErrorKind::ConnectionAborted
+        | IoErrorKind::ConnectionReset
+        | IoErrorKind::Interrupted
+        | IoErrorKind::NotConnected
+        | IoErrorKind::BrokenPipe => CoreError::new(
+            ErrorKind::NetworkUnavailable,
+            "Network response body read failed before completion",
+            true,
+        ),
+        _ => CoreError::new(
+            ErrorKind::NetworkUnavailable,
+            "Network response body read failed",
+            true,
+        ),
+    }
+}
+
 fn io_error(error: std::io::Error) -> CoreError {
     let kind = if error.raw_os_error() == Some(28) {
         ErrorKind::InsufficientStorage
@@ -408,6 +437,7 @@ fn io_error(error: std::io::Error) -> CoreError {
 mod tests {
     use super::*;
     use crate::resume::{ResumeRepresentation, load_resume_representation, resume_metadata_path};
+    use std::net::{Shutdown, TcpListener, TcpStream};
     use std::sync::Arc;
     use std::thread;
     use tiny_http::{Header, Response as TinyResponse, Server, StatusCode};
@@ -487,6 +517,66 @@ mod tests {
         }
     }
 
+    struct RawHttpFixtureServer {
+        address: String,
+        handle: Option<thread::JoinHandle<()>>,
+    }
+
+    impl RawHttpFixtureServer {
+        fn start(handler: impl FnOnce(TcpStream) + Send + 'static) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = format!("http://{}", listener.local_addr().unwrap());
+            let handle = thread::spawn(move || {
+                let (stream, _) = listener.accept().unwrap();
+                handler(stream);
+            });
+            Self {
+                address,
+                handle: Some(handle),
+            }
+        }
+    }
+
+    impl Drop for RawHttpFixtureServer {
+        fn drop(&mut self) {
+            if let Some(handle) = self.handle.take() {
+                handle.join().unwrap();
+            }
+        }
+    }
+
+    fn drain_http_request(stream: &mut TcpStream) {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 256];
+        while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+            match stream.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(count) => request.extend_from_slice(&buffer[..count]),
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        IoErrorKind::WouldBlock | IoErrorKind::TimedOut | IoErrorKind::Interrupted
+                    ) =>
+                {
+                    break;
+                }
+                Err(error) => panic!("failed to read fixture request: {error}"),
+            }
+        }
+    }
+
+    fn transfer_from(url: String) -> TransferRequest {
+        TransferRequest {
+            url,
+            relative_path: "items/one/video.mp4".into(),
+            expected_bytes: None,
+            expected_sha256: None,
+        }
+    }
+
     #[test]
     fn retry_backoff_is_bounded() {
         assert_eq!(retry_delay(1, 0), Duration::from_secs(1));
@@ -514,8 +604,7 @@ mod tests {
             data
         );
         assert!(
-            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path)))
-                .exists()
+            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path))).exists()
         );
     }
 
@@ -570,6 +659,75 @@ mod tests {
         let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
         assert!(!result.resumed);
         assert_eq!(fs::read(final_path).unwrap(), data);
+    }
+
+    #[test]
+    fn mid_body_disconnect_is_retryable_remote_failure_not_storage() {
+        let server = RawHttpFixtureServer::start(|mut stream| {
+            drain_http_request(&mut stream);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 1024\r\nConnection: close\r\n\r\npartial body",
+                )
+                .unwrap();
+            let _ = stream.shutdown(Shutdown::Both);
+        });
+        let temp = tempfile::tempdir().unwrap();
+        let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+
+        let error = engine
+            .transfer(
+                &transfer_from(format!("{}/media", server.address)),
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+
+        assert_ne!(error.kind, ErrorKind::Internal);
+        assert!(
+            matches!(
+                error.kind,
+                ErrorKind::IntegrityFailure
+                    | ErrorKind::NetworkUnavailable
+                    | ErrorKind::NetworkTimeout
+            ),
+            "unexpected error: {error:?}"
+        );
+        assert!(error.retryable);
+        assert!(!error.message.starts_with("storage error:"));
+    }
+
+    #[test]
+    fn response_body_timeout_is_retryable_network_timeout() {
+        let server = RawHttpFixtureServer::start(|mut stream| {
+            drain_http_request(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1024\r\n\r\n")
+                .unwrap();
+            thread::sleep(Duration::from_millis(500));
+        });
+        let temp = tempfile::tempdir().unwrap();
+        let mut policy = DownloadPolicy::default();
+        policy.request_timeout = Duration::from_millis(75);
+        let engine = DownloadEngine::new(temp.path(), policy).unwrap();
+
+        let error = engine
+            .transfer(
+                &transfer_from(format!("{}/media", server.address)),
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::NetworkTimeout);
+        assert!(error.retryable);
+        assert!(!error.message.starts_with("storage error:"));
+    }
+
+    #[test]
+    fn local_enospc_still_maps_to_insufficient_storage() {
+        let error = io_error(std::io::Error::from_raw_os_error(28));
+        assert_eq!(error.kind, ErrorKind::InsufficientStorage);
+        assert!(!error.retryable);
+        assert!(error.message.starts_with("storage error:"));
     }
 
     #[test]
