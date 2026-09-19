@@ -1,7 +1,8 @@
 use crate::{
     CoreError, DownloadEngine, DownloadPlan, DownloadPolicy, DownloadState, DownloadStateMachine,
-    DurableDownloadSnapshot, ErrorKind, LibraryItem, LibraryStore, LocalAsset, ProgressCoalescer,
-    TransferRequest, bounded_download_concurrency, retry_delay,
+    DurableDownloadSnapshot, DurableStopReason, ErrorKind, LibraryItem, LibraryStore, LocalAsset,
+    PAUSE_POLL_INTERVAL, ProgressCoalescer, TransferRequest, bounded_download_concurrency,
+    durable_stop_reason, propagate_durable_stop, retry_delay,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,6 +19,7 @@ pub struct DownloadWorkItem {
 pub struct DownloadWorkerReport {
     pub claimed: Vec<String>,
     pub completed: Vec<String>,
+    pub paused: Vec<String>,
     pub failed: Vec<String>,
     pub retry_wait: Vec<String>,
     pub canceled: Vec<String>,
@@ -67,8 +69,15 @@ impl DownloadWorker {
             match self.execute_one(&engine, item, &mut snapshot, cancel, now_epoch_ms) {
                 Ok(()) => report.completed.push(snapshot.job_id.clone()),
                 Err(error) if error.kind == ErrorKind::Canceled => {
-                    self.finish_canceled(&mut snapshot)?;
-                    report.canceled.push(snapshot.job_id.clone());
+                    match durable_stop_reason(&self.library, &snapshot.job_id)? {
+                        Some(DurableStopReason::Pause) => {
+                            report.paused.push(snapshot.job_id.clone());
+                        }
+                        _ => {
+                            self.finish_canceled(&mut snapshot)?;
+                            report.canceled.push(snapshot.job_id.clone());
+                        }
+                    }
                 }
                 Err(error) => {
                     let retryable = error.retryable && snapshot.attempt < self.policy.max_attempts;
@@ -166,15 +175,13 @@ impl DownloadWorker {
                     false,
                 ));
             }
-            let result = engine.transfer(
-                &TransferRequest {
-                    url: plan_asset.url.clone(),
-                    relative_path: plan_asset.relative_path.clone(),
-                    expected_bytes: plan_asset.expected_bytes,
-                    expected_sha256: plan_asset.expected_sha256.clone(),
-                },
-                cancel,
-            )?;
+            let request = TransferRequest {
+                url: plan_asset.url.clone(),
+                relative_path: plan_asset.relative_path.clone(),
+                expected_bytes: plan_asset.expected_bytes,
+                expected_sha256: plan_asset.expected_sha256.clone(),
+            };
+            let result = self.transfer_with_durable_stop(engine, &item.job_id, &request, cancel)?;
             snapshot.bytes_downloaded = snapshot.bytes_downloaded.saturating_add(result.bytes);
             if coalescer.should_emit(now_epoch_ms, snapshot.bytes_downloaded, false) {
                 self.library.save_download_snapshot(snapshot)?;
@@ -212,6 +219,51 @@ impl DownloadWorker {
         snapshot.last_error = None;
         self.library.save_download_snapshot(snapshot)?;
         Ok(())
+    }
+
+    fn transfer_with_durable_stop(
+        &self,
+        engine: &DownloadEngine,
+        job_id: &str,
+        request: &TransferRequest,
+        external_cancel: &AtomicBool,
+    ) -> Result<crate::TransferResult, CoreError> {
+        let transfer_stop = AtomicBool::new(false);
+        let polling_done = AtomicBool::new(false);
+        let poll_error = std::sync::Mutex::new(None);
+
+        let result = std::thread::scope(|scope| {
+            scope.spawn(|| {
+                while !polling_done.load(Ordering::Acquire) {
+                    if external_cancel.load(Ordering::Acquire) {
+                        transfer_stop.store(true, Ordering::Release);
+                        break;
+                    }
+                    if let Err(error) =
+                        propagate_durable_stop(&self.library, job_id, &transfer_stop)
+                    {
+                        *poll_error.lock().expect("pause poll error mutex poisoned") = Some(error);
+                        transfer_stop.store(true, Ordering::Release);
+                        break;
+                    }
+                    if transfer_stop.load(Ordering::Acquire) {
+                        break;
+                    }
+                    std::thread::sleep(PAUSE_POLL_INTERVAL);
+                }
+            });
+            let transfer_result = engine.transfer(request, &transfer_stop);
+            polling_done.store(true, Ordering::Release);
+            transfer_result
+        });
+
+        if let Some(error) = poll_error
+            .into_inner()
+            .expect("pause poll error mutex poisoned")
+        {
+            return Err(error);
+        }
+        result
     }
 
     fn finish_canceled(&self, snapshot: &mut DurableDownloadSnapshot) -> Result<(), CoreError> {
@@ -276,9 +328,12 @@ mod tests {
         stop: Arc<AtomicBool>,
         handle: Option<thread::JoinHandle<()>>,
     }
-
     impl FixtureServer {
         fn start(body: Vec<u8>) -> Self {
+            Self::start_with_delay(body, std::time::Duration::ZERO)
+        }
+
+        fn start_with_delay(body: Vec<u8>, response_delay: std::time::Duration) -> Self {
             let server = Server::http("127.0.0.1:0").unwrap();
             let address = format!("http://{}", server.server_addr());
             let stop = Arc::new(AtomicBool::new(false));
@@ -290,6 +345,7 @@ mod tests {
                     else {
                         continue;
                     };
+                    thread::sleep(response_delay);
                     request
                         .respond(TinyResponse::from_data(body.clone()))
                         .unwrap();
@@ -302,7 +358,6 @@ mod tests {
             }
         }
     }
-
     impl Drop for FixtureServer {
         fn drop(&mut self) {
             self.stop.store(true, Ordering::Relaxed);
@@ -311,7 +366,6 @@ mod tests {
             }
         }
     }
-
     fn snapshot(job_id: &str, state: DownloadState) -> DurableDownloadSnapshot {
         DurableDownloadSnapshot {
             job_id: job_id.into(),
@@ -323,7 +377,6 @@ mod tests {
             last_error: None,
         }
     }
-
     fn plan(job_id: &str, url: String, bytes: usize) -> DownloadWorkItem {
         DownloadWorkItem {
             job_id: job_id.into(),
@@ -369,7 +422,6 @@ mod tests {
             .unwrap();
         let root = tempfile::tempdir().unwrap();
         let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
-
         let report = worker
             .execute_ready_at(
                 &[
@@ -380,7 +432,6 @@ mod tests {
                 10_000,
             )
             .unwrap();
-
         assert_eq!(report.claimed, vec!["job-a"]);
         assert_eq!(report.completed, vec!["job-a"]);
         assert!(root.path().join("items/job-a/video.mp4").is_file());
@@ -407,7 +458,6 @@ mod tests {
             ..DownloadPolicy::default()
         };
         let worker = DownloadWorker::new(store.clone(), root.path(), policy, 2);
-
         let report = worker
             .execute_ready_at(
                 &[plan(
@@ -419,7 +469,6 @@ mod tests {
                 5_000,
             )
             .unwrap();
-
         assert_eq!(report.retry_wait, vec!["job-fail"]);
         let snapshot = store.load_download_snapshots().unwrap().remove(0);
         assert_eq!(snapshot.state, DownloadState::RetryWait);
@@ -442,20 +491,64 @@ mod tests {
             .unwrap();
         let root = tempfile::tempdir().unwrap();
         let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 2);
-
         let report = worker.repair_interrupted_claims_at(42_000).unwrap();
-
         assert_eq!(report.repaired, vec!["downloading", "resolving"]);
         let snapshots = store.load_download_snapshots().unwrap();
-        let repaired = snapshots
-            .iter()
-            .filter(|snapshot| snapshot.state == DownloadState::RetryWait)
-            .count();
-        assert_eq!(repaired, 2);
-        let queued = snapshots
-            .iter()
-            .find(|snapshot| snapshot.job_id == "queued")
+        assert_eq!(
+            snapshots
+                .iter()
+                .filter(|snapshot| snapshot.state == DownloadState::RetryWait)
+                .count(),
+            2
+        );
+        assert_eq!(
+            snapshots
+                .iter()
+                .find(|snapshot| snapshot.job_id == "queued")
+                .unwrap()
+                .state,
+            DownloadState::Queued
+        );
+    }
+
+    #[test]
+    fn durable_pause_is_not_reclassified_as_terminal_cancel() {
+        let data = vec![7_u8; 4 * 1024 * 1024];
+        let server =
+            FixtureServer::start_with_delay(data.clone(), std::time::Duration::from_millis(100));
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("pause-job", DownloadState::Queued))
             .unwrap();
-        assert_eq!(queued.state, DownloadState::Queued);
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let work = plan(
+            "pause-job",
+            format!("{}/pause.mp4", server.address),
+            data.len(),
+        );
+        let control_store = store.clone();
+        let controller = thread::spawn(move || {
+            for _ in 0..100 {
+                let mut current = control_store.load_download_snapshots().unwrap().remove(0);
+                if current.state == DownloadState::Downloading {
+                    let mut machine = DownloadStateMachine::new(current.state);
+                    machine.transition(DownloadState::Paused).unwrap();
+                    current.state = machine.state();
+                    control_store.save_download_snapshot(&current).unwrap();
+                    return;
+                }
+                thread::sleep(std::time::Duration::from_millis(5));
+            }
+            panic!("worker never entered downloading state");
+        });
+        let report = worker
+            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
+            .unwrap();
+        controller.join().unwrap();
+        assert_eq!(report.paused, vec!["pause-job"]);
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Paused);
+        assert!(report.canceled.is_empty());
     }
 }
