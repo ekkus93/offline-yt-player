@@ -126,11 +126,6 @@ pub struct FfiDownloadQueueResult {
     pub error: Option<FfiError>,
 }
 
-/// Coarse application service exported through UniFFI.
-///
-/// The service owns portable persistence and exposes operation-sized calls rather than leaking
-/// SQLite handles or repository internals across the language boundary. Android must invoke these
-/// potentially blocking calls through `CoreCallDispatcher`.
 #[derive(Debug, uniffi::Object)]
 pub struct FfiCoreService {
     library: LibraryStore,
@@ -228,11 +223,7 @@ impl FfiCancellationToken {
 impl FfiCancellationToken {
     pub fn check(&self) -> Result<(), CoreError> {
         if self.is_canceled() {
-            Err(CoreError::new(
-                ErrorKind::Canceled,
-                "Operation canceled",
-                false,
-            ))
+            Err(CoreError::new(ErrorKind::Canceled, "Operation canceled", false))
         } else {
             Ok(())
         }
@@ -385,7 +376,7 @@ mod tests {
             estimated_bytes: Some(1024),
             video_height: Some(720),
             audio_only: false,
-            compatibility: crate::Compatibility::Preferred,
+            compatibility: Compatibility::Preferred,
         };
         assert_eq!(FfiQualityChoice::from(&choice).label, "720p");
     }
@@ -450,7 +441,11 @@ mod tests {
         let result = service.download_queue();
         assert!(result.error.is_none());
         assert_eq!(result.jobs.len(), snapshots.len());
-        let retrying = result.jobs.iter().find(|job| job.job_id == "retrying").unwrap();
+        let retrying = result
+            .jobs
+            .iter()
+            .find(|job| job.job_id == "retrying")
+            .unwrap();
         assert_eq!(retrying.state, FfiDownloadState::RetryWait);
         assert_eq!(retrying.bytes_downloaded, 40);
         assert_eq!(retrying.attempt, 2);
@@ -463,10 +458,16 @@ mod tests {
 
     #[test]
     fn concurrency_policy_maps_through_ffi_without_exceeding_core_ceiling() {
-        assert_eq!(ffi_max_concurrent_downloads(), crate::MAX_CONCURRENT_DOWNLOADS as u32);
+        assert_eq!(
+            ffi_max_concurrent_downloads(),
+            crate::MAX_CONCURRENT_DOWNLOADS as u32
+        );
         assert_eq!(ffi_bounded_download_concurrency(0), 1);
         assert_eq!(ffi_bounded_download_concurrency(2), 2);
-        assert_eq!(ffi_bounded_download_concurrency(u32::MAX), crate::MAX_CONCURRENT_DOWNLOADS as u32);
+        assert_eq!(
+            ffi_bounded_download_concurrency(u32::MAX),
+            crate::MAX_CONCURRENT_DOWNLOADS as u32
+        );
     }
 
     #[test]
@@ -483,7 +484,12 @@ mod tests {
 
     #[test]
     fn network_diagnostic_secret_markers_do_not_cross_ffi_error_boundary() {
-        let markers = ["SIGNED_QUERY_SECRET", "TOKEN_SECRET", "COOKIE_SECRET", "BEARER_SECRET"];
+        let markers = [
+            "SIGNED_QUERY_SECRET",
+            "TOKEN_SECRET",
+            "COOKIE_SECRET",
+            "BEARER_SECRET",
+        ];
         let core = CoreError::new(
             ErrorKind::NetworkUnavailable,
             "Network request failed before a response was received",
