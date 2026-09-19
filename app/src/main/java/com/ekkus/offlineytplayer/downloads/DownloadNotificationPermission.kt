@@ -32,4 +32,20 @@ object DownloadNotificationPermissionStateStore {
             .putBoolean(PermissionGrantedKey, granted)
             .apply()
     }
+
+    fun recordedGrantState(context: Context): Boolean? {
+        val preferences = context.getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
+        return if (preferences.contains(PermissionGrantedKey)) {
+            preferences.getBoolean(PermissionGrantedKey, false)
+        } else {
+            null
+        }
+    }
+
+    fun clearRecordedGrantState(context: Context) {
+        context.getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
+            .edit()
+            .remove(PermissionGrantedKey)
+            .commit()
+    }
 }
