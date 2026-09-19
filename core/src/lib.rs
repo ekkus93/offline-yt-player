@@ -33,6 +33,8 @@ mod youtube_extract;
 pub mod youtube_source;
 
 #[cfg(test)]
+mod worker_cancel_tests;
+#[cfg(test)]
 mod youtube_source_fixture_tests;
 
 pub use asset_validation::*;
