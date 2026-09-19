@@ -71,8 +71,6 @@ impl DownloadWorker {
                 Err(error) if error.kind == ErrorKind::Canceled => {
                     match durable_stop_reason(&self.library, &snapshot.job_id)? {
                         Some(DurableStopReason::Pause) => {
-                            // The control gateway already persisted Paused. Do not overwrite that
-                            // resumable source-of-truth with terminal cancellation.
                             report.paused.push(snapshot.job_id.clone());
                         }
                         _ => {
@@ -332,6 +330,10 @@ mod tests {
     }
     impl FixtureServer {
         fn start(body: Vec<u8>) -> Self {
+            Self::start_with_delay(body, std::time::Duration::ZERO)
+        }
+
+        fn start_with_delay(body: Vec<u8>, response_delay: std::time::Duration) -> Self {
             let server = Server::http("127.0.0.1:0").unwrap();
             let address = format!("http://{}", server.server_addr());
             let stop = Arc::new(AtomicBool::new(false));
@@ -343,6 +345,7 @@ mod tests {
                     else {
                         continue;
                     };
+                    thread::sleep(response_delay);
                     request
                         .respond(TinyResponse::from_data(body.clone()))
                         .unwrap();
@@ -511,7 +514,10 @@ mod tests {
     #[test]
     fn durable_pause_is_not_reclassified_as_terminal_cancel() {
         let data = vec![7_u8; 4 * 1024 * 1024];
-        let server = FixtureServer::start(data.clone());
+        let server = FixtureServer::start_with_delay(
+            data.clone(),
+            std::time::Duration::from_millis(100),
+        );
         let store = LibraryStore::open_in_memory().unwrap();
         store
             .save_download_snapshot(&snapshot("pause-job", DownloadState::Queued))
