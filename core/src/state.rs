@@ -55,16 +55,22 @@ pub struct DownloadStateMachine {
 
 impl Default for DownloadStateMachine {
     fn default() -> Self {
-        Self { state: DownloadState::Queued }
+        Self {
+            state: DownloadState::Queued,
+        }
     }
 }
 
 impl DownloadStateMachine {
     #[must_use]
-    pub const fn new(state: DownloadState) -> Self { Self { state } }
+    pub const fn new(state: DownloadState) -> Self {
+        Self { state }
+    }
 
     #[must_use]
-    pub const fn state(&self) -> DownloadState { self.state }
+    pub const fn state(&self) -> DownloadState {
+        self.state
+    }
 
     pub fn transition(&mut self, next: DownloadState) -> Result<(), CoreError> {
         if !self.state.can_transition_to(next) {
@@ -103,7 +109,11 @@ mod tests {
                 let mut machine = DownloadStateMachine::new(from);
                 let actual = machine.transition(to).is_ok();
                 assert_eq!(actual, expected, "transition {from:?} -> {to:?}");
-                if actual { assert_eq!(machine.state(), to); } else { assert_eq!(machine.state(), from); }
+                if actual {
+                    assert_eq!(machine.state(), to);
+                } else {
+                    assert_eq!(machine.state(), from);
+                }
             }
         }
     }
@@ -111,7 +121,9 @@ mod tests {
     #[test]
     fn completed_and_canceled_are_terminal() {
         for state in [DownloadState::Completed, DownloadState::Canceled] {
-            for next in STATES { assert!(!state.can_transition_to(next)); }
+            for next in STATES {
+                assert!(!state.can_transition_to(next));
+            }
         }
     }
 
