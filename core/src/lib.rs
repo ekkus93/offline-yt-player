@@ -23,6 +23,7 @@ pub mod startup_reconciliation;
 pub mod state;
 pub mod subtitle;
 pub mod thumbnail;
+pub mod worker;
 pub mod youtube;
 pub mod youtube_diagnostics;
 // The quality rank is intentionally a lexicographic tuple so every tie-breaker remains explicit.
@@ -54,6 +55,7 @@ pub use startup_reconciliation::*;
 pub use state::*;
 pub use subtitle::*;
 pub use thumbnail::*;
+pub use worker::*;
 pub use youtube::*;
 pub use youtube_diagnostics::*;
 pub use youtube_source::*;
