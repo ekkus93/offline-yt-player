@@ -634,7 +634,8 @@ mod tests {
             data
         );
         assert!(
-            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path))).exists()
+            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path)))
+                .exists()
         );
     }
 
