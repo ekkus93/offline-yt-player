@@ -1,4 +1,4 @@
-use offline_yt_core::{DownloadEngine, DownloadPolicy, TransferRequest};
+use offline_yt_core::{DownloadEngine, DownloadPolicy, FfiError, TransferRequest};
 use std::sync::atomic::AtomicBool;
 
 const SECRET_MARKERS: [&str; 4] = [
@@ -30,14 +30,16 @@ fn download_connect_failure_does_not_reflect_signed_url_or_secret_markers() {
     let error = engine
         .transfer(&request, &AtomicBool::new(false))
         .expect_err("closed local port must fail without exposing the request URL");
+    let ffi_error = FfiError::from(&error);
 
-    let rendered = format!("{error:?} {}", error.message);
-    assert!(!rendered.contains("http://"));
-    assert!(!rendered.contains("?sig="));
-    for marker in SECRET_MARKERS {
-        assert!(
-            !rendered.contains(marker),
-            "network diagnostic reflected injected secret marker {marker}"
-        );
+    for rendered in [format!("{error:?} {}", error.message), ffi_error.message] {
+        assert!(!rendered.contains("http://"));
+        assert!(!rendered.contains("?sig="));
+        for marker in SECRET_MARKERS {
+            assert!(
+                !rendered.contains(marker),
+                "network diagnostic reflected injected secret marker {marker}"
+            );
+        }
     }
 }
