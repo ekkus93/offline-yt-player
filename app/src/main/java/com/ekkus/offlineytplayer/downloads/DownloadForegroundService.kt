@@ -55,13 +55,21 @@ internal object DownloadNetworkPolicy {
 internal object DownloadServicePolicy {
     const val ChannelId = "offline_downloads"
     const val NotificationId = 4100
-    const val MaxConcurrentDownloads = 2
+    const val DefaultConcurrentDownloads = 2
     const val SupportsPauseResumeCancel = true
     const val ReportsCompletionAndFailure = true
     const val ReconcilesDurableQueueOnStart = true
     const val HonorsNetworkPreference = true
     const val SupportsBootRecovery = true
     const val FailsInterruptedTransfersExplicitly = true
+
+    /**
+     * The maximum is owned by the portable core and exported through UniFFI. Android deliberately
+     * has no duplicate maximum constant; generated binding verification in CI is the contract that
+     * makes [ffiMaxConcurrentDownloads] available to the platform integration layer.
+     */
+    fun concurrentDownloads(requested: Int, coreMaximum: Int): Int =
+        requested.coerceIn(1, coreMaximum)
 }
 
 internal object DownloadForegroundServiceInventory {

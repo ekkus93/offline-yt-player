@@ -12,7 +12,8 @@ class DownloadServicePolicyTest {
     @Test
     fun serviceIsUserVisibleBoundedAndActionable() {
         assertTrue(DownloadServicePolicy.NotificationId > 0)
-        assertTrue(DownloadServicePolicy.MaxConcurrentDownloads in 1..4)
+        assertTrue(DownloadServicePolicy.DefaultConcurrentDownloads in 1..4)
+        assertEquals(4, DownloadServicePolicy.concurrentDownloads(Int.MAX_VALUE, 4))
         assertTrue(DownloadServicePolicy.SupportsPauseResumeCancel)
         assertTrue(DownloadServicePolicy.ReportsCompletionAndFailure)
         assertTrue(DownloadServicePolicy.ReconcilesDurableQueueOnStart)

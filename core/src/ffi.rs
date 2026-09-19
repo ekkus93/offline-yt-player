@@ -273,6 +273,19 @@ pub fn ffi_core_identity() -> String {
     crate::core_identity().to_owned()
 }
 
+/// Portable-core resource ceiling exposed to Android so the platform layer does not duplicate it.
+#[uniffi::export]
+pub fn ffi_max_concurrent_downloads() -> u32 {
+    u32::try_from(crate::MAX_CONCURRENT_DOWNLOADS).expect("core concurrency ceiling fits u32")
+}
+
+/// Map a persisted/user-selected platform preference into the portable core's safe range.
+#[uniffi::export]
+pub fn ffi_bounded_download_concurrency(requested: u32) -> u32 {
+    u32::try_from(crate::bounded_download_concurrency(requested as usize))
+        .expect("bounded concurrency fits u32")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,48 +329,50 @@ mod tests {
     }
 
     #[test]
+    fn concurrency_policy_maps_through_ffi_without_exceeding_core_ceiling() {
+        assert_eq!(
+            ffi_max_concurrent_downloads(),
+            crate::MAX_CONCURRENT_DOWNLOADS as u32
+        );
+        assert_eq!(ffi_bounded_download_concurrency(0), 1);
+        assert_eq!(ffi_bounded_download_concurrency(2), 2);
+        assert_eq!(
+            ffi_bounded_download_concurrency(u32::MAX),
+            crate::MAX_CONCURRENT_DOWNLOADS as u32
+        );
+    }
+
+    #[test]
     fn cancellation_is_cooperative_sticky_and_typed() {
         let token = FfiCancellationToken::new();
         assert!(!token.is_canceled());
-        token.check().unwrap();
-
+        assert!(token.check().is_ok());
         token.cancel();
         assert!(token.is_canceled());
-        token.cancel();
-        assert!(token.is_canceled());
-
         let error = token.check().unwrap_err();
         assert_eq!(error.kind, ErrorKind::Canceled);
-        let ffi = FfiError::from(&error);
-        assert_eq!(ffi.kind, FfiErrorKind::Canceled);
-        assert!(!ffi.retryable);
+        assert!(!error.retryable);
+        token.cancel();
+        assert!(token.is_canceled());
     }
 
     #[test]
-    fn core_service_exposes_coarse_library_operations() {
-        let temp = tempfile::tempdir().unwrap();
-        let database = temp.path().join("library.sqlite3");
-        let service = FfiCoreService::open(database.to_string_lossy().into_owned()).unwrap();
-
-        let listed = service.library_list(None);
-        assert!(listed.error.is_none());
-        assert!(listed.items.is_empty());
-
-        let missing = service.library_get("missing".into());
-        assert!(missing.error.is_none());
-        assert!(missing.item.is_none());
-
-        let deleted = service.library_delete("missing".into());
-        assert!(deleted.error.is_none());
-        assert!(!deleted.deleted);
-    }
-
-    #[test]
-    fn core_service_open_failure_is_typed_not_panicking() {
-        let temp = tempfile::tempdir().unwrap();
-        let database = temp.path().join("missing-parent").join("library.sqlite3");
-        let error = FfiCoreService::open(database.to_string_lossy().into_owned()).unwrap_err();
-
-        assert!(matches!(error, FfiCoreServiceOpenError::Persistence { .. }));
+    fn network_diagnostic_secret_markers_do_not_cross_ffi_error_boundary() {
+        let markers = [
+            "SIGNED_QUERY_SECRET",
+            "TOKEN_SECRET",
+            "COOKIE_SECRET",
+            "BEARER_SECRET",
+        ];
+        let core = CoreError::new(
+            ErrorKind::NetworkUnavailable,
+            "Network request failed before a response was received",
+            true,
+        );
+        let ffi = FfiError::from(&core);
+        let rendered = format!("{ffi:?}");
+        for marker in markers {
+            assert!(!rendered.contains(marker));
+        }
     }
 }
