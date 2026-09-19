@@ -8,6 +8,7 @@ interface AppDownloadControlGateway : Closeable {
     fun pause(jobId: String): CoreGatewayResult<Boolean>
     fun resume(jobId: String): CoreGatewayResult<Boolean>
     fun cancel(jobId: String): CoreGatewayResult<Boolean>
+    fun retry(jobId: String): CoreGatewayResult<Boolean>
 }
 
 class GeneratedUniffiDownloadControlGateway private constructor(
@@ -21,6 +22,8 @@ class GeneratedUniffiDownloadControlGateway private constructor(
     override fun resume(jobId: String): CoreGatewayResult<Boolean> = control("resume", jobId)
 
     override fun cancel(jobId: String): CoreGatewayResult<Boolean> = control("cancel", jobId)
+
+    override fun retry(jobId: String): CoreGatewayResult<Boolean> = control("retry", jobId)
 
     override fun close() {
         dispatcher.close()
@@ -73,6 +76,7 @@ class FakeDownloadControlGateway : AppDownloadControlGateway {
     val pausedJobIds = mutableListOf<String>()
     val resumedJobIds = mutableListOf<String>()
     val canceledJobIds = mutableListOf<String>()
+    val retriedJobIds = mutableListOf<String>()
 
     override fun pause(jobId: String): CoreGatewayResult<Boolean> {
         pausedJobIds += jobId
@@ -86,6 +90,11 @@ class FakeDownloadControlGateway : AppDownloadControlGateway {
 
     override fun cancel(jobId: String): CoreGatewayResult<Boolean> {
         canceledJobIds += jobId
+        return CoreGatewayResult(value = true, error = null)
+    }
+
+    override fun retry(jobId: String): CoreGatewayResult<Boolean> {
+        retriedJobIds += jobId
         return CoreGatewayResult(value = true, error = null)
     }
 
