@@ -8,15 +8,15 @@ import android.net.NetworkRequest
 
 /** Maps Android network capabilities to the download policy's portable connectivity states. */
 internal object DownloadConnectivityMapper {
-    fun fromCapabilities(capabilities: NetworkCapabilities?): DownloadConnectivity {
-        if (capabilities == null || !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-            return DownloadConnectivity.None
-        }
-        return if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) {
-            DownloadConnectivity.Unmetered
-        } else {
-            DownloadConnectivity.Metered
-        }
+    fun fromCapabilities(capabilities: NetworkCapabilities?): DownloadConnectivity =
+        fromCapabilityFlags(
+            hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
+            isUnmetered = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true,
+        )
+
+    fun fromCapabilityFlags(hasInternet: Boolean, isUnmetered: Boolean): DownloadConnectivity {
+        if (!hasInternet) return DownloadConnectivity.None
+        return if (isUnmetered) DownloadConnectivity.Unmetered else DownloadConnectivity.Metered
     }
 }
 
