@@ -60,6 +60,23 @@ impl FfiDownloadControlService {
     pub fn cancel(&self, job_id: String) -> FfiDownloadControlResult {
         self.transition(&job_id, DownloadState::Canceled)
     }
+
+    /// Explicit user Retry is distinct from automatic retry. It is legal only from terminal
+    /// Failed state and starts a fresh bounded attempt budget for the same durable job identity.
+    /// Partial progress/size metadata is preserved for normal continuation revalidation, while
+    /// stale retry timing and the prior terminal error are cleared.
+    pub fn retry(&self, job_id: String) -> FfiDownloadControlResult {
+        match self.retry_inner(&job_id) {
+            Ok(updated) => FfiDownloadControlResult {
+                updated,
+                error: None,
+            },
+            Err(error) => FfiDownloadControlResult {
+                updated: false,
+                error: Some(crate::ffi::FfiError::from(&error)),
+            },
+        }
+    }
 }
 
 impl FfiDownloadControlService {
@@ -121,6 +138,37 @@ impl FfiDownloadControlService {
         let mut machine = DownloadStateMachine::new(snapshot.state);
         machine.transition(next)?;
         snapshot.state = machine.state();
+        self.library.save_download_snapshot(snapshot)?;
+        Ok(true)
+    }
+
+    fn retry_inner(&self, job_id: &str) -> Result<bool, CoreError> {
+        let mut snapshots = self.library.load_download_snapshots()?;
+        let snapshot = snapshots
+            .iter_mut()
+            .find(|snapshot| snapshot.job_id == job_id)
+            .ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "download job does not exist",
+                    false,
+                )
+            })?;
+
+        if snapshot.state != DownloadState::Failed {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "download is not eligible for explicit retry",
+                false,
+            ));
+        }
+
+        let mut machine = DownloadStateMachine::new(snapshot.state);
+        machine.transition(DownloadState::Queued)?;
+        snapshot.state = machine.state();
+        snapshot.attempt = 0;
+        snapshot.retry_at_epoch_ms = None;
+        snapshot.last_error = None;
         self.library.save_download_snapshot(snapshot)?;
         Ok(true)
     }
@@ -225,6 +273,71 @@ mod tests {
         let durable = reopened.load_download_snapshots().unwrap().remove(0);
         assert_eq!(durable.state, DownloadState::Queued);
         assert_eq!(durable.bytes_downloaded, 128);
+    }
+
+    #[test]
+    fn explicit_retry_is_failed_only_and_resets_only_attempt_error_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let store = LibraryStore::open(&database).unwrap();
+        let mut failed = snapshot("failed", DownloadState::Failed);
+        failed.attempt = 3;
+        failed.retry_at_epoch_ms = Some(55_000);
+        failed.last_error = Some(CoreError::new(ErrorKind::NetworkTimeout, "timeout", true));
+        store.save_download_snapshot(&failed).unwrap();
+        store
+            .save_download_snapshot(&snapshot("active", DownloadState::Downloading))
+            .unwrap();
+        let service =
+            FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
+
+        let retry = service.retry("failed".into());
+        assert!(retry.updated);
+        assert!(retry.error.is_none());
+        let retried = store
+            .load_download_snapshots()
+            .unwrap()
+            .into_iter()
+            .find(|item| item.job_id == "failed")
+            .unwrap();
+        assert_eq!(retried.state, DownloadState::Queued);
+        assert_eq!(retried.attempt, 0);
+        assert_eq!(retried.retry_at_epoch_ms, None);
+        assert_eq!(retried.last_error, None);
+        assert_eq!(retried.bytes_downloaded, 128);
+        assert_eq!(retried.total_bytes, Some(1024));
+
+        let ineligible = service.retry("active".into());
+        assert!(!ineligible.updated);
+        assert_eq!(ineligible.error.unwrap().kind, FfiErrorKind::InvalidInput);
+        assert_eq!(
+            store
+                .load_download_snapshots()
+                .unwrap()
+                .into_iter()
+                .find(|item| item.job_id == "active")
+                .unwrap()
+                .state,
+            DownloadState::Downloading
+        );
+    }
+
+    #[test]
+    fn explicit_retry_reuses_same_durable_identity_without_duplicate_snapshot() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let store = LibraryStore::open(&database).unwrap();
+        store
+            .save_download_snapshot(&snapshot("same-job", DownloadState::Failed))
+            .unwrap();
+        let service =
+            FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
+
+        assert!(service.retry("same-job".into()).updated);
+        let saved = store.load_download_snapshots().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].job_id, "same-job");
+        assert_eq!(saved[0].state, DownloadState::Queued);
     }
 
     #[test]
