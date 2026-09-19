@@ -25,6 +25,8 @@ pub mod subtitle;
 pub mod thumbnail;
 pub mod youtube;
 pub mod youtube_diagnostics;
+// The quality rank is intentionally a lexicographic tuple so every tie-breaker remains explicit.
+#[allow(clippy::type_complexity)]
 mod youtube_extract;
 pub mod youtube_source;
 
