@@ -164,15 +164,11 @@ impl DownloadEngine {
                 append = true;
                 start = existing;
             } else {
-                // The ranged response could not prove that the persisted bytes belong to the
-                // same representation. Discard it and restart from byte zero rather than ever
-                // appending unproven content.
                 response = self.request(&request.url, 0)?;
                 ensure_success(&response)?;
                 observed = representation_from_headers(&request.url, response.headers());
             }
         } else {
-            // A stale sidecar without bytes is not useful and must not influence this transfer.
             prepare_partial_reuse(&partial_path, &observed)?;
         }
 
@@ -390,7 +386,7 @@ fn map_reqwest_error(error: reqwest::Error) -> CoreError {
     } else {
         CoreError::new(
             ErrorKind::NetworkUnavailable,
-            format!("Network request failed: {error}"),
+            "Network request failed before a response was received",
             true,
         )
     }
@@ -638,8 +634,7 @@ mod tests {
             data
         );
         assert!(
-            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path)))
-                .exists()
+            !resume_metadata_path(&partial_path(&temp.path().join(&request.relative_path))).exists()
         );
     }
 
@@ -694,6 +689,46 @@ mod tests {
         let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
         assert!(!result.resumed);
         assert_eq!(fs::read(final_path).unwrap(), data);
+    }
+
+    #[test]
+    fn malformed_response_does_not_reflect_signed_url_or_tokens() {
+        let server = RawHttpFixtureServer::start(|mut stream| {
+            drain_http_request(&mut stream);
+            stream.write_all(b"not http at all\r\n\r\n").unwrap();
+            let _ = stream.shutdown(Shutdown::Both);
+        });
+        let temp = tempfile::tempdir().unwrap();
+        let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+        let signed_url = format!(
+            "{}/media?signature=SECRET_SIGNED_URL&token=BEARER_SECRET&X-Goog-Signature=COOKIE_SECRET",
+            server.address
+        );
+
+        let error = engine
+            .transfer(&transfer_from(signed_url), &AtomicBool::new(false))
+            .unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::NetworkUnavailable);
+        assert!(error.retryable);
+        assert_eq!(
+            error.message,
+            "Network request failed before a response was received"
+        );
+        for marker in [
+            "SECRET_SIGNED_URL",
+            "BEARER_SECRET",
+            "COOKIE_SECRET",
+            "signature=",
+            "token=",
+            "X-Goog-Signature",
+        ] {
+            assert!(
+                !error.message.contains(marker),
+                "diagnostic leaked secret marker {marker}: {}",
+                error.message
+            );
+        }
     }
 
     #[test]
