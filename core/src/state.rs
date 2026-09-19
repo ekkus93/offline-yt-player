@@ -29,7 +29,7 @@ impl DownloadState {
         matches!(
             (self, next),
             (Queued, Resolving | Canceled)
-                | (Resolving, Downloading | Failed | RetryWait | Canceled)
+                | (Resolving, Downloading | Paused | Failed | RetryWait | Canceled)
                 | (
                     Downloading,
                     Paused | RetryWait | Failed | Verifying | Canceled
@@ -37,7 +37,7 @@ impl DownloadState {
                 | (Paused, Downloading | Canceled)
                 | (RetryWait, Resolving | Downloading | Failed | Canceled)
                 | (Failed, Queued | Resolving | Canceled)
-                | (Verifying, Completed | Failed | RetryWait | Canceled)
+                | (Verifying, Paused | Completed | Failed | RetryWait | Canceled)
         )
     }
 }
@@ -119,6 +119,14 @@ mod tests {
                 assert!(!state.can_transition_to(next));
             }
         }
+    }
+
+    #[test]
+    fn active_jobs_can_pause_without_becoming_terminal() {
+        assert!(DownloadState::Resolving.can_transition_to(DownloadState::Paused));
+        assert!(DownloadState::Downloading.can_transition_to(DownloadState::Paused));
+        assert!(DownloadState::Verifying.can_transition_to(DownloadState::Paused));
+        assert!(!DownloadState::Paused.is_terminal());
     }
 
     #[test]

@@ -1,5 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
+import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
+
 internal enum class DownloadRowAction { Pause, Resume, Cancel, Retry }
 
 internal data class DownloadRowPresentation(
@@ -29,5 +31,18 @@ internal data class DownloadRowPresentation(
         val speed = speedBytesPerSecond?.takeIf { it > 0 } ?: return null
         val eta = etaSeconds?.takeIf { it >= 0 } ?: return null
         return speed to eta
+    }
+}
+
+internal object DownloadRowControlBinding {
+    fun invoke(
+        action: DownloadRowAction,
+        jobId: String,
+        gateway: AppDownloadControlGateway,
+    ): Boolean = when (action) {
+        DownloadRowAction.Pause -> gateway.pause(jobId).isSuccess
+        DownloadRowAction.Resume -> gateway.resume(jobId).isSuccess
+        DownloadRowAction.Cancel -> gateway.cancel(jobId).isSuccess
+        DownloadRowAction.Retry -> false
     }
 }
