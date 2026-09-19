@@ -37,7 +37,7 @@ impl DownloadState {
                     Downloading,
                     Paused | RetryWait | Failed | Verifying | Canceled
                 )
-                | (Paused, Downloading | Canceled)
+                | (Paused, Queued | Canceled)
                 | (RetryWait, Resolving | Downloading | Failed | Canceled)
                 | (Failed, Queued | Resolving | Canceled)
                 | (
@@ -133,6 +133,12 @@ mod tests {
         assert!(DownloadState::Downloading.can_transition_to(DownloadState::Paused));
         assert!(DownloadState::Verifying.can_transition_to(DownloadState::Paused));
         assert!(!DownloadState::Paused.is_terminal());
+    }
+
+    #[test]
+    fn paused_job_resumes_by_reentering_eligible_queue() {
+        assert!(DownloadState::Paused.can_transition_to(DownloadState::Queued));
+        assert!(!DownloadState::Paused.can_transition_to(DownloadState::Downloading));
     }
 
     #[test]

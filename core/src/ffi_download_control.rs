@@ -51,8 +51,10 @@ impl FfiDownloadControlService {
         self.transition(&job_id, DownloadState::Paused)
     }
 
+    /// Resume makes paused work eligible for the worker claim loop again. The worker owns the
+    /// Resolving -> Downloading transition, and DownloadEngine revalidates retained partials.
     pub fn resume(&self, job_id: String) -> FfiDownloadControlResult {
-        self.transition(&job_id, DownloadState::Downloading)
+        self.transition(&job_id, DownloadState::Queued)
     }
 
     pub fn cancel(&self, job_id: String) -> FfiDownloadControlResult {
@@ -193,11 +195,36 @@ mod tests {
             DownloadState::Paused
         );
         assert!(service.resume("job-1".into()).updated);
+        assert_eq!(
+            store.load_download_snapshots().unwrap()[0].state,
+            DownloadState::Queued
+        );
         assert!(service.cancel("job-1".into()).updated);
         assert_eq!(
             store.load_download_snapshots().unwrap()[0].state,
             DownloadState::Canceled
         );
+    }
+
+    #[test]
+    fn resume_survives_reopen_and_preserves_partial_progress() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let store = LibraryStore::open(&database).unwrap();
+        store
+            .save_download_snapshot(&snapshot("paused", DownloadState::Paused))
+            .unwrap();
+        drop(store);
+
+        let service =
+            FfiDownloadControlService::open(database.to_string_lossy().into_owned()).unwrap();
+        assert!(service.resume("paused".into()).updated);
+        drop(service);
+
+        let reopened = LibraryStore::open(&database).unwrap();
+        let durable = reopened.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Queued);
+        assert_eq!(durable.bytes_downloaded, 128);
     }
 
     #[test]
