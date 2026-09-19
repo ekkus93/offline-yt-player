@@ -48,4 +48,13 @@ class DownloadForegroundServicePolicyTest {
         assertTrue(service.contains("stopSelf()"))
         assertTrue(service.contains("return START_STICKY"))
     }
+
+    @Test
+    fun notificationControlsRouteThroughDurableGatewayDispatcher() {
+        val service = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundService.kt").readText()
+        assertTrue(service.contains("DownloadForegroundControlDispatcher.dispatch"))
+        assertTrue(service.contains("GeneratedUniffiDownloadControlGateway.open"))
+        assertTrue(service.contains("intent.getStringExtra(EXTRA_QUEUE_ITEM_ID)"))
+        assertTrue(service.contains("serviceAction(ACTION_PAUSE, 1, queueItemId)"))
+    }
 }

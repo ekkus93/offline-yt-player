@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.ekkus.offlineytplayer.MainActivity
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
+import java.io.File
 
 internal enum class DownloadNetworkPreference {
     AnyNetwork,
@@ -105,6 +107,7 @@ class DownloadForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val queueItemId = intent?.getStringExtra(EXTRA_QUEUE_ITEM_ID)
         when (intent?.action) {
             ACTION_STOP -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -114,12 +117,13 @@ class DownloadForegroundService : Service() {
             ACTION_PAUSE,
             ACTION_RESUME,
             ACTION_CANCEL,
+            -> dispatchControlAction(intent)
             ACTION_CONNECTIVITY_RETRY,
             ACTION_RECONCILE_AFTER_REBOOT,
             ACTION_SCHEDULE_WORK,
             -> Unit
         }
-        startForeground(DownloadServicePolicy.NotificationId, activeNotification())
+        startForeground(DownloadServicePolicy.NotificationId, activeNotification(queueItemId))
         return START_STICKY
     }
 
@@ -135,7 +139,21 @@ class DownloadForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun activeNotification(): Notification {
+    private fun dispatchControlAction(intent: Intent): Boolean = try {
+        GeneratedUniffiDownloadControlGateway.open(downloadDatabasePath()).use { gateway ->
+            DownloadForegroundControlDispatcher.dispatch(
+                action = intent.action,
+                queueItemId = intent.getStringExtra(EXTRA_QUEUE_ITEM_ID),
+                gateway = gateway,
+            )
+        }
+    } catch (_: RuntimeException) {
+        false
+    }
+
+    private fun downloadDatabasePath(): String = File(filesDir, "library.sqlite3").absolutePath
+
+    private fun activeNotification(queueItemId: String?): Notification {
         val openApp = PendingIntent.getActivity(
             this,
             0,
@@ -150,18 +168,24 @@ class DownloadForegroundService : Service() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setProgress(100, 0, true)
-            .addAction(android.R.drawable.ic_media_pause, "Pause", serviceAction(ACTION_PAUSE, 1))
-            .addAction(android.R.drawable.ic_media_play, "Resume", serviceAction(ACTION_RESUME, 2))
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", serviceAction(ACTION_CANCEL, 3))
+            .addAction(android.R.drawable.ic_media_pause, "Pause", serviceAction(ACTION_PAUSE, 1, queueItemId))
+            .addAction(android.R.drawable.ic_media_play, "Resume", serviceAction(ACTION_RESUME, 2, queueItemId))
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", serviceAction(ACTION_CANCEL, 3, queueItemId))
             .build()
     }
 
-    private fun serviceAction(action: String, requestCode: Int): PendingIntent = PendingIntent.getService(
-        this,
-        requestCode,
-        Intent(this, DownloadForegroundService::class.java).setAction(action),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-    )
+    private fun serviceAction(action: String, requestCode: Int, queueItemId: String?): PendingIntent {
+        val intent = Intent(this, DownloadForegroundService::class.java).setAction(action)
+        if (!queueItemId.isNullOrBlank()) {
+            intent.putExtra(EXTRA_QUEUE_ITEM_ID, queueItemId)
+        }
+        return PendingIntent.getService(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
