@@ -514,10 +514,8 @@ mod tests {
     #[test]
     fn durable_pause_is_not_reclassified_as_terminal_cancel() {
         let data = vec![7_u8; 4 * 1024 * 1024];
-        let server = FixtureServer::start_with_delay(
-            data.clone(),
-            std::time::Duration::from_millis(100),
-        );
+        let server =
+            FixtureServer::start_with_delay(data.clone(), std::time::Duration::from_millis(100));
         let store = LibraryStore::open_in_memory().unwrap();
         store
             .save_download_snapshot(&snapshot("pause-job", DownloadState::Queued))
