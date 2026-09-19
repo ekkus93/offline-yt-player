@@ -63,7 +63,7 @@ class DownloadResumeCoordinatorTest {
         assertEquals(listOf("paused-job"), control.resumedJobIds)
         assertEquals(1, scheduler.requests.size)
         assertEquals("paused-job", scheduler.requests.single().queueItemId)
-        assertEquals(42_000, scheduler.requests.single().estimatedDownloadBytes)
+        assertEquals(42_000L, scheduler.requests.single().estimatedDownloadBytes)
         assertEquals(DownloadNetworkPreference.WifiOnly, scheduler.requests.single().networkPreference)
     }
 
