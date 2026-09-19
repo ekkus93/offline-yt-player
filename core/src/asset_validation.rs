@@ -67,25 +67,25 @@ fn validate_asset(
             },
         ));
     }
-    if depth == AssetValidationDepth::Deep {
-        if let Some(expected) = asset.sha256.as_deref() {
-            if !valid_sha256(expected) {
-                return Ok(result(
-                    asset,
-                    AssetHealth::Corrupt {
-                        reason: "persisted SHA-256 is malformed".into(),
-                    },
-                ));
-            }
-            let actual = sha256_file(&path)?;
-            if !actual.eq_ignore_ascii_case(expected) {
-                return Ok(result(
-                    asset,
-                    AssetHealth::Corrupt {
-                        reason: "asset SHA-256 does not match persisted metadata".into(),
-                    },
-                ));
-            }
+    if depth == AssetValidationDepth::Deep
+        && let Some(expected) = asset.sha256.as_deref()
+    {
+        if !valid_sha256(expected) {
+            return Ok(result(
+                asset,
+                AssetHealth::Corrupt {
+                    reason: "persisted SHA-256 is malformed".into(),
+                },
+            ));
+        }
+        let actual = sha256_file(&path)?;
+        if !actual.eq_ignore_ascii_case(expected) {
+            return Ok(result(
+                asset,
+                AssetHealth::Corrupt {
+                    reason: "asset SHA-256 does not match persisted metadata".into(),
+                },
+            ));
         }
     }
     Ok(result(asset, AssetHealth::Healthy))
