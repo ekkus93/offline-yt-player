@@ -330,7 +330,10 @@ mod tests {
 
     #[test]
     fn concurrency_policy_maps_through_ffi_without_exceeding_core_ceiling() {
-        assert_eq!(ffi_max_concurrent_downloads(), crate::MAX_CONCURRENT_DOWNLOADS as u32);
+        assert_eq!(
+            ffi_max_concurrent_downloads(),
+            crate::MAX_CONCURRENT_DOWNLOADS as u32
+        );
         assert_eq!(ffi_bounded_download_concurrency(0), 1);
         assert_eq!(ffi_bounded_download_concurrency(2), 2);
         assert_eq!(

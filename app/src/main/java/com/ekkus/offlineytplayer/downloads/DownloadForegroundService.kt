@@ -11,8 +11,8 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.ekkus.offlineytplayer.MainActivity
-import com.ekkus.offlineytplayer.core.ffiBoundedDownloadConcurrency
-import com.ekkus.offlineytplayer.core.ffiMaxConcurrentDownloads
+import uniffi.offline_yt_core.ffiBoundedDownloadConcurrency
+import uniffi.offline_yt_core.ffiMaxConcurrentDownloads
 
 internal enum class DownloadNetworkPreference {
     AnyNetwork,
