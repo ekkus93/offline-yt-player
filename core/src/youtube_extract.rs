@@ -5,6 +5,7 @@ use crate::domain::{
 use crate::security::{sanitize_title, validate_http_url};
 use crate::youtube::recognize_youtube_video_url;
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ExtractedYouTubeMedia {
@@ -140,34 +141,83 @@ fn normalize_stream(stream: &ExtractedStream) -> Result<MediaFormat, CoreError> 
 }
 
 pub(crate) fn curate_quality_choices(media: &MediaInfo) -> Vec<QualityChoice> {
-    let mut choices: Vec<_> = media
+    let mut formats = media
         .formats
         .iter()
         .filter(|format| format.video.is_some())
-        .map(|format| QualityChoice {
-            choice_id: format!("format:{}", format.format_id),
-            label: format
-                .video
-                .as_ref()
-                .map(|video| format!("{}p", video.height))
-                .unwrap_or_else(|| "Video".into()),
-            estimated_bytes: format.content_length,
-            video_height: format.video.as_ref().map(|video| video.height),
-            audio_only: false,
-            compatibility: if format.compatible_direct_play {
-                if format.role == StreamRole::Combined {
-                    Compatibility::Preferred
-                } else {
-                    Compatibility::RequiresSeparateAssets
-                }
-            } else {
-                Compatibility::RequiresMuxing
-            },
-        })
-        .collect();
-    choices.sort_by_key(|choice| choice.video_height);
-    choices.dedup_by_key(|choice| choice.video_height);
-    choices
+        .collect::<Vec<_>>();
+    formats.sort_by_key(|format| format_rank(format));
+    formats.dedup_by_key(|format| format.video.as_ref().map(|video| video.height));
+    formats.into_iter().map(quality_choice).collect()
+}
+
+fn quality_choice(format: &MediaFormat) -> QualityChoice {
+    QualityChoice {
+        choice_id: format!("format:{}", format.format_id),
+        label: format
+            .video
+            .as_ref()
+            .map(|video| format!("{}p", video.height))
+            .unwrap_or_else(|| "Video".into()),
+        estimated_bytes: format.content_length,
+        video_height: format.video.as_ref().map(|video| video.height),
+        audio_only: false,
+        compatibility: format_compatibility(format),
+    }
+}
+
+fn format_compatibility(format: &MediaFormat) -> Compatibility {
+    if format.compatible_direct_play {
+        if format.role == StreamRole::Combined {
+            Compatibility::Preferred
+        } else {
+            Compatibility::RequiresSeparateAssets
+        }
+    } else {
+        Compatibility::RequiresMuxing
+    }
+}
+
+fn format_rank(
+    format: &MediaFormat,
+) -> (
+    Reverse<u32>,
+    u8,
+    u8,
+    Reverse<u64>,
+    Reverse<u32>,
+    String,
+    String,
+    String,
+) {
+    let video = format.video.as_ref();
+    (
+        Reverse(video.map_or(0, |video| video.height)),
+        compatibility_rank(format_compatibility(format)),
+        role_rank(format.role),
+        Reverse(format.bitrate_bps.unwrap_or(0)),
+        Reverse(video.and_then(|video| video.fps).unwrap_or(0)),
+        video.map_or_else(String::new, |video| video.codec.clone()),
+        format.container.clone(),
+        format.format_id.clone(),
+    )
+}
+
+fn compatibility_rank(value: Compatibility) -> u8 {
+    match value {
+        Compatibility::Preferred => 0,
+        Compatibility::Compatible | Compatibility::RequiresSeparateAssets => 1,
+        Compatibility::RequiresMuxing => 2,
+        Compatibility::Unsupported => 3,
+    }
+}
+
+fn role_rank(value: StreamRole) -> u8 {
+    match value {
+        StreamRole::Combined => 0,
+        StreamRole::VideoOnly => 1,
+        StreamRole::AudioOnly => 2,
+    }
 }
 
 #[cfg(test)]
@@ -218,6 +268,49 @@ mod tests {
         }
     }
 
+    fn stream(
+        id: &str,
+        height: u32,
+        role: StreamRole,
+        compatible: bool,
+        bitrate: u64,
+        fps: u32,
+        codec: &str,
+    ) -> MediaFormat {
+        MediaFormat {
+            format_id: id.into(),
+            container: if compatible { "mp4" } else { "webm" }.into(),
+            mime_type: Some("video/mp4".into()),
+            role,
+            bitrate_bps: Some(bitrate),
+            content_length: Some(bitrate / 8),
+            video: Some(VideoFormat {
+                width: height.saturating_mul(16) / 9,
+                height,
+                fps: Some(fps),
+                codec: codec.into(),
+            }),
+            audio: (role == StreamRole::Combined).then(|| AudioFormat {
+                codec: "aac".into(),
+                bitrate_bps: Some(128_000),
+                channels: Some(2),
+                language: None,
+            }),
+            compatible_direct_play: compatible,
+        }
+    }
+
+    fn media_with_formats(formats: Vec<MediaFormat>) -> MediaInfo {
+        MediaInfo {
+            source: SourceIdentity::new("youtube", "dQw4w9WgXcQ"),
+            title: "Example".into(),
+            duration_ms: Some(1_000),
+            thumbnail_url: None,
+            formats,
+            subtitles: Vec::new(),
+        }
+    }
+
     #[test]
     fn normalizes_metadata_stream_roles_and_subtitles() {
         let media = normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &fixture()).unwrap();
@@ -238,12 +331,132 @@ mod tests {
                 .unwrap();
         let choices = curate_quality_choices(&media);
         assert_eq!(choices.len(), 2);
-        assert_eq!(choices[0].label, "720p");
-        assert_eq!(choices[0].compatibility, Compatibility::Preferred);
+        assert_eq!(choices[0].label, "1080p");
         assert_eq!(
-            choices[1].compatibility,
+            choices[0].compatibility,
             Compatibility::RequiresSeparateAssets
         );
+        assert_eq!(choices[1].label, "720p");
+        assert_eq!(choices[1].compatibility, Compatibility::Preferred);
+    }
+
+    #[test]
+    fn quality_dedup_prefers_direct_combined_even_when_provider_order_is_adversarial() {
+        let media = media_with_formats(vec![
+            stream(
+                "mux-first",
+                720,
+                StreamRole::VideoOnly,
+                false,
+                3_000_000,
+                30,
+                "av1",
+            ),
+            stream(
+                "split-second",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                2_500_000,
+                30,
+                "h264",
+            ),
+            stream(
+                "combined-last",
+                720,
+                StreamRole::Combined,
+                true,
+                1_500_000,
+                30,
+                "h264",
+            ),
+        ]);
+
+        let choices = curate_quality_choices(&media);
+
+        assert_eq!(choices.len(), 1);
+        assert_eq!(choices[0].choice_id, "format:combined-last");
+        assert_eq!(choices[0].compatibility, Compatibility::Preferred);
+    }
+
+    #[test]
+    fn quality_dedup_prefers_compatible_split_over_mux_required() {
+        let media = media_with_formats(vec![
+            stream(
+                "mux-first",
+                1080,
+                StreamRole::VideoOnly,
+                false,
+                5_000_000,
+                60,
+                "av1",
+            ),
+            stream(
+                "split-second",
+                1080,
+                StreamRole::VideoOnly,
+                true,
+                3_500_000,
+                30,
+                "h264",
+            ),
+        ]);
+
+        let choices = curate_quality_choices(&media);
+
+        assert_eq!(choices.len(), 1);
+        assert_eq!(choices[0].choice_id, "format:split-second");
+        assert_eq!(
+            choices[0].compatibility,
+            Compatibility::RequiresSeparateAssets
+        );
+    }
+
+    #[test]
+    fn quality_ranking_has_deterministic_tie_breakers() {
+        let media = media_with_formats(vec![
+            stream(
+                "id-b",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                2_500_000,
+                30,
+                "h264",
+            ),
+            stream(
+                "id-a",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                2_500_000,
+                30,
+                "h264",
+            ),
+            stream(
+                "id-high-fps",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                2_500_000,
+                60,
+                "h264",
+            ),
+            stream(
+                "id-high-bitrate",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                3_000_000,
+                30,
+                "h264",
+            ),
+        ]);
+
+        let choices = curate_quality_choices(&media);
+
+        assert_eq!(choices.len(), 1);
+        assert_eq!(choices[0].choice_id, "format:id-high-bitrate");
     }
 
     #[test]
