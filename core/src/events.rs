@@ -97,12 +97,12 @@ impl TransferMetricEstimator {
         if bytes_per_second == 0 {
             return EphemeralTransferMetrics::unknown();
         }
-        let eta_seconds = total_bytes.and_then(|total| {
+        let eta_seconds = total_bytes.map(|total| {
             if bytes_downloaded >= total {
-                Some(0)
+                0
             } else {
                 let remaining = total.saturating_sub(bytes_downloaded);
-                Some(remaining.div_ceil(bytes_per_second))
+                remaining.div_ceil(bytes_per_second)
             }
         });
         EphemeralTransferMetrics {
