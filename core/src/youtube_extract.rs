@@ -178,7 +178,18 @@ fn format_compatibility(format: &MediaFormat) -> Compatibility {
     }
 }
 
-fn format_rank(format: &MediaFormat) -> (Reverse<u32>, u8, u8, Reverse<u64>, Reverse<u32>, String, String, String) {
+fn format_rank(
+    format: &MediaFormat,
+) -> (
+    Reverse<u32>,
+    u8,
+    u8,
+    Reverse<u64>,
+    Reverse<u32>,
+    String,
+    String,
+    String,
+) {
     let video = format.video.as_ref();
     (
         Reverse(video.map_or(0, |video| video.height)),
@@ -257,7 +268,15 @@ mod tests {
         }
     }
 
-    fn stream(id: &str, height: u32, role: StreamRole, compatible: bool, bitrate: u64, fps: u32, codec: &str) -> MediaFormat {
+    fn stream(
+        id: &str,
+        height: u32,
+        role: StreamRole,
+        compatible: bool,
+        bitrate: u64,
+        fps: u32,
+        codec: &str,
+    ) -> MediaFormat {
         MediaFormat {
             format_id: id.into(),
             container: if compatible { "mp4" } else { "webm" }.into(),
@@ -324,9 +343,33 @@ mod tests {
     #[test]
     fn quality_dedup_prefers_direct_combined_even_when_provider_order_is_adversarial() {
         let media = media_with_formats(vec![
-            stream("mux-first", 720, StreamRole::VideoOnly, false, 3_000_000, 30, "av1"),
-            stream("split-second", 720, StreamRole::VideoOnly, true, 2_500_000, 30, "h264"),
-            stream("combined-last", 720, StreamRole::Combined, true, 1_500_000, 30, "h264"),
+            stream(
+                "mux-first",
+                720,
+                StreamRole::VideoOnly,
+                false,
+                3_000_000,
+                30,
+                "av1",
+            ),
+            stream(
+                "split-second",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                2_500_000,
+                30,
+                "h264",
+            ),
+            stream(
+                "combined-last",
+                720,
+                StreamRole::Combined,
+                true,
+                1_500_000,
+                30,
+                "h264",
+            ),
         ]);
 
         let choices = curate_quality_choices(&media);
@@ -339,24 +382,75 @@ mod tests {
     #[test]
     fn quality_dedup_prefers_compatible_split_over_mux_required() {
         let media = media_with_formats(vec![
-            stream("mux-first", 1080, StreamRole::VideoOnly, false, 5_000_000, 60, "av1"),
-            stream("split-second", 1080, StreamRole::VideoOnly, true, 3_500_000, 30, "h264"),
+            stream(
+                "mux-first",
+                1080,
+                StreamRole::VideoOnly,
+                false,
+                5_000_000,
+                60,
+                "av1",
+            ),
+            stream(
+                "split-second",
+                1080,
+                StreamRole::VideoOnly,
+                true,
+                3_500_000,
+                30,
+                "h264",
+            ),
         ]);
 
         let choices = curate_quality_choices(&media);
 
         assert_eq!(choices.len(), 1);
         assert_eq!(choices[0].choice_id, "format:split-second");
-        assert_eq!(choices[0].compatibility, Compatibility::RequiresSeparateAssets);
+        assert_eq!(
+            choices[0].compatibility,
+            Compatibility::RequiresSeparateAssets
+        );
     }
 
     #[test]
     fn quality_ranking_has_deterministic_tie_breakers() {
         let media = media_with_formats(vec![
-            stream("id-b", 720, StreamRole::VideoOnly, true, 2_500_000, 30, "h264"),
-            stream("id-a", 720, StreamRole::VideoOnly, true, 2_500_000, 30, "h264"),
-            stream("id-high-fps", 720, StreamRole::VideoOnly, true, 2_500_000, 60, "h264"),
-            stream("id-high-bitrate", 720, StreamRole::VideoOnly, true, 3_000_000, 30, "h264"),
+            stream(
+                "id-b",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                2_500_000,
+                30,
+                "h264",
+            ),
+            stream(
+                "id-a",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                2_500_000,
+                30,
+                "h264",
+            ),
+            stream(
+                "id-high-fps",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                2_500_000,
+                60,
+                "h264",
+            ),
+            stream(
+                "id-high-bitrate",
+                720,
+                StreamRole::VideoOnly,
+                true,
+                3_000_000,
+                30,
+                "h264",
+            ),
         ]);
 
         let choices = curate_quality_choices(&media);
