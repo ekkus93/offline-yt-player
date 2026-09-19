@@ -29,7 +29,10 @@ impl DownloadState {
         matches!(
             (self, next),
             (Queued, Resolving | Canceled)
-                | (Resolving, Downloading | Paused | Failed | RetryWait | Canceled)
+                | (
+                    Resolving,
+                    Downloading | Paused | Failed | RetryWait | Canceled
+                )
                 | (
                     Downloading,
                     Paused | RetryWait | Failed | Verifying | Canceled
@@ -37,7 +40,10 @@ impl DownloadState {
                 | (Paused, Downloading | Canceled)
                 | (RetryWait, Resolving | Downloading | Failed | Canceled)
                 | (Failed, Queued | Resolving | Canceled)
-                | (Verifying, Paused | Completed | Failed | RetryWait | Canceled)
+                | (
+                    Verifying,
+                    Paused | Completed | Failed | RetryWait | Canceled
+                )
         )
     }
 }
