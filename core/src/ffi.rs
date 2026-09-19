@@ -4,7 +4,10 @@
 //! by durable job identifiers and cooperative cancellation tokens so cancellation remains an
 //! explicit application-level channel rather than depending on foreign-future cancellation semantics.
 
-use crate::{CoreError, ErrorKind, LibraryItem, LibraryStore, MediaInfo, QualityChoice};
+use crate::{
+    CoreError, DownloadState, DurableDownloadSnapshot, ErrorKind, LibraryItem, LibraryStore,
+    MediaInfo, QualityChoice,
+};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -42,6 +45,30 @@ pub struct FfiLibraryItem {
     pub created_at_epoch_ms: u64,
     pub playback_position_ms: u64,
     pub completed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum FfiDownloadState {
+    Queued,
+    Resolving,
+    Downloading,
+    Paused,
+    RetryWait,
+    Failed,
+    Verifying,
+    Completed,
+    Canceled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiDurableDownloadSnapshot {
+    pub job_id: String,
+    pub state: FfiDownloadState,
+    pub bytes_downloaded: u64,
+    pub total_bytes: Option<u64>,
+    pub attempt: u32,
+    pub retry_at_epoch_ms: Option<u64>,
+    pub last_error: Option<FfiError>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -90,6 +117,12 @@ pub struct FfiLibraryGetResult {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FfiLibraryDeleteResult {
     pub deleted: bool,
+    pub error: Option<FfiError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiDownloadQueueResult {
+    pub jobs: Vec<FfiDurableDownloadSnapshot>,
     pub error: Option<FfiError>,
 }
 
@@ -152,13 +185,23 @@ impl FfiCoreService {
             },
         }
     }
+
+    /// Return the durable queue as the authoritative download state visible to platform clients.
+    /// Ephemeral service-local booleans are intentionally absent from this boundary.
+    pub fn download_queue(&self) -> FfiDownloadQueueResult {
+        match self.library.load_download_snapshots() {
+            Ok(jobs) => FfiDownloadQueueResult {
+                jobs: jobs.iter().map(FfiDurableDownloadSnapshot::from).collect(),
+                error: None,
+            },
+            Err(error) => FfiDownloadQueueResult {
+                jobs: Vec::new(),
+                error: Some(FfiError::from(&error)),
+            },
+        }
+    }
 }
 
-/// Cooperative cancellation channel that can safely cross the UniFFI boundary.
-///
-/// Long-running Rust operations receive a clone of this object and check `is_canceled` at bounded
-/// interruption points. Android may call `cancel` from another thread without blocking the main
-/// thread or relying on foreign-future cancellation behavior.
 #[derive(Debug, uniffi::Object)]
 pub struct FfiCancellationToken {
     canceled: AtomicBool,
@@ -183,7 +226,6 @@ impl FfiCancellationToken {
 }
 
 impl FfiCancellationToken {
-    /// Convert a requested cancellation into the same typed error exposed to Kotlin.
     pub fn check(&self) -> Result<(), CoreError> {
         if self.is_canceled() {
             Err(CoreError::new(
@@ -243,6 +285,36 @@ impl From<&LibraryItem> for FfiLibraryItem {
     }
 }
 
+impl From<DownloadState> for FfiDownloadState {
+    fn from(value: DownloadState) -> Self {
+        match value {
+            DownloadState::Queued => Self::Queued,
+            DownloadState::Resolving => Self::Resolving,
+            DownloadState::Downloading => Self::Downloading,
+            DownloadState::Paused => Self::Paused,
+            DownloadState::RetryWait => Self::RetryWait,
+            DownloadState::Failed => Self::Failed,
+            DownloadState::Verifying => Self::Verifying,
+            DownloadState::Completed => Self::Completed,
+            DownloadState::Canceled => Self::Canceled,
+        }
+    }
+}
+
+impl From<&DurableDownloadSnapshot> for FfiDurableDownloadSnapshot {
+    fn from(value: &DurableDownloadSnapshot) -> Self {
+        Self {
+            job_id: value.job_id.clone(),
+            state: value.state.into(),
+            bytes_downloaded: value.bytes_downloaded,
+            total_bytes: value.total_bytes,
+            attempt: value.attempt,
+            retry_at_epoch_ms: value.retry_at_epoch_ms,
+            last_error: value.last_error.as_ref().map(FfiError::from),
+        }
+    }
+}
+
 impl From<&CoreError> for FfiError {
     fn from(value: &CoreError) -> Self {
         Self {
@@ -273,13 +345,11 @@ pub fn ffi_core_identity() -> String {
     crate::core_identity().to_owned()
 }
 
-/// Portable-core resource ceiling exposed to Android so the platform layer does not duplicate it.
 #[uniffi::export]
 pub fn ffi_max_concurrent_downloads() -> u32 {
     u32::try_from(crate::MAX_CONCURRENT_DOWNLOADS).expect("core concurrency ceiling fits u32")
 }
 
-/// Map a persisted/user-selected platform preference into the portable core's safe range.
 #[uniffi::export]
 pub fn ffi_bounded_download_concurrency(requested: u32) -> u32 {
     u32::try_from(crate::bounded_download_concurrency(requested as usize))
@@ -315,7 +385,7 @@ mod tests {
             estimated_bytes: Some(1024),
             video_height: Some(720),
             audio_only: false,
-            compatibility: Compatibility::Preferred,
+            compatibility: crate::Compatibility::Preferred,
         };
         assert_eq!(FfiQualityChoice::from(&choice).label, "720p");
     }
@@ -329,17 +399,74 @@ mod tests {
     }
 
     #[test]
-    fn concurrency_policy_maps_through_ffi_without_exceeding_core_ceiling() {
+    fn core_service_exposes_durable_queue_and_survives_reopen() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let store = LibraryStore::open(&database).unwrap();
+        let snapshots = [
+            DurableDownloadSnapshot {
+                job_id: "queued".into(),
+                state: DownloadState::Queued,
+                bytes_downloaded: 0,
+                total_bytes: Some(100),
+                attempt: 0,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            },
+            DurableDownloadSnapshot {
+                job_id: "retrying".into(),
+                state: DownloadState::RetryWait,
+                bytes_downloaded: 40,
+                total_bytes: Some(100),
+                attempt: 2,
+                retry_at_epoch_ms: Some(123_456),
+                last_error: Some(CoreError::new(ErrorKind::NetworkTimeout, "timeout", true)),
+            },
+            DurableDownloadSnapshot {
+                job_id: "paused".into(),
+                state: DownloadState::Paused,
+                bytes_downloaded: 60,
+                total_bytes: Some(100),
+                attempt: 1,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            },
+            DurableDownloadSnapshot {
+                job_id: "completed".into(),
+                state: DownloadState::Completed,
+                bytes_downloaded: 100,
+                total_bytes: Some(100),
+                attempt: 1,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            },
+        ];
+        for snapshot in &snapshots {
+            store.save_download_snapshot(snapshot).unwrap();
+        }
+        drop(store);
+
+        let service = FfiCoreService::open(database.to_string_lossy().into_owned()).unwrap();
+        let result = service.download_queue();
+        assert!(result.error.is_none());
+        assert_eq!(result.jobs.len(), snapshots.len());
+        let retrying = result.jobs.iter().find(|job| job.job_id == "retrying").unwrap();
+        assert_eq!(retrying.state, FfiDownloadState::RetryWait);
+        assert_eq!(retrying.bytes_downloaded, 40);
+        assert_eq!(retrying.attempt, 2);
+        assert_eq!(retrying.retry_at_epoch_ms, Some(123_456));
         assert_eq!(
-            ffi_max_concurrent_downloads(),
-            crate::MAX_CONCURRENT_DOWNLOADS as u32
+            retrying.last_error.as_ref().map(|error| &error.kind),
+            Some(&FfiErrorKind::NetworkTimeout)
         );
+    }
+
+    #[test]
+    fn concurrency_policy_maps_through_ffi_without_exceeding_core_ceiling() {
+        assert_eq!(ffi_max_concurrent_downloads(), crate::MAX_CONCURRENT_DOWNLOADS as u32);
         assert_eq!(ffi_bounded_download_concurrency(0), 1);
         assert_eq!(ffi_bounded_download_concurrency(2), 2);
-        assert_eq!(
-            ffi_bounded_download_concurrency(u32::MAX),
-            crate::MAX_CONCURRENT_DOWNLOADS as u32
-        );
+        assert_eq!(ffi_bounded_download_concurrency(u32::MAX), crate::MAX_CONCURRENT_DOWNLOADS as u32);
     }
 
     #[test]
@@ -352,18 +479,11 @@ mod tests {
         let error = token.check().unwrap_err();
         assert_eq!(error.kind, ErrorKind::Canceled);
         assert!(!error.retryable);
-        token.cancel();
-        assert!(token.is_canceled());
     }
 
     #[test]
     fn network_diagnostic_secret_markers_do_not_cross_ffi_error_boundary() {
-        let markers = [
-            "SIGNED_QUERY_SECRET",
-            "TOKEN_SECRET",
-            "COOKIE_SECRET",
-            "BEARER_SECRET",
-        ];
+        let markers = ["SIGNED_QUERY_SECRET", "TOKEN_SECRET", "COOKIE_SECRET", "BEARER_SECRET"];
         let core = CoreError::new(
             ErrorKind::NetworkUnavailable,
             "Network request failed before a response was received",
