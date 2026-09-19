@@ -10,8 +10,18 @@ class DownloadForegroundServicePolicyTest {
     fun foregroundServicePolicyIsUserVisibleAndBounded() {
         assertEquals("offline_downloads", DownloadServicePolicy.ChannelId)
         assertTrue(DownloadServicePolicy.NotificationId > 0)
-        assertTrue(DownloadServicePolicy.MaxConcurrentDownloads in 1..4)
+        assertEquals(2u, DownloadServicePolicy.concurrentDownloads())
+        assertTrue(DownloadServicePolicy.maxConcurrentDownloads() >= DownloadServicePolicy.concurrentDownloads())
         assertTrue(DownloadServicePolicy.ReconcilesDurableQueueOnStart)
+    }
+
+    @Test
+    fun concurrencyPreferenceIsBoundedByPortableCorePolicy() {
+        val maximum = DownloadServicePolicy.maxConcurrentDownloads()
+        assertTrue(maximum >= 1u)
+        assertEquals(1u, DownloadServicePolicy.concurrentDownloads(0u))
+        assertEquals(maximum, DownloadServicePolicy.concurrentDownloads(maximum))
+        assertEquals(maximum, DownloadServicePolicy.concurrentDownloads(UInt.MAX_VALUE))
     }
 
     @Test

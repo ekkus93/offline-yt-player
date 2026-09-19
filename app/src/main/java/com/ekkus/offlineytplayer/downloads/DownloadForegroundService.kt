@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.ekkus.offlineytplayer.MainActivity
+import com.ekkus.offlineytplayer.core.ffiBoundedDownloadConcurrency
+import com.ekkus.offlineytplayer.core.ffiMaxConcurrentDownloads
 
 internal enum class DownloadNetworkPreference {
     AnyNetwork,
@@ -55,13 +57,18 @@ internal object DownloadNetworkPolicy {
 internal object DownloadServicePolicy {
     const val ChannelId = "offline_downloads"
     const val NotificationId = 4100
-    const val MaxConcurrentDownloads = 2
+    const val DefaultConcurrentDownloads = 2u
     const val SupportsPauseResumeCancel = true
     const val ReportsCompletionAndFailure = true
     const val ReconcilesDurableQueueOnStart = true
     const val HonorsNetworkPreference = true
     const val SupportsBootRecovery = true
     const val FailsInterruptedTransfersExplicitly = true
+
+    fun maxConcurrentDownloads(): UInt = ffiMaxConcurrentDownloads()
+
+    fun concurrentDownloads(requested: UInt = DefaultConcurrentDownloads): UInt =
+        ffiBoundedDownloadConcurrency(requested)
 }
 
 internal object DownloadForegroundServiceInventory {
