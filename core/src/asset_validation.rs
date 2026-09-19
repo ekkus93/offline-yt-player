@@ -46,7 +46,14 @@ fn validate_asset(
     let path = library_root.join(&asset.relative_path);
     let metadata = match std::fs::metadata(&path) {
         Ok(metadata) if metadata.is_file() => metadata,
-        Ok(_) => return Ok(result(asset, AssetHealth::Corrupt { reason: "asset path is not a regular file".into() })),
+        Ok(_) => {
+            return Ok(result(
+                asset,
+                AssetHealth::Corrupt {
+                    reason: "asset path is not a regular file".into(),
+                },
+            ));
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(result(asset, AssetHealth::Missing));
         }
@@ -63,7 +70,12 @@ fn validate_asset(
     if depth == AssetValidationDepth::Deep {
         if let Some(expected) = asset.sha256.as_deref() {
             if !valid_sha256(expected) {
-                return Ok(result(asset, AssetHealth::Corrupt { reason: "persisted SHA-256 is malformed".into() }));
+                return Ok(result(
+                    asset,
+                    AssetHealth::Corrupt {
+                        reason: "persisted SHA-256 is malformed".into(),
+                    },
+                ));
             }
             let actual = sha256_file(&path)?;
             if !actual.eq_ignore_ascii_case(expected) {
@@ -153,9 +165,11 @@ mod tests {
         let item = item(original.len() as u64, Some(expected));
         write_asset(root.path(), b"evil");
 
-        let cheap = validate_library_item_assets(root.path(), &item, AssetValidationDepth::Cheap).unwrap();
+        let cheap =
+            validate_library_item_assets(root.path(), &item, AssetValidationDepth::Cheap).unwrap();
         assert_eq!(cheap[0].health, AssetHealth::Healthy);
-        let deep = validate_library_item_assets(root.path(), &item, AssetValidationDepth::Deep).unwrap();
+        let deep =
+            validate_library_item_assets(root.path(), &item, AssetValidationDepth::Deep).unwrap();
         assert!(matches!(deep[0].health, AssetHealth::Corrupt { .. }));
     }
 
@@ -166,7 +180,8 @@ mod tests {
         let expected = format!("{:x}", Sha256::digest(contents));
         let item = item(contents.len() as u64, Some(expected));
         write_asset(root.path(), contents);
-        let result = validate_library_item_assets(root.path(), &item, AssetValidationDepth::Deep).unwrap();
+        let result =
+            validate_library_item_assets(root.path(), &item, AssetValidationDepth::Deep).unwrap();
         assert_eq!(result[0].health, AssetHealth::Healthy);
     }
 
@@ -174,10 +189,12 @@ mod tests {
     fn missing_and_wrong_length_assets_are_explicit_repairable_states() {
         let root = tempdir().unwrap();
         let item = item(4, None);
-        let missing = validate_library_item_assets(root.path(), &item, AssetValidationDepth::Cheap).unwrap();
+        let missing =
+            validate_library_item_assets(root.path(), &item, AssetValidationDepth::Cheap).unwrap();
         assert_eq!(missing[0].health, AssetHealth::Missing);
         write_asset(root.path(), b"too long");
-        let corrupt = validate_library_item_assets(root.path(), &item, AssetValidationDepth::Cheap).unwrap();
+        let corrupt =
+            validate_library_item_assets(root.path(), &item, AssetValidationDepth::Cheap).unwrap();
         assert!(matches!(corrupt[0].health, AssetHealth::Corrupt { .. }));
     }
 }
