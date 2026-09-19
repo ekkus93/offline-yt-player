@@ -50,12 +50,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-101 — Restore network capability
 
-- [ ] Add `android.permission.INTERNET` to `app/src/main/AndroidManifest.xml`.
-- [ ] Retain only permissions actually needed by implemented runtime paths.
-- [ ] Add a manifest-level test/assertion for required network permission.
-- [ ] Add an Android runtime fixture test that performs a local deterministic HTTP request through the packaged app/core path.
+- [x] Add `android.permission.INTERNET` to `app/src/main/AndroidManifest.xml`.
+- [x] Retain only permissions actually needed by implemented runtime paths.
+- [x] Add a manifest-level test/assertion for required network permission.
+- [x] Add an Android runtime fixture test that performs a local deterministic HTTP request through the packaged app/core path.
 
 **Acceptance:** the Android app can open the deterministic fixture network endpoint on an emulator/device.
+
+**Evidence (RMD-101):** production manifest in `app/src/main/AndroidManifest.xml`; manifest guard in `app/src/test/java/com/ekkus/offlineytplayer/ManifestPermissionTest.kt`; packaged device-side deterministic loopback HTTP proof in `app/src/androidTest/java/com/ekkus/offlineytplayer/NetworkCapabilitySmokeTest.kt`; audit in `docs/RMD_101_NETWORK_CAPABILITY_AUDIT.md`. Implementation exact-head SHA `3b92b5960afa63470efc7343953f95a2b94b81e4`; push CI run `35470562072` and PR CI run `35471256640` passed on that exact SHA; merged to master as `25bf9c79d5db4caae81cb2ceff05404e2d6961e3`.
 
 ### RMD-102 — Replace illegal/fragile boot-start behavior
 
