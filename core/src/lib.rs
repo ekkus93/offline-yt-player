@@ -24,6 +24,7 @@ pub mod state;
 pub mod subtitle;
 pub mod thumbnail;
 pub mod worker;
+pub mod worker_pause;
 pub mod youtube;
 pub mod youtube_diagnostics;
 // The quality rank is intentionally a lexicographic tuple so every tie-breaker remains explicit.
@@ -56,6 +57,7 @@ pub use state::*;
 pub use subtitle::*;
 pub use thumbnail::*;
 pub use worker::*;
+pub use worker_pause::*;
 pub use youtube::*;
 pub use youtube_diagnostics::*;
 pub use youtube_source::*;
