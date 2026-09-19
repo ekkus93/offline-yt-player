@@ -31,6 +31,22 @@ class DownloadRowPolicyTest {
     }
 
     @Test
+    fun unknownLengthProgressDoesNotFabricatePercentageOrEta() {
+        val row = DownloadProgressPresentationMapper.fromProgress(
+            state = DownloadVisualState.Active,
+            bytesDownloaded = 1024,
+            totalBytes = null,
+            metrics = DownloadProgressMetrics(speedBytesPerSecond = 512, etaSeconds = 10),
+        )
+
+        assertNull(row.progressFraction)
+        assertNull(row.progressPercent)
+        assertEquals(512L, row.trustworthySpeedBytesPerSecond())
+        assertNull(row.trustworthyEtaSeconds())
+        assertNull(row.trustworthySpeedAndEta())
+    }
+
+    @Test
     fun speedAndEtaAreHiddenUnlessBothAreTrustworthy() {
         assertNull(DownloadRowPresentation(DownloadVisualState.Active, 1, 10).trustworthySpeedAndEta())
         assertNull(DownloadRowPresentation(DownloadVisualState.Active, 1, 10, speedBytesPerSecond = 0, etaSeconds = 5).trustworthySpeedAndEta())
@@ -38,6 +54,20 @@ class DownloadRowPolicyTest {
             1024L to 12L,
             DownloadRowPresentation(DownloadVisualState.Active, 1, 10, speedBytesPerSecond = 1024, etaSeconds = 12).trustworthySpeedAndEta(),
         )
+    }
+
+    @Test
+    fun progressMapperKeepsOnlyRealPositiveMetrics() {
+        val row = DownloadProgressPresentationMapper.fromProgress(
+            state = DownloadVisualState.Active,
+            bytesDownloaded = -1,
+            totalBytes = 100,
+            metrics = DownloadProgressMetrics(speedBytesPerSecond = -5, etaSeconds = -1),
+        )
+
+        assertEquals(0, row.bytesDownloaded)
+        assertNull(row.speedBytesPerSecond)
+        assertNull(row.etaSeconds)
     }
 
     @Test
