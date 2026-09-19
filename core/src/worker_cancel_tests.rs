@@ -74,7 +74,10 @@ fn durable_cancel_stops_active_work_and_persists_terminal_state() {
     let controller_store = store.clone();
     let controller = thread::spawn(move || {
         for _ in 0..100 {
-            let current = controller_store.load_download_snapshots().unwrap().remove(0);
+            let current = controller_store
+                .load_download_snapshots()
+                .unwrap()
+                .remove(0);
             if current.state == DownloadState::Downloading {
                 let control = FfiDownloadControlService::open(controller_db).unwrap();
                 let result = control.cancel("cancel-job".into());
@@ -104,5 +107,9 @@ fn durable_cancel_stops_active_work_and_persists_terminal_state() {
     assert!(!media_root.join("items/cancel-job/video.mp4").exists());
     // Default policy intentionally retains a resumable partial; terminal state prevents automatic
     // reuse unless a future explicit user action/policy chooses to recover it.
-    assert!(media_root.join("items/cancel-job/.video.mp4.partial").exists());
+    assert!(
+        media_root
+            .join("items/cancel-job/.video.mp4.partial")
+            .exists()
+    );
 }
