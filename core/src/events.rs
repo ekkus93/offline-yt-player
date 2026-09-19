@@ -81,11 +81,7 @@ impl TransferMetricEstimator {
         }
     }
 
-    fn metrics(
-        &self,
-        bytes_downloaded: u64,
-        total_bytes: Option<u64>,
-    ) -> EphemeralTransferMetrics {
+    fn metrics(&self, bytes_downloaded: u64, total_bytes: Option<u64>) -> EphemeralTransferMetrics {
         let Some(first) = self.samples.front() else {
             return EphemeralTransferMetrics::unknown();
         };
