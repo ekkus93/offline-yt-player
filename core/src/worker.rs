@@ -160,7 +160,11 @@ impl DownloadWorker {
         let mut coalescer = ProgressCoalescer::default();
         for plan_asset in &item.plan.assets {
             if cancel.load(Ordering::Relaxed) {
-                return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
+                return Err(CoreError::new(
+                    ErrorKind::Canceled,
+                    "Download canceled",
+                    false,
+                ));
             }
             let result = engine.transfer(
                 &TransferRequest {
@@ -200,7 +204,8 @@ impl DownloadWorker {
             playback_position_ms: 0,
             completed: true,
         };
-        self.library.promote_completed(&item.job_id, &library_item)?;
+        self.library
+            .promote_completed(&item.job_id, &library_item)?;
         transition_snapshot(snapshot, DownloadState::Completed)?;
         snapshot.bytes_downloaded = snapshot.total_bytes.unwrap_or(snapshot.bytes_downloaded);
         snapshot.retry_at_epoch_ms = None;
@@ -225,8 +230,8 @@ impl DownloadWorker {
     ) -> Result<(), CoreError> {
         if retryable {
             transition_snapshot(snapshot, DownloadState::RetryWait)?;
-            let delay_ms = u64::try_from(retry_delay(snapshot.attempt, 0).as_millis())
-                .unwrap_or(u64::MAX);
+            let delay_ms =
+                u64::try_from(retry_delay(snapshot.attempt, 0).as_millis()).unwrap_or(u64::MAX);
             snapshot.retry_at_epoch_ms = Some(now_epoch_ms.saturating_add(delay_ms));
         } else {
             transition_snapshot(snapshot, DownloadState::Failed)?;
@@ -285,7 +290,9 @@ mod tests {
                     else {
                         continue;
                     };
-                    request.respond(TinyResponse::from_data(body.clone())).unwrap();
+                    request
+                        .respond(TinyResponse::from_data(body.clone()))
+                        .unwrap();
                 }
             });
             Self {
@@ -403,9 +410,11 @@ mod tests {
 
         let report = worker
             .execute_ready_at(
-                &[
-                    plan("job-fail", "http://127.0.0.1:1/missing.mp4".into(), 10),
-                ],
+                &[plan(
+                    "job-fail",
+                    "http://127.0.0.1:1/missing.mp4".into(),
+                    10,
+                )],
                 &AtomicBool::new(false),
                 5_000,
             )
