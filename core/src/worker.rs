@@ -171,7 +171,11 @@ impl DownloadWorker {
         let mut coalescer = ProgressCoalescer::default();
         for plan_asset in &item.plan.assets {
             if cancel.load(Ordering::Relaxed) {
-                return Err(CoreError::new(ErrorKind::Canceled, "Download canceled", false));
+                return Err(CoreError::new(
+                    ErrorKind::Canceled,
+                    "Download canceled",
+                    false,
+                ));
             }
             let request = TransferRequest {
                 url: plan_asset.url.clone(),
@@ -209,7 +213,8 @@ impl DownloadWorker {
             playback_position_ms: 0,
             completed: true,
         };
-        self.library.promote_completed(&item.job_id, &library_item)?;
+        self.library
+            .promote_completed(&item.job_id, &library_item)?;
         transition_snapshot(snapshot, DownloadState::Completed)?;
         snapshot.bytes_downloaded = snapshot.total_bytes.unwrap_or(snapshot.bytes_downloaded);
         snapshot.retry_at_epoch_ms = None;
