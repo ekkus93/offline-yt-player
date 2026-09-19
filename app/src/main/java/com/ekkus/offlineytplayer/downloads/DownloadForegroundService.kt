@@ -11,8 +11,6 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.ekkus.offlineytplayer.MainActivity
-import uniffi.offline_yt_core.ffiBoundedDownloadConcurrency
-import uniffi.offline_yt_core.ffiMaxConcurrentDownloads
 
 internal enum class DownloadNetworkPreference {
     AnyNetwork,
@@ -57,7 +55,7 @@ internal object DownloadNetworkPolicy {
 internal object DownloadServicePolicy {
     const val ChannelId = "offline_downloads"
     const val NotificationId = 4100
-    const val DefaultConcurrentDownloads = 2u
+    const val DefaultConcurrentDownloads = 2
     const val SupportsPauseResumeCancel = true
     const val ReportsCompletionAndFailure = true
     const val ReconcilesDurableQueueOnStart = true
@@ -65,10 +63,13 @@ internal object DownloadServicePolicy {
     const val SupportsBootRecovery = true
     const val FailsInterruptedTransfersExplicitly = true
 
-    fun maxConcurrentDownloads(): UInt = ffiMaxConcurrentDownloads()
-
-    fun concurrentDownloads(requested: UInt = DefaultConcurrentDownloads): UInt =
-        ffiBoundedDownloadConcurrency(requested)
+    /**
+     * The maximum is owned by the portable core and exported through UniFFI. Android deliberately
+     * has no duplicate maximum constant; generated binding verification in CI is the contract that
+     * makes [ffiMaxConcurrentDownloads] available to the platform integration layer.
+     */
+    fun concurrentDownloads(requested: Int, coreMaximum: Int): Int =
+        requested.coerceIn(1, coreMaximum)
 }
 
 internal object DownloadForegroundServiceInventory {
