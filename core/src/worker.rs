@@ -261,9 +261,7 @@ fn total_expected_bytes(plan: &DownloadPlan) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        Compatibility, DownloadPlanAsset, MediaKind, QualityChoice, SourceIdentity, StreamRole,
-    };
+    use crate::{Compatibility, DownloadPlanAsset, MediaKind, QualityChoice, SourceIdentity};
     use std::sync::Arc;
     use std::thread;
     use tiny_http::{Response as TinyResponse, Server};
@@ -282,7 +280,9 @@ mod tests {
             let stop_thread = Arc::clone(&stop);
             let handle = thread::spawn(move || {
                 while !stop_thread.load(Ordering::Relaxed) {
-                    let Ok(Some(request)) = server.recv_timeout(std::time::Duration::from_millis(50)) else {
+                    let Ok(Some(request)) =
+                        server.recv_timeout(std::time::Duration::from_millis(50))
+                    else {
                         continue;
                     };
                     request.respond(TinyResponse::from_data(body.clone())).unwrap();
@@ -403,7 +403,9 @@ mod tests {
 
         let report = worker
             .execute_ready_at(
-                &[plan("job-fail", "http://127.0.0.1:1/missing.mp4".into(), 10)],
+                &[
+                    plan("job-fail", "http://127.0.0.1:1/missing.mp4".into(), 10),
+                ],
                 &AtomicBool::new(false),
                 5_000,
             )
