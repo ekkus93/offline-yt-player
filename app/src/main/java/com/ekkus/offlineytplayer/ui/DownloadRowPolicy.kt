@@ -4,6 +4,11 @@ import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 
 internal enum class DownloadRowAction { Pause, Resume, Cancel, Retry }
 
+internal data class DownloadProgressMetrics(
+    val speedBytesPerSecond: Long? = null,
+    val etaSeconds: Long? = null,
+)
+
 internal data class DownloadRowPresentation(
     val state: DownloadVisualState,
     val bytesDownloaded: Long,
@@ -27,11 +32,34 @@ internal data class DownloadRowPresentation(
 
     fun humanReadableError(): String? = errorReason?.trim()?.takeIf { it.isNotEmpty() }
 
+    fun trustworthySpeedBytesPerSecond(): Long? = speedBytesPerSecond?.takeIf { it > 0 }
+
+    fun trustworthyEtaSeconds(): Long? = etaSeconds
+        ?.takeIf { it >= 0 }
+        ?.takeIf { totalBytes != null && bytesDownloaded <= totalBytes }
+
     fun trustworthySpeedAndEta(): Pair<Long, Long>? {
-        val speed = speedBytesPerSecond?.takeIf { it > 0 } ?: return null
-        val eta = etaSeconds?.takeIf { it >= 0 } ?: return null
+        val speed = trustworthySpeedBytesPerSecond() ?: return null
+        val eta = trustworthyEtaSeconds() ?: return null
         return speed to eta
     }
+}
+
+internal object DownloadProgressPresentationMapper {
+    fun fromProgress(
+        state: DownloadVisualState,
+        bytesDownloaded: Long,
+        totalBytes: Long?,
+        metrics: DownloadProgressMetrics = DownloadProgressMetrics(),
+        errorReason: String? = null,
+    ): DownloadRowPresentation = DownloadRowPresentation(
+        state = state,
+        bytesDownloaded = bytesDownloaded.coerceAtLeast(0),
+        totalBytes = totalBytes?.takeIf { it > 0 },
+        errorReason = errorReason,
+        speedBytesPerSecond = metrics.speedBytesPerSecond?.takeIf { it > 0 },
+        etaSeconds = metrics.etaSeconds?.takeIf { eta -> eta >= 0 && totalBytes != null },
+    )
 }
 
 internal object DownloadRowControlBinding {
@@ -43,6 +71,6 @@ internal object DownloadRowControlBinding {
         DownloadRowAction.Pause -> gateway.pause(jobId).isSuccess
         DownloadRowAction.Resume -> gateway.resume(jobId).isSuccess
         DownloadRowAction.Cancel -> gateway.cancel(jobId).isSuccess
-        DownloadRowAction.Retry -> false
+        DownloadRowAction.Retry -> gateway.retry(jobId).isSuccess
     }
 }
