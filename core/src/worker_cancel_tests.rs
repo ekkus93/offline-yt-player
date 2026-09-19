@@ -1,7 +1,7 @@
 use crate::{
-    Compatibility, DownloadPlan, DownloadPlanAsset, DownloadPolicy, DownloadState, DownloadWorkItem,
-    DownloadWorker, DurableDownloadSnapshot, FfiDownloadControlService, LibraryStore, MediaKind,
-    QualityChoice, SourceIdentity,
+    Compatibility, DownloadPlan, DownloadPlanAsset, DownloadPolicy, DownloadState,
+    DownloadWorkItem, DownloadWorker, DurableDownloadSnapshot, FfiDownloadControlService,
+    LibraryStore, MediaKind, QualityChoice, SourceIdentity,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,7 +16,8 @@ fn durable_cancel_stops_active_work_and_persists_terminal_state() {
     let server_stop = Arc::clone(&stop_server);
     let server_thread = thread::spawn(move || {
         while !server_stop.load(Ordering::Relaxed) {
-            let Ok(Some(request)) = server.recv_timeout(std::time::Duration::from_millis(50)) else {
+            let Ok(Some(request)) = server.recv_timeout(std::time::Duration::from_millis(50))
+            else {
                 continue;
             };
             thread::sleep(std::time::Duration::from_millis(150));
