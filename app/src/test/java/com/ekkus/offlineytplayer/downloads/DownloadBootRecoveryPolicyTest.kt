@@ -5,12 +5,12 @@ import org.junit.Test
 
 class DownloadBootRecoveryPolicyTest {
     @Test
-    fun bootRecoveryNeverStartsDataSyncForegroundService() {
+    fun bootRecoveryNeverStartsForegroundDataSyncService() {
         assertFalse(DownloadBootRecovery.StartsForegroundServiceFromBoot)
     }
 
     @Test
-    fun lockedBootIsNotPartOfV1RecoveryContract() {
+    fun lockedBootIsNotRegisteredForCredentialProtectedState() {
         assertFalse(DownloadBootRecovery.UsesLockedBootCompleted)
     }
 }
