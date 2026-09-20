@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 
 internal enum class AppDestination(val label: String, val accessibilityLabel: String) {
@@ -60,7 +61,16 @@ internal object PortraitLayoutPolicy {
 }
 
 @Composable
-fun OfflineYTPlayerApp(initialSharedUrl: String? = null) {
+internal fun OfflineYTPlayerApp(
+    initialSharedUrl: String? = null,
+    libraryState: LibraryScreenState = LibraryScreenState.Unavailable(
+        "Library repository is not connected yet; no empty-library claim is being made.",
+    ),
+    downloadsState: DownloadsScreenState = DownloadsScreenState.Unavailable(
+        "Downloads repository is not connected yet; no empty-queue claim is being made.",
+    ),
+    downloadControlGateway: AppDownloadControlGateway? = null,
+) {
     OfflineYTPlayerTheme {
         var destination by rememberSaveable(initialSharedUrl) { mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add) }
         var playbackAsset by remember { mutableStateOf<LocalPlaybackAsset?>(null) }
@@ -73,6 +83,9 @@ fun OfflineYTPlayerApp(initialSharedUrl: String? = null) {
                     destination = destination,
                     padding = padding,
                     initialSharedUrl = initialSharedUrl,
+                    libraryState = libraryState,
+                    downloadsState = downloadsState,
+                    downloadControlGateway = downloadControlGateway,
                     onAdd = { destination = AppDestination.Add },
                     onPlay = { playbackAsset = it },
                 )
@@ -96,13 +109,16 @@ private fun DestinationContent(
     destination: AppDestination,
     padding: PaddingValues,
     initialSharedUrl: String?,
+    libraryState: LibraryScreenState,
+    downloadsState: DownloadsScreenState,
+    downloadControlGateway: AppDownloadControlGateway?,
     onAdd: () -> Unit,
     onPlay: (LocalPlaybackAsset) -> Unit,
 ) {
     Box(Modifier.fillMaxSize().padding(padding)) {
         when (destination) {
-            AppDestination.Library -> LibraryScreen(onAdd, onPlay)
-            AppDestination.Downloads -> DownloadsScreen()
+            AppDestination.Library -> LibraryScreen(onAdd, onPlay, libraryState)
+            AppDestination.Downloads -> DownloadsScreen(downloadsState, downloadControlGateway)
             AppDestination.Add -> AddScreen(PaddingValues(), initialSharedUrl)
             AppDestination.Settings -> SettingsScreen(PaddingValues())
         }

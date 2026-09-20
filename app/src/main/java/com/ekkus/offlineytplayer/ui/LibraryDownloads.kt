@@ -2,6 +2,7 @@ package com.ekkus.offlineytplayer.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,6 +47,20 @@ internal data class DownloadRowModel(
     val error: String? = null,
 )
 
+internal sealed class LibraryScreenState {
+    object Loading : LibraryScreenState()
+    data class Ready(val rows: List<LibraryRowModel>) : LibraryScreenState()
+    data class Unavailable(val reason: String) : LibraryScreenState()
+    data class Failed(val message: String) : LibraryScreenState()
+}
+
+internal sealed class DownloadsScreenState {
+    object Loading : DownloadsScreenState()
+    data class Ready(val rows: List<DownloadRowModel>) : DownloadsScreenState()
+    data class Unavailable(val reason: String) : DownloadsScreenState()
+    data class Failed(val message: String) : DownloadsScreenState()
+}
+
 internal object CollectionLayoutPolicy {
     const val LibraryFixedControlRows = 2
     const val DownloadFixedControlRows = 1
@@ -69,12 +84,18 @@ internal object LibraryPlaybackRoute {
 }
 
 @Composable
-internal fun LibraryScreen(onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Unit) {
+internal fun LibraryScreen(
+    onAdd: () -> Unit,
+    onPlay: (LocalPlaybackAsset) -> Unit,
+    state: LibraryScreenState = LibraryScreenState.Unavailable(
+        "Library repository is not connected yet; no empty-library claim is being made.",
+    ),
+) {
     var query by rememberSaveable { mutableStateOf("") }
     var layout by rememberSaveable { mutableStateOf(LibraryLayout.List) }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
-    val allItems = emptyList<LibraryRowModel>()
-    val visibleItems = allItems.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) }
+    val readyRows = (state as? LibraryScreenState.Ready)?.rows.orEmpty()
+    val visibleItems = readyRows.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) }
     Column(
         Modifier.fillMaxSize().padding(MidnightTransit.ScreenSpacing),
         verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
@@ -86,38 +107,64 @@ internal fun LibraryScreen(onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Un
                 modifier = Modifier.weight(1f),
                 label = { Text("Search library") },
                 singleLine = true,
+                enabled = state is LibraryScreenState.Ready,
             )
             OutlinedButton(
                 onClick = { layout = if (layout == LibraryLayout.List) LibraryLayout.Grid else LibraryLayout.List },
                 modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+                enabled = state is LibraryScreenState.Ready,
             ) { Text(if (layout == LibraryLayout.List) "Grid" else "List") }
         }
         Text("Filter: All · ${layout.name}")
         message?.let { Text(it) }
-        if (visibleItems.isEmpty()) {
-            Column(
-                Modifier.weight(1f).fillMaxWidth(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(if (query.isBlank()) "No offline videos yet" else "No matching videos")
+        when (state) {
+            LibraryScreenState.Loading -> RepositoryStatus("Loading library repository state…")
+            is LibraryScreenState.Unavailable -> RepositoryStatus(state.reason)
+            is LibraryScreenState.Failed -> RepositoryStatus("Library repository failed: ${state.message}")
+            is LibraryScreenState.Ready -> {
+                if (visibleItems.isEmpty()) {
+                    Column(
+                        Modifier.weight(1f).fillMaxWidth(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(if (query.isBlank()) "No offline videos yet" else "No matching videos")
+                    }
+                    Button(
+                        onClick = onAdd,
+                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+                    ) { Text("Add video") }
+                } else {
+                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+                        items(visibleItems, key = { it.id }) { item ->
+                            LibraryItemRow(
+                                item = item,
+                                onPlay = onPlay,
+                                onDetails = { selected -> message = "${selected.title}: ${selected.detail}" },
+                                onRemove = { selected -> message = "Remove requires repository-backed deletion for ${selected.title}." },
+                            )
+                        }
+                    }
+                }
             }
+        }
+        if (state !is LibraryScreenState.Ready) {
             Button(
                 onClick = onAdd,
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("Add video") }
-        } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-                items(visibleItems, key = { it.id }) { item ->
-                    LibraryItemRow(
-                        item = item,
-                        onPlay = onPlay,
-                        onDetails = { selected -> message = "${selected.title}: ${selected.detail}" },
-                        onRemove = { selected -> message = "Remove requires repository-backed deletion for ${selected.title}." },
-                    )
-                }
-            }
         }
+    }
+}
+
+@Composable
+private fun ColumnScope.RepositoryStatus(text: String) {
+    Column(
+        Modifier.weight(1f).fillMaxWidth(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(text)
     }
 }
 
@@ -145,10 +192,18 @@ private fun LibraryItemRow(
 }
 
 @Composable
-internal fun DownloadsScreen(controlGateway: AppDownloadControlGateway? = null) {
+internal fun DownloadsScreen(
+    state: DownloadsScreenState = DownloadsScreenState.Unavailable(
+        "Downloads repository is not connected yet; no empty-queue claim is being made.",
+    ),
+    controlGateway: AppDownloadControlGateway? = null,
+) {
     var filter by rememberSaveable { mutableStateOf("All") }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
-    val rows = emptyList<DownloadRowModel>()
+    val rows = (state as? DownloadsScreenState.Ready)?.rows.orEmpty()
+    val visibleRows = rows.filter { row ->
+        filter == "All" || row.state.name == filter
+    }
     Column(
         Modifier.fillMaxSize().padding(MidnightTransit.ScreenSpacing),
         verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
@@ -157,32 +212,40 @@ internal fun DownloadsScreen(controlGateway: AppDownloadControlGateway? = null) 
             listOf("All", "Active", "Failed").forEach { value ->
                 OutlinedButton(
                     onClick = { filter = value },
+                    enabled = state is DownloadsScreenState.Ready,
                     modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
                 ) { Text(if (filter == value) "[$value]" else value) }
             }
         }
         message?.let { Text(it) }
-        if (rows.isEmpty()) {
-            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("No downloads yet")
-            }
-        } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-                items(rows, key = { it.id }) { row ->
-                    DownloadRow(
-                        row = row,
-                        onAction = { action ->
-                            val gateway = controlGateway
-                            message = if (gateway == null) {
-                                "Download control gateway is not connected for ${row.title}."
-                            } else if (DownloadRowControlBinding.invoke(action, row.id, gateway)) {
-                                "${action.name} requested for ${row.title}."
-                            } else {
-                                "${action.name} failed for ${row.title}."
-                            }
-                        },
-                        onDetails = { selected -> message = "${selected.title}: ${selected.state.name} · ${selected.percent.coerceIn(0, 100)}% · ${selected.size}" },
-                    )
+        when (state) {
+            DownloadsScreenState.Loading -> RepositoryStatus("Loading download queue state…")
+            is DownloadsScreenState.Unavailable -> RepositoryStatus(state.reason)
+            is DownloadsScreenState.Failed -> RepositoryStatus("Downloads repository failed: ${state.message}")
+            is DownloadsScreenState.Ready -> {
+                if (visibleRows.isEmpty()) {
+                    Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(if (rows.isEmpty()) "No downloads yet" else "No downloads match the $filter filter")
+                    }
+                } else {
+                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+                        items(visibleRows, key = { it.id }) { row ->
+                            DownloadRow(
+                                row = row,
+                                onAction = { action ->
+                                    val gateway = controlGateway
+                                    message = if (gateway == null) {
+                                        "Download control gateway is not connected for ${row.title}."
+                                    } else if (DownloadRowControlBinding.invoke(action, row.id, gateway)) {
+                                        "${action.name} requested for ${row.title}."
+                                    } else {
+                                        "${action.name} failed for ${row.title}."
+                                    }
+                                },
+                                onDetails = { selected -> message = "${selected.title}: ${selected.state.name} · ${selected.percent.coerceIn(0, 100)}% · ${selected.size}" },
+                            )
+                        }
+                    }
                 }
             }
         }
