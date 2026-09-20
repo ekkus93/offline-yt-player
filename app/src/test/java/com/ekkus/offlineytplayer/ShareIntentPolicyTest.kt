@@ -26,9 +26,11 @@ class ShareIntentPolicyTest {
         val activity = File("src/main/java/com/ekkus/offlineytplayer/MainActivity.kt").readText()
         assertTrue(activity.contains("GeneratedUniffiCoreGateway.open(databasePath)"))
         assertTrue(activity.contains("GeneratedUniffiDownloadControlGateway.open(databasePath)"))
+        assertTrue(activity.contains("GeneratedUniffiSourceAnalysisGateway.open()"))
         assertTrue(activity.contains("bootstrapExecutor.execute"))
-        assertTrue(activity.contains("gateway.listLibrary()"))
-        assertTrue(activity.contains("gateway.listDownloadQueue()"))
+        assertTrue(activity.contains("listLibrary().toLibraryScreenState()"))
+        assertTrue(activity.contains("listDownloadQueue().toDownloadsScreenState()"))
         assertTrue(activity.contains("downloadControlGateway = downloadControlGateway"))
+        assertTrue(activity.contains("sourceAnalysisGateway = sourceAnalysisGateway"))
     }
 }
