@@ -11,6 +11,7 @@ val rustAndroidTarget = "aarch64-linux-android"
 val rustNativeLibrary = rootProject.layout.projectDirectory.file("target/$rustAndroidTarget/debug/liboffline_yt_core.so")
 val generatedJniLibsDir = layout.buildDirectory.dir("generated/rustJniLibs").get().asFile
 val generatedUniffiKotlinDir = layout.buildDirectory.dir("generated/uniffiKotlin").get().asFile
+val verificationUniffiKotlinDir = layout.buildDirectory.dir("generated/uniffiKotlinVerification").get().asFile
 
 val prepareRustJniLibs by tasks.registering(Copy::class) {
     from(rustNativeLibrary)
@@ -38,8 +39,20 @@ val generateUniffiKotlinBindings by tasks.registering(Exec::class) {
     )
 }
 
-val verifyUniffiKotlinBindings by tasks.registering {
+val verifyReproducibleUniffiKotlinBindings by tasks.registering(Exec::class) {
     dependsOn(generateUniffiKotlinBindings)
+    workingDir = rootProject.projectDir
+    inputs.dir(generatedUniffiKotlinDir)
+    outputs.dir(verificationUniffiKotlinDir)
+    commandLine(
+        "bash",
+        "-lc",
+        "rm -rf '${verificationUniffiKotlinDir.absolutePath}' && cargo run -p uniffi-bindgen -- generate target/debug/liboffline_yt_core.so --language kotlin --out-dir '${verificationUniffiKotlinDir.absolutePath}' && diff -ru '${generatedUniffiKotlinDir.absolutePath}' '${verificationUniffiKotlinDir.absolutePath}'",
+    )
+}
+
+val verifyUniffiKotlinBindings by tasks.registering {
+    dependsOn(verifyReproducibleUniffiKotlinBindings)
     doLast {
         val generatedFiles = generatedUniffiKotlinDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
