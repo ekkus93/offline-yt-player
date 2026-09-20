@@ -2,9 +2,9 @@ package com.ekkus.offlineytplayer
 
 import java.nio.file.Files
 import java.nio.file.Paths
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class ManifestNetworkPolicyTest {
     private val manifest = Files.readString(Paths.get("src/main/AndroidManifest.xml"))
@@ -24,6 +24,6 @@ class ManifestNetworkPolicyTest {
             "android.permission.ACCESS_FINE_LOCATION",
             "android.permission.ACCESS_COARSE_LOCATION",
         )
-        assertEquals(emptyList(), forbidden.filter(manifest::contains))
+        assertEquals(emptyList<String>(), forbidden.filter(manifest::contains))
     }
 }
