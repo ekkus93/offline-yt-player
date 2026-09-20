@@ -47,7 +47,7 @@ class SupportedUrlPolicyTest {
     }
 
     @Test
-    fun shareInputUsesSupportedUrlPolicy() {
+    fun shareInputRequiresExactlyOneSupportedUrl() {
         assertEquals(
             "https://youtu.be/dQw4w9WgXcQ",
             ShareInput.parse(
@@ -61,6 +61,13 @@ class SupportedUrlPolicyTest {
                 "android.intent.action.SEND",
                 "text/plain",
                 "unsupported https://example.com/video.mp4",
+            ),
+        )
+        assertNull(
+            ShareInput.parse(
+                "android.intent.action.SEND",
+                "text/plain",
+                "choose https://youtu.be/dQw4w9WgXcQ or https://youtu.be/abcdefghijk",
             ),
         )
     }

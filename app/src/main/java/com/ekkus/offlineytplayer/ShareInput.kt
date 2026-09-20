@@ -9,6 +9,6 @@ internal object ShareInput {
         if (action != SendAction || mimeType != PlainText) return null
         val text = sharedText?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         if (text.length > MaxSharedTextLength) return null
-        return SupportedUrlPolicy.firstSupportedUrlFromText(text)
+        return SupportedUrlPolicy.singleSupportedUrlFromText(text)
     }
 }
