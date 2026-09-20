@@ -2,6 +2,7 @@ package com.ekkus.offlineytplayer.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -157,7 +158,7 @@ internal fun LibraryScreen(
 }
 
 @Composable
-private fun RepositoryStatus(text: String) {
+private fun ColumnScope.RepositoryStatus(text: String) {
     Column(
         Modifier.weight(1f).fillMaxWidth(),
         verticalArrangement = Arrangement.Center,
