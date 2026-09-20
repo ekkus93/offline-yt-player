@@ -3,6 +3,7 @@ package com.ekkus.offlineytplayer.downloads
 import android.app.job.JobInfo
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,6 +22,27 @@ class DownloadExecutionSchedulerPolicyTest {
             DownloadSchedulerKind.UserInitiatedDataTransferJob,
             DownloadExecutionSchedulerPolicy.schedulerKindForSdk(36),
         )
+    }
+
+    @Test
+    fun schedulerSdkGatesEstimatedBytesAndUserInitiatedFlags() {
+        assertFalse(DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(27))
+        assertTrue(DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(28))
+        assertTrue(DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(34))
+
+        assertFalse(DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(33))
+        assertTrue(DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(34))
+        assertTrue(DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(36))
+    }
+
+    @Test
+    fun stableJobIdsAreDeterministicAndInsideConfiguredRange() {
+        val first = DownloadExecutionSchedulerPolicy.stableJobId("queue-item-1")
+        val second = DownloadExecutionSchedulerPolicy.stableJobId("queue-item-1")
+
+        assertEquals(first, second)
+        assertTrue(first >= DownloadUserInitiatedJobService.JobIdBase)
+        assertTrue(first < DownloadUserInitiatedJobService.JobIdBase + DownloadUserInitiatedJobService.JobIdRange)
     }
 
     @Test

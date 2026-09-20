@@ -51,6 +51,10 @@ internal object DownloadExecutionSchedulerPolicy {
             DownloadSchedulerKind.ForegroundServiceFallback
         }
 
+    fun supportsEstimatedNetworkBytes(sdkInt: Int): Boolean = sdkInt >= Build.VERSION_CODES.P
+
+    fun supportsUserInitiatedJobFlag(sdkInt: Int): Boolean = sdkInt >= UserInitiatedDataTransferMinSdk
+
     fun requiredNetworkType(preference: DownloadNetworkPreference): Int = when (preference) {
         DownloadNetworkPreference.AnyNetwork -> JobInfo.NETWORK_TYPE_ANY
         DownloadNetworkPreference.WifiOnly -> JobInfo.NETWORK_TYPE_UNMETERED
@@ -84,13 +88,13 @@ internal class AndroidDownloadExecutionScheduler(
             )
             .setRequiredNetworkType(DownloadExecutionSchedulerPolicy.requiredNetworkType(request.networkPreference))
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(sdkInt)) {
             builder.setEstimatedNetworkBytes(
                 request.estimatedDownloadBytes ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
                 JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
             )
         }
-        if (Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk) {
+        if (DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(sdkInt)) {
             builder.setUserInitiated(true)
         }
 
