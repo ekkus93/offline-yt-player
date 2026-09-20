@@ -1,1 +1,1 @@
-{"title":"Malformed","duration_ms":null,"thumbnail_url":null,"streams":[{"id":"22","url":"javascript:alert(1)","container":"mp4","mime_type":"video/mp4","bitrate_bps":null,"content_length":null,"width":1280,"height":720,"fps":30,"video_codec":"h264","audio_codec":"aac","audio_channels":2}],"subtitles":[]}
+{"playabilityStatus":{"status":"OK"},"streamingData":{"formats":[{"itag":22,"mimeType":"video/mp4; codecs=\"avc1.64001F, mp4a.40.2\""}]}}
