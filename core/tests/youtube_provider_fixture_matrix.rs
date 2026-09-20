@@ -17,9 +17,19 @@ fn fixture(name: &str) -> Value {
 #[test]
 fn combined_fixture_contains_metadata_and_direct_play_stream() {
     let v = fixture("combined");
-    assert_eq!(v.pointer("/playabilityStatus/status").and_then(Value::as_str), Some("OK"));
-    assert_eq!(v.pointer("/videoDetails/title").and_then(Value::as_str), Some("Fixture Combined"));
-    let formats = v.pointer("/streamingData/formats").and_then(Value::as_array).unwrap();
+    assert_eq!(
+        v.pointer("/playabilityStatus/status")
+            .and_then(Value::as_str),
+        Some("OK")
+    );
+    assert_eq!(
+        v.pointer("/videoDetails/title").and_then(Value::as_str),
+        Some("Fixture Combined")
+    );
+    let formats = v
+        .pointer("/streamingData/formats")
+        .and_then(Value::as_array)
+        .unwrap();
     assert_eq!(formats.len(), 1);
     let mime = formats[0].get("mimeType").and_then(Value::as_str).unwrap();
     assert!(mime.starts_with("video/mp4"));
@@ -30,16 +40,30 @@ fn combined_fixture_contains_metadata_and_direct_play_stream() {
 #[test]
 fn split_fixture_contains_separate_video_and_audio_streams() {
     let v = fixture("split");
-    let formats = v.pointer("/streamingData/adaptiveFormats").and_then(Value::as_array).unwrap();
+    let formats = v
+        .pointer("/streamingData/adaptiveFormats")
+        .and_then(Value::as_array)
+        .unwrap();
     assert_eq!(formats.len(), 2);
-    assert!(formats.iter().any(|f| f.get("mimeType").and_then(Value::as_str).is_some_and(|m| m.starts_with("video/"))));
-    assert!(formats.iter().any(|f| f.get("mimeType").and_then(Value::as_str).is_some_and(|m| m.starts_with("audio/"))));
+    assert!(formats.iter().any(|f| f
+        .get("mimeType")
+        .and_then(Value::as_str)
+        .is_some_and(|m| m.starts_with("video/"))));
+    assert!(formats.iter().any(|f| f
+        .get("mimeType")
+        .and_then(Value::as_str)
+        .is_some_and(|m| m.starts_with("audio/"))));
 }
 
 #[test]
 fn unavailable_and_malformed_fixtures_are_distinct_failure_shapes() {
     let unavailable = fixture("unavailable");
-    assert_ne!(unavailable.pointer("/playabilityStatus/status").and_then(Value::as_str), Some("OK"));
+    assert_ne!(
+        unavailable
+            .pointer("/playabilityStatus/status")
+            .and_then(Value::as_str),
+        Some("OK")
+    );
     let malformed = fixture("malformed");
     assert!(malformed.get("videoDetails").is_none());
     assert!(malformed.pointer("/streamingData/formats/0/url").is_none());
