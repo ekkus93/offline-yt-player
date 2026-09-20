@@ -6,6 +6,7 @@ plugins {
 val sourceRevision = providers.environmentVariable("GITHUB_SHA").orElse("local").get()
 val releaseVersionName = providers.environmentVariable("OYP_VERSION_NAME").orElse("0.1.0-dev").get()
 val releaseVersionCode = providers.environmentVariable("OYP_VERSION_CODE").orElse("1").get().toInt()
+val supportedAndroidAbis = listOf("arm64-v8a")
 val rustAndroidTarget = "aarch64-linux-android"
 val rustNativeLibrary = rootProject.layout.projectDirectory.file("target/$rustAndroidTarget/debug/liboffline_yt_core.so")
 val generatedJniLibsDir = layout.buildDirectory.dir("generated/rustJniLibs").get().asFile
@@ -13,7 +14,7 @@ val generatedUniffiKotlinDir = layout.buildDirectory.dir("generated/uniffiKotlin
 
 val prepareRustJniLibs by tasks.registering(Copy::class) {
     from(rustNativeLibrary)
-    into(generatedJniLibsDir.resolve("arm64-v8a"))
+    into(generatedJniLibsDir.resolve(supportedAndroidAbis.single()))
     doFirst {
         check(rustNativeLibrary.asFile.isFile) {
             "Missing Rust Android native library ${rustNativeLibrary.asFile}; build offline-yt-core for $rustAndroidTarget first"
@@ -64,7 +65,7 @@ android {
         versionName = releaseVersionName
         buildConfigField("String", "SOURCE_REVISION", "\"$sourceRevision\"")
         ndk {
-            abiFilters += "arm64-v8a"
+            abiFilters += supportedAndroidAbis
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
