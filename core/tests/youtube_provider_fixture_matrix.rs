@@ -8,7 +8,10 @@ fn fixture(name: &str) -> Value {
         "malformed" => include_str!("fixtures/youtube/malformed.json"),
         _ => panic!("unknown fixture"),
     };
-    assert!(raw.len() < 16 * 1024, "sanitized fixture must remain bounded");
+    assert!(
+        raw.len() < 16 * 1024,
+        "sanitized fixture must remain bounded"
+    );
     assert!(!raw.contains("signature="));
     assert!(!raw.contains("token="));
     serde_json::from_str(raw).expect("fixture must be valid JSON")
@@ -45,14 +48,16 @@ fn split_fixture_contains_separate_video_and_audio_streams() {
         .and_then(Value::as_array)
         .unwrap();
     assert_eq!(formats.len(), 2);
-    assert!(formats.iter().any(|f| f
-        .get("mimeType")
-        .and_then(Value::as_str)
-        .is_some_and(|m| m.starts_with("video/"))));
-    assert!(formats.iter().any(|f| f
-        .get("mimeType")
-        .and_then(Value::as_str)
-        .is_some_and(|m| m.starts_with("audio/"))));
+    assert!(formats.iter().any(|f| {
+        f.get("mimeType")
+            .and_then(Value::as_str)
+            .is_some_and(|m| m.starts_with("video/"))
+    }));
+    assert!(formats.iter().any(|f| {
+        f.get("mimeType")
+            .and_then(Value::as_str)
+            .is_some_and(|m| m.starts_with("audio/"))
+    }));
 }
 
 #[test]
