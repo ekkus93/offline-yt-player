@@ -11,6 +11,7 @@ data class CoreSourceAnalysis(
     val thumbnailUrl: String?,
     val qualityLabel: String,
     val estimatedBytes: Long?,
+    val qualityOptions: List<String> = emptyList(),
 )
 
 interface AppSourceAnalysisGateway : Closeable {
@@ -37,6 +38,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         readSourceError(choicesResult)?.let { return CoreGatewayResult(null, it) }
         val choices = readSourceList(choicesResult, "choices")
         val preferred = choices.firstOrNull()
+        val qualityOptions = choices.map { readSourceString(it, "label") }.distinct()
         return CoreGatewayResult(
             CoreSourceAnalysis(
                 sourceUrl = normalized,
@@ -45,6 +47,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
                 thumbnailUrl = readSourceNullable(media, "thumbnailUrl", "thumbnail_url") as String?,
                 qualityLabel = preferred?.let { readSourceString(it, "label") } ?: "No compatible format",
                 estimatedBytes = preferred?.let { (readSourceNullable(it, "estimatedBytes", "estimated_bytes") as Number?)?.toLong() },
+                qualityOptions = qualityOptions,
             ),
             null,
         )
