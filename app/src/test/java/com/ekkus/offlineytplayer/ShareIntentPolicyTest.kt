@@ -19,6 +19,6 @@ class ShareIntentPolicyTest {
         assertTrue(activity.contains("ShareInput.parse("))
         assertTrue(activity.contains("intent?.getStringExtra(Intent.EXTRA_TEXT)"))
         assertTrue(activity.contains("initialSharedUrl = sharedUrl"))
-        assertTrue(activity.indexOf("ShareInput.parse(") < activity.indexOf("setContent"))
+        assertTrue(activity.indexOf("ShareInput.parse(") < activity.indexOf("setContent {"))
     }
 }
