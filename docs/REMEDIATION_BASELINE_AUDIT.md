@@ -8,6 +8,8 @@
 
 This document freezes the post-closeout code-review findings and maps each finding to one or more remediation task IDs. It is evidence for RMD-001; it is not a replacement for the detailed remediation checklist.
 
+Supersession and reconciliation notes are maintained in `docs/REMEDIATION_RECONCILIATION.md`. Historical audit and closeout claims remain available for traceability, but the detailed remediation TODO is the current authority when a historical claim conflicts with current implementation evidence.
+
 The historical detailed v1 checklist remains available at commit `4c977462a1f0ff885484aa88f6936b8dcc2cbf2f`:
 
 - `docs/OFFLINE_YT_PLAYER_TODO.md` at `4c977462a1f0ff885484aa88f6936b8dcc2cbf2f`
