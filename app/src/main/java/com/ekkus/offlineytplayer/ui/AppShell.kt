@@ -111,7 +111,13 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceG
         analyzing = false
     }
     DisposableEffect(Unit) { onDispose { analysisJob?.cancel() } }
-    if (advanced) { AdvancedDownloadOptions(padding) { advanced = false }; return }
+    if (advanced) {
+        val activeSetup = setup
+        if (activeSetup != null) {
+            AdvancedDownloadOptions(padding, activeSetup) { advanced = false }
+            return
+        }
+    }
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Download a supported video for offline playback.")
         OutlinedTextField(value = url, onValueChange = { url = it; cancelSupersededAnalysis(); setup = null; status = null }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
@@ -131,7 +137,20 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceG
                     analysisJob = null
                     result.error?.let { status = it.message; return@launch }
                     val analysis = result.value ?: run { status = "Source resolver returned no media."; return@launch }
-                    setup = DownloadSetupState(analysis.sourceUrl, analysis.title, analysis.durationMs?.let(::formatSetupDuration) ?: "Unknown duration", analysis.qualityLabel, analysis.estimatedBytes?.let(::formatSetupBytes) ?: "Size unavailable", true)
+                    val qualityLabels = analysis.qualityOptions.map { it.label }.ifEmpty { listOf(analysis.qualityLabel) }
+                    setup = DownloadSetupState(
+                        sourceUrl = analysis.sourceUrl,
+                        title = analysis.title,
+                        durationLabel = analysis.durationMs?.let(::formatSetupDuration) ?: "Unknown duration",
+                        qualityLabel = analysis.qualityLabel,
+                        estimatedSizeLabel = analysis.estimatedBytes?.let(::formatSetupBytes) ?: "Size unavailable",
+                        readyForDownload = true,
+                        thumbnailUrl = analysis.thumbnailUrl,
+                        qualityOptions = qualityLabels,
+                        subtitleOptions = emptyList(),
+                        audioOptions = listOf("Default track"),
+                        containerOptions = listOf("Best compatible"),
+                    )
                     status = null
                 }
             }, enabled = url.isNotBlank() && !analyzing && !scheduling, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(if (analyzing) "Analyzing…" else "Analyze") }
@@ -162,6 +181,7 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceG
 
 private fun formatSetupDuration(durationMs: Long): String { val seconds = durationMs / 1000; return "%d:%02d".format(seconds / 60, seconds % 60) }
 private fun formatSetupBytes(bytes: Long): String = if (bytes >= 1024L * 1024L) "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0)) else "$bytes bytes"
+private fun optionSummary(options: List<String>, fallback: String): String = options.filter { it.isNotBlank() }.distinct().takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: fallback
 
-@Composable private fun DownloadSetupPreview(setup: DownloadSetupState, onOptions: () -> Unit, onDownload: () -> Unit) { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Text("Download setup"); Text(setup.title); Text("Source: ${setup.sourceUrl}"); Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}"); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { OutlinedButton(onClick = onOptions, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }; Button(onClick = onDownload, enabled = setup.readyForDownload, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") } } } }
-@Composable private fun AdvancedDownloadOptions(padding: PaddingValues, onBack: () -> Unit) { var subtitles by rememberSaveable { mutableStateOf(true) }; Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Download options"); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; SettingValue("Audio track", "Default"); Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Download subtitles"); Switch(checked = subtitles, onCheckedChange = { subtitles = it }) }; SettingValue("Subtitle language", "Preferred"); SettingValue("Container strategy", "Best compatible"); Box(Modifier.weight(1f)); Button(onClick = onBack, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Apply options") } } }
+@Composable private fun DownloadSetupPreview(setup: DownloadSetupState, onOptions: () -> Unit, onDownload: () -> Unit) { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Text("Download setup"); Text(setup.title); Text("Source: ${setup.sourceUrl}"); setup.thumbnailUrl?.takeIf { it.isNotBlank() }?.let { Text("Thumbnail: $it") }; Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}"); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { OutlinedButton(onClick = onOptions, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }; Button(onClick = onDownload, enabled = setup.readyForDownload, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") } } } }
+@Composable private fun AdvancedDownloadOptions(padding: PaddingValues, setup: DownloadSetupState, onBack: () -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Download options"); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; SettingValue("Quality choices", optionSummary(setup.qualityOptions, setup.qualityLabel)); SettingValue("Audio choices", optionSummary(setup.audioOptions, "Default track only")); SettingValue("Subtitle tracks", optionSummary(setup.subtitleOptions, "None reported by source")); SettingValue("Container choices", optionSummary(setup.containerOptions, "Best compatible")); Box(Modifier.weight(1f)); Button(onClick = onBack, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Apply options") } } }
