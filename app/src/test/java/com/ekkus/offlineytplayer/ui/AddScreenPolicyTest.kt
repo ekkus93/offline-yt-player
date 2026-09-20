@@ -16,4 +16,11 @@ class AddScreenPolicyTest {
         assertFalse(source.contains("DownloadSetupRoute.previewFor(url)"))
         assertTrue(source.contains("withContext(Dispatchers.IO)"))
     }
+
+    @Test fun sourceAnalysisCancelsSupersededRequests() {
+        val source = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt"))
+        assertTrue(source.contains("analysisJob?.cancel()"))
+        assertTrue(source.contains("activeAnalysisUrl"))
+        assertTrue(source.contains("DisposableEffect(Unit)"))
+    }
 }

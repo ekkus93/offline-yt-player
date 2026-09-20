@@ -22,6 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,7 @@ import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -99,19 +101,33 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceG
     var advanced by rememberSaveable { mutableStateOf(false) }
     var analyzing by remember { mutableStateOf(false) }
     var status by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeAnalysisUrl by remember { mutableStateOf<String?>(null) }
+    var analysisJob by remember { mutableStateOf<Job?>(null) }
+    fun cancelSupersededAnalysis() {
+        analysisJob?.cancel()
+        analysisJob = null
+        activeAnalysisUrl = null
+        analyzing = false
+    }
+    DisposableEffect(Unit) { onDispose { analysisJob?.cancel() } }
     if (advanced) { AdvancedDownloadOptions(padding) { advanced = false }; return }
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Download a supported video for offline playback.")
-        OutlinedTextField(value = url, onValueChange = { url = it; setup = null; status = null }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
+        OutlinedTextField(value = url, onValueChange = { url = it; cancelSupersededAnalysis(); setup = null; status = null }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-            OutlinedButton(onClick = { val pasted = clipboard.getText()?.text?.takeIf { it.isNotBlank() }; if (pasted == null) status = "Clipboard does not contain a video URL." else { url = pasted.take(4096); setup = null; status = "Pasted clipboard text. Choose Analyze to validate it." } }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Paste") }
+            OutlinedButton(onClick = { val pasted = clipboard.getText()?.text?.takeIf { it.isNotBlank() }; if (pasted == null) status = "Clipboard does not contain a video URL." else { cancelSupersededAnalysis(); url = pasted.take(4096); setup = null; status = "Pasted clipboard text. Choose Analyze to validate it." } }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Paste") }
             Button(onClick = {
                 val gateway = sourceGateway
                 if (gateway == null) { status = "Source resolver is unavailable."; return@Button }
+                val requestUrl = url
+                analysisJob?.cancel()
+                activeAnalysisUrl = requestUrl
                 analyzing = true; setup = null; status = "Resolving source…"
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) { gateway.analyze(url) }
+                analysisJob = scope.launch {
+                    val result = withContext(Dispatchers.IO) { gateway.analyze(requestUrl) }
+                    if (activeAnalysisUrl != requestUrl) return@launch
                     analyzing = false
+                    analysisJob = null
                     result.error?.let { status = it.message; return@launch }
                     val analysis = result.value ?: run { status = "Source resolver returned no media."; return@launch }
                     setup = DownloadSetupState(analysis.sourceUrl, analysis.title, analysis.durationMs?.let(::formatSetupDuration) ?: "Unknown duration", analysis.qualityLabel, analysis.estimatedBytes?.let(::formatSetupBytes) ?: "Size unavailable", true)
