@@ -23,4 +23,12 @@ class AddScreenPolicyTest {
         assertTrue(source.contains("activeAnalysisUrl"))
         assertTrue(source.contains("DisposableEffect(Unit)"))
     }
+
+    @Test fun downloadSetupSchedulesThroughControlGateway() {
+        val source = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt"))
+        assertTrue(source.contains("downloadControlGateway"))
+        assertTrue(source.contains("gateway.enqueue(jobId)"))
+        assertTrue(source.contains("Download scheduled."))
+        assertFalse(source.contains("Download scheduling requires the durable production worker wiring"))
+    }
 }
