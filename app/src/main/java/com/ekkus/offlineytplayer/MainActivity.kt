@@ -8,6 +8,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadSnapshot
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
@@ -34,6 +37,10 @@ class MainActivity : ComponentActivity() {
     private var coreGateway: GeneratedUniffiCoreGateway? = null
     private var downloadControlGateway: GeneratedUniffiDownloadControlGateway? = null
     private var sourceAnalysisGateway: GeneratedUniffiSourceAnalysisGateway? = null
+    private var stateRefresher: AppStateRefresher? = null
+    private var activityStarted = false
+    private var libraryState by mutableStateOf<LibraryScreenState>(LibraryScreenState.Loading)
+    private var downloadsState by mutableStateOf<DownloadsScreenState>(DownloadsScreenState.Loading)
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -46,14 +53,29 @@ class MainActivity : ComponentActivity() {
         setContent {
             OfflineYTPlayerApp(
                 initialSharedUrl = sharedUrl,
-                libraryState = LibraryScreenState.Loading,
-                downloadsState = DownloadsScreenState.Loading,
+                libraryState = libraryState,
+                downloadsState = downloadsState,
+                downloadControlGateway = downloadControlGateway,
+                sourceAnalysisGateway = sourceAnalysisGateway,
             )
         }
-        bootstrapProductionUi(sharedUrl)
+        bootstrapProductionUi()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        activityStarted = true
+        stateRefresher?.start()
+    }
+
+    override fun onStop() {
+        activityStarted = false
+        stateRefresher?.stop()
+        super.onStop()
     }
 
     override fun onDestroy() {
+        stateRefresher?.close()
         coreGateway?.close()
         downloadControlGateway?.close()
         sourceAnalysisGateway?.close()
@@ -61,44 +83,40 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private fun bootstrapProductionUi(sharedUrl: String?) {
+    private fun bootstrapProductionUi() {
         val databasePath = File(filesDir, "offline-yt-player.sqlite3").absolutePath
         bootstrapExecutor.execute {
             val core = runCatching { GeneratedUniffiCoreGateway.open(databasePath) }
             val controls = runCatching { GeneratedUniffiDownloadControlGateway.open(databasePath) }
             val sources = runCatching { GeneratedUniffiSourceAnalysisGateway.open() }
-            val libraryState = core.fold(
+            val initialLibrary = core.fold(
                 onSuccess = { it.listLibrary().toLibraryScreenState() },
                 onFailure = { LibraryScreenState.Failed(it.safeUiMessage()) },
             )
-            val downloadsState = core.fold(
+            val initialDownloads = core.fold(
                 onSuccess = { it.listDownloadQueue().toDownloadsScreenState() },
                 onFailure = { DownloadsScreenState.Failed(it.safeUiMessage()) },
             )
             if (isFinishing || isDestroyed) {
-                core.getOrNull()?.close()
-                controls.getOrNull()?.close()
-                sources.getOrNull()?.close()
+                core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
                 return@execute
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) {
-                    core.getOrNull()?.close()
-                    controls.getOrNull()?.close()
-                    sources.getOrNull()?.close()
+                    core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
                     return@runOnUiThread
                 }
+                libraryState = initialLibrary
+                downloadsState = initialDownloads
                 coreGateway = core.getOrNull()
                 downloadControlGateway = controls.getOrNull()
                 sourceAnalysisGateway = sources.getOrNull()
-                setContent {
-                    OfflineYTPlayerApp(
-                        initialSharedUrl = sharedUrl,
-                        libraryState = libraryState,
-                        downloadsState = downloadsState,
-                        downloadControlGateway = downloadControlGateway,
-                        sourceAnalysisGateway = sourceAnalysisGateway,
-                    )
+                coreGateway?.let { gateway ->
+                    stateRefresher = AppStateRefresher(
+                        gateway = gateway,
+                        onLibrary = { result -> runOnUiThread { if (!isDestroyed) libraryState = result.toLibraryScreenState() } },
+                        onDownloads = { result -> runOnUiThread { if (!isDestroyed) downloadsState = result.toDownloadsScreenState() } },
+                    ).also { if (activityStarted) it.start() }
                 }
             }
         }
