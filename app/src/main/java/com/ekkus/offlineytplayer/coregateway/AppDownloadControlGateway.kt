@@ -17,6 +17,12 @@ class GeneratedUniffiDownloadControlGateway private constructor(
 ) : AppDownloadControlGateway {
     fun pauseAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { pause(jobId) }
 
+    fun resumeAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { resume(jobId) }
+
+    fun cancelAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { cancel(jobId) }
+
+    fun retryAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { retry(jobId) }
+
     override fun pause(jobId: String): CoreGatewayResult<Boolean> = control("pause", jobId)
 
     override fun resume(jobId: String): CoreGatewayResult<Boolean> = control("resume", jobId)
@@ -30,6 +36,7 @@ class GeneratedUniffiDownloadControlGateway private constructor(
     }
 
     private fun control(methodName: String, jobId: String): CoreGatewayResult<Boolean> {
+        checkNotMainThread()
         val result = callFfi(methodName, jobId)
         return CoreGatewayResult(
             value = readBoolean(result, "updated"),

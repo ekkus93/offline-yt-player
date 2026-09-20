@@ -24,6 +24,10 @@ class GeneratedUniffiCoreGatewaySmokeTest {
                 assertEquals(emptyList<CoreLibraryItem>(), listed.value)
                 assertNull(listed.error)
 
+                val queue = gateway.listDownloadQueueAsync().get(10, TimeUnit.SECONDS)
+                assertEquals(emptyList<CoreDownloadSnapshot>(), queue.value)
+                assertNull(queue.error)
+
                 val missing = gateway.getLibraryItemAsync("missing-item").get(10, TimeUnit.SECONDS)
                 assertNull(missing.value)
                 assertNull(missing.error)
