@@ -18,6 +18,7 @@ class ShareIntentPolicyTest {
         val activity = File("src/main/java/com/ekkus/offlineytplayer/MainActivity.kt").readText()
         assertTrue(activity.contains("ShareInput.parse("))
         assertTrue(activity.contains("intent?.getStringExtra(Intent.EXTRA_TEXT)"))
-        assertTrue(activity.contains("OfflineYTPlayerApp(initialSharedUrl = sharedUrl)"))
+        assertTrue(activity.contains("initialSharedUrl = sharedUrl"))
+        assertTrue(activity.indexOf("ShareInput.parse(") < activity.indexOf("setContent"))
     }
 }
