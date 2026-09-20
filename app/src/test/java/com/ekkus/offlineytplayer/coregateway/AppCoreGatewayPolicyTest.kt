@@ -55,6 +55,7 @@ class AppCoreGatewayPolicyTest {
         assertTrue(source.contains("CoreGatewayError"))
         assertTrue(source.contains("CoreDownloadSnapshot"))
         assertTrue(source.contains("listDownloadQueueAsync"))
+        assertTrue(controls.contains("enqueueAsync"))
         assertTrue(controls.contains("resumeAsync"))
         assertTrue(controls.contains("cancelAsync"))
         assertTrue(controls.contains("retryAsync"))

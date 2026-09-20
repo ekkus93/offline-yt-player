@@ -20,21 +20,40 @@ class GeneratedUniffiCoreGatewaySmokeTest {
         try {
             System.loadLibrary("offline_yt_core")
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { gateway ->
-                val listed = gateway.listLibraryAsync().get(10, TimeUnit.SECONDS)
-                assertEquals(emptyList<CoreLibraryItem>(), listed.value)
-                assertNull(listed.error)
+                GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { controls ->
+                    val listed = gateway.listLibraryAsync().get(10, TimeUnit.SECONDS)
+                    assertEquals(emptyList<CoreLibraryItem>(), listed.value)
+                    assertNull(listed.error)
 
-                val queue = gateway.listDownloadQueueAsync().get(10, TimeUnit.SECONDS)
-                assertEquals(emptyList<CoreDownloadSnapshot>(), queue.value)
-                assertNull(queue.error)
+                    val emptyQueue = gateway.listDownloadQueueAsync().get(10, TimeUnit.SECONDS)
+                    assertEquals(emptyList<CoreDownloadSnapshot>(), emptyQueue.value)
+                    assertNull(emptyQueue.error)
 
-                val missing = gateway.getLibraryItemAsync("missing-item").get(10, TimeUnit.SECONDS)
-                assertNull(missing.value)
-                assertNull(missing.error)
+                    val enqueued = controls.enqueueAsync("job-smoke").get(10, TimeUnit.SECONDS)
+                    assertEquals(true, enqueued.value)
+                    assertNull(enqueued.error)
 
-                val deleted = gateway.deleteLibraryItemAsync("missing-item").get(10, TimeUnit.SECONDS)
-                assertFalse(deleted.value ?: true)
-                assertNull(deleted.error)
+                    val queued = gateway.listDownloadQueueAsync().get(10, TimeUnit.SECONDS)
+                    assertEquals(1, queued.value?.size)
+                    assertEquals(CoreDownloadState.QUEUED, queued.value?.single()?.state)
+                    assertNull(queued.error)
+
+                    val paused = controls.pauseAsync("job-smoke").get(10, TimeUnit.SECONDS)
+                    assertEquals(true, paused.value)
+                    assertNull(paused.error)
+
+                    val pausedQueue = gateway.listDownloadQueueAsync().get(10, TimeUnit.SECONDS)
+                    assertEquals(CoreDownloadState.PAUSED, pausedQueue.value?.single()?.state)
+                    assertNull(pausedQueue.error)
+
+                    val missing = gateway.getLibraryItemAsync("missing-item").get(10, TimeUnit.SECONDS)
+                    assertNull(missing.value)
+                    assertNull(missing.error)
+
+                    val deleted = gateway.deleteLibraryItemAsync("missing-item").get(10, TimeUnit.SECONDS)
+                    assertFalse(deleted.value ?: true)
+                    assertNull(deleted.error)
+                }
             }
         } finally {
             root.deleteRecursively()
