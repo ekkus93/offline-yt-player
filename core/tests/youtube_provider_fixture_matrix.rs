@@ -4,8 +4,8 @@ fn fixture(name: &str) -> Value {
     let raw = match name {
         "combined" => include_str!("fixtures/youtube/combined_av.json"),
         "split" => include_str!("fixtures/youtube/split_av.json"),
-        "unavailable" => include_str!("fixtures/youtube/unavailable.json"),
-        "malformed" => include_str!("fixtures/youtube/malformed.json"),
+        "unavailable" => include_str!("fixtures/youtube/provider_unavailable.json"),
+        "malformed" => include_str!("fixtures/youtube/provider_malformed.json"),
         _ => panic!("unknown fixture"),
     };
     assert!(
