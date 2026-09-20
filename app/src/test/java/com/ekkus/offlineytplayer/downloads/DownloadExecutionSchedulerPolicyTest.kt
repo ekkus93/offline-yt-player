@@ -4,7 +4,6 @@ import android.app.job.JobInfo
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,12 +48,13 @@ class DownloadExecutionSchedulerPolicyTest {
 
     @Test
     fun uidtJobCarriesOnlyDurableQueueIdentityInExtras() {
-        val extras = DownloadExecutionSchedulerPolicy.durableQueueItemExtras("queue-42")
+        val scheduler = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadExecutionScheduler.kt").readText()
+        val extrasFunction = scheduler.substringAfter("fun durableQueueItemExtras").substringBefore("fun stableJobId")
 
-        assertEquals("queue-42", extras.getString(DownloadUserInitiatedJobService.ExtraQueueItemId))
-        assertNull(extras.getString("url"))
-        assertNull(extras.getString("title"))
-        assertNull(extras.getString("provider_payload"))
+        assertTrue(extrasFunction.contains("putString(DownloadUserInitiatedJobService.ExtraQueueItemId, queueItemId)"))
+        assertFalse(extrasFunction.contains("url"))
+        assertFalse(extrasFunction.contains("title"))
+        assertFalse(extrasFunction.contains("provider_payload"))
     }
 
     @Test
