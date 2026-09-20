@@ -39,8 +39,9 @@ class NetworkCapabilityInstrumentedTest {
         val serverThread = thread(name = "network-fixture", isDaemon = true) {
             server.use { socket ->
                 socket.accept().use { client ->
-                    client.getInputStream().bufferedReader().readLine()
-                    while (!client.getInputStream().bufferedReader().readLine().isNullOrEmpty()) {
+                    val reader = client.getInputStream().bufferedReader()
+                    reader.readLine()
+                    while (!reader.readLine().isNullOrEmpty()) {
                         // Consume the bounded HTTP request headers before responding.
                     }
                     val bodyBytes = fixtureBody.toByteArray(Charsets.UTF_8)
