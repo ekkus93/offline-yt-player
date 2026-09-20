@@ -37,12 +37,15 @@ internal object SupportedUrlPolicy {
         return if (isValidVideoId(videoId)) uri.toASCIIString() else null
     }
 
-    fun firstSupportedUrlFromText(text: String): String? =
+    fun supportedUrlsFromText(text: String): List<String> =
         text.trim()
             .split(Regex("\\s+"))
-            .firstNotNullOfOrNull { token ->
-                normalizeSupportedUrl(token.trimSharePunctuation())
-            }
+            .mapNotNull { token -> normalizeSupportedUrl(token.trimSharePunctuation()) }
+            .distinct()
+
+    fun firstSupportedUrlFromText(text: String): String? = supportedUrlsFromText(text).firstOrNull()
+
+    fun singleSupportedUrlFromText(text: String): String? = supportedUrlsFromText(text).singleOrNull()
 
     private fun shortVideoId(uri: URI): String? {
         val segments = uri.path

@@ -1,5 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
+import com.ekkus.offlineytplayer.SupportedUrlPolicy
+
 internal data class AddScreenPolicy(
     val urlFieldVisible: Boolean = true,
     val pasteActionVisible: Boolean = true,
@@ -11,8 +13,7 @@ internal data class AddScreenPolicy(
         urlFieldVisible && pasteActionVisible && analyzeActionVisible &&
             supportedSourceHintVisible && !primaryScreenScrollable
 
-    fun canAnalyze(url: String): Boolean {
-        val value = url.trim()
-        return value.startsWith("https://") || value.startsWith("http://")
-    }
+    fun normalizedAnalyzeUrl(url: String): String? = SupportedUrlPolicy.normalizeSupportedUrl(url)
+
+    fun canAnalyze(url: String): Boolean = normalizedAnalyzeUrl(url) != null
 }
