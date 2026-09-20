@@ -44,7 +44,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         val choices = readSourceList(choicesResult, "choices")
         val qualityOptions = choices.map { choice ->
             CoreSourceQualityChoice(
-                label = readSourceString(choice, "label"),
+                label = SourceMetadataPolicy.qualityLabel(readSourceString(choice, "label")),
                 estimatedBytes = (readSourceNullable(choice, "estimatedBytes", "estimated_bytes") as Number?)?.toLong(),
             )
         }.distinctBy { it.label }
@@ -52,7 +52,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         return CoreGatewayResult(
             CoreSourceAnalysis(
                 sourceUrl = normalized,
-                title = readSourceString(media, "title"),
+                title = SourceMetadataPolicy.title(readSourceString(media, "title")),
                 durationMs = (readSourceNullable(media, "durationMs", "duration_ms") as Number?)?.toLong(),
                 thumbnailUrl = readSourceNullable(media, "thumbnailUrl", "thumbnail_url") as String?,
                 qualityLabel = preferred?.label ?: "No compatible format",
