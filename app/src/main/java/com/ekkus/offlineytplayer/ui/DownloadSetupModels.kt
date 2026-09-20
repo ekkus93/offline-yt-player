@@ -9,6 +9,11 @@ internal data class DownloadSetupState(
     val qualityLabel: String,
     val estimatedSizeLabel: String,
     val readyForDownload: Boolean,
+    val thumbnailUrl: String? = null,
+    val qualityOptions: List<String> = emptyList(),
+    val subtitleOptions: List<String> = emptyList(),
+    val audioOptions: List<String> = emptyList(),
+    val containerOptions: List<String> = emptyList(),
 )
 
 internal object DownloadSetupRoute {

@@ -31,4 +31,17 @@ class AddScreenPolicyTest {
         assertTrue(source.contains("Download scheduled."))
         assertFalse(source.contains("Download scheduling requires the durable production worker wiring"))
     }
+
+    @Test fun advancedOptionsReflectSourceDerivedSetupState() {
+        val source = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt"))
+        val model = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/DownloadSetupModels.kt"))
+        assertTrue(model.contains("qualityOptions"))
+        assertTrue(model.contains("subtitleOptions"))
+        assertTrue(model.contains("audioOptions"))
+        assertTrue(model.contains("containerOptions"))
+        assertTrue(source.contains("analysis.qualityOptions"))
+        assertTrue(source.contains("AdvancedDownloadOptions(padding, activeSetup)"))
+        assertTrue(source.contains("None reported by source"))
+        assertFalse(source.contains("SettingValue(\"Subtitle language\", \"Preferred\")"))
+    }
 }

@@ -4,6 +4,11 @@ import android.os.Looper
 import java.io.Closeable
 import java.lang.reflect.Method
 
+data class CoreSourceQualityChoice(
+    val label: String,
+    val estimatedBytes: Long?,
+)
+
 data class CoreSourceAnalysis(
     val sourceUrl: String,
     val title: String,
@@ -11,6 +16,7 @@ data class CoreSourceAnalysis(
     val thumbnailUrl: String?,
     val qualityLabel: String,
     val estimatedBytes: Long?,
+    val qualityOptions: List<CoreSourceQualityChoice> = emptyList(),
 )
 
 interface AppSourceAnalysisGateway : Closeable {
@@ -36,15 +42,22 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         val choicesResult = callTwoArg(sourceService, "listChoices", normalized, token)
         readSourceError(choicesResult)?.let { return CoreGatewayResult(null, it) }
         val choices = readSourceList(choicesResult, "choices")
-        val preferred = choices.firstOrNull()
+        val qualityOptions = choices.map { choice ->
+            CoreSourceQualityChoice(
+                label = readSourceString(choice, "label"),
+                estimatedBytes = (readSourceNullable(choice, "estimatedBytes", "estimated_bytes") as Number?)?.toLong(),
+            )
+        }.distinctBy { it.label }
+        val preferred = qualityOptions.firstOrNull()
         return CoreGatewayResult(
             CoreSourceAnalysis(
                 sourceUrl = normalized,
                 title = readSourceString(media, "title"),
                 durationMs = (readSourceNullable(media, "durationMs", "duration_ms") as Number?)?.toLong(),
                 thumbnailUrl = readSourceNullable(media, "thumbnailUrl", "thumbnail_url") as String?,
-                qualityLabel = preferred?.let { readSourceString(it, "label") } ?: "No compatible format",
-                estimatedBytes = preferred?.let { (readSourceNullable(it, "estimatedBytes", "estimated_bytes") as Number?)?.toLong() },
+                qualityLabel = preferred?.label ?: "No compatible format",
+                estimatedBytes = preferred?.estimatedBytes,
+                qualityOptions = qualityOptions,
             ),
             null,
         )
