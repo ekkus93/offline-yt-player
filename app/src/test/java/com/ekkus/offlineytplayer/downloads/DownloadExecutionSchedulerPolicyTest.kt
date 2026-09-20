@@ -36,6 +36,28 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
+    fun api26Through33UseForegroundFallbackInsteadOfDuplicatedSchedulerState() {
+        assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(26))
+        assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(33))
+        assertFalse(DownloadExecutionSchedulerPolicy.usesForegroundFallback(34))
+        assertTrue(DownloadServicePolicy.ReconcilesDurableQueueOnStart)
+        assertTrue(DownloadExecutionSchedulerPolicy.UsesSharedDurableQueue)
+        assertEquals(DownloadForegroundService.ACTION_SCHEDULE_WORK, "com.ekkus.offlineytplayer.download.SCHEDULE_WORK")
+        assertEquals(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, DownloadUserInitiatedJobService.ExtraQueueItemId)
+    }
+
+    @Test
+    fun uidtJobCarriesOnlyDurableQueueIdentityInExtras() {
+        val scheduler = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadExecutionScheduler.kt").readText()
+        val extrasFunction = scheduler.substringAfter("fun durableQueueItemExtras").substringBefore("fun stableJobId")
+
+        assertTrue(extrasFunction.contains("putString(DownloadUserInitiatedJobService.ExtraQueueItemId, queueItemId)"))
+        assertFalse(extrasFunction.contains("url"))
+        assertFalse(extrasFunction.contains("title"))
+        assertFalse(extrasFunction.contains("provider_payload"))
+    }
+
+    @Test
     fun stableJobIdsAreDeterministicAndInsideConfiguredRange() {
         val first = DownloadExecutionSchedulerPolicy.stableJobId("queue-item-1")
         val second = DownloadExecutionSchedulerPolicy.stableJobId("queue-item-1")
