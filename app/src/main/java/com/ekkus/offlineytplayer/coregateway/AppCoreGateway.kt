@@ -50,6 +50,51 @@ data class CoreLibraryItem(
     val completed: Boolean,
 )
 
+enum class CoreDownloadState {
+    QUEUED,
+    RESOLVING,
+    DOWNLOADING,
+    PAUSED,
+    RETRY_WAIT,
+    FAILED,
+    VERIFYING,
+    COMPLETED,
+    CANCELED,
+    ;
+
+    companion object {
+        fun fromGeneratedName(name: String): CoreDownloadState {
+            val normalized = name
+                .substringAfterLast('.')
+                .replace("_", "")
+                .replace("-", "")
+                .lowercase()
+            return when (normalized) {
+                "queued" -> QUEUED
+                "resolving" -> RESOLVING
+                "downloading" -> DOWNLOADING
+                "paused" -> PAUSED
+                "retrywait" -> RETRY_WAIT
+                "failed" -> FAILED
+                "verifying" -> VERIFYING
+                "completed" -> COMPLETED
+                "canceled", "cancelled" -> CANCELED
+                else -> error("Unknown generated download state $name")
+            }
+        }
+    }
+}
+
+data class CoreDownloadSnapshot(
+    val jobId: String,
+    val state: CoreDownloadState,
+    val bytesDownloaded: Long,
+    val totalBytes: Long?,
+    val attempt: Int,
+    val retryAtEpochMs: Long?,
+    val lastError: CoreGatewayError?,
+)
+
 data class CoreGatewayError(
     val kind: String,
     val message: String,
@@ -67,6 +112,7 @@ interface AppCoreGateway : Closeable {
     fun listLibrary(query: String? = null): CoreGatewayResult<List<CoreLibraryItem>>
     fun getLibraryItem(itemId: String): CoreGatewayResult<CoreLibraryItem?>
     fun deleteLibraryItem(itemId: String): CoreGatewayResult<Boolean>
+    fun listDownloadQueue(): CoreGatewayResult<List<CoreDownloadSnapshot>>
 }
 
 /**
@@ -88,6 +134,9 @@ class GeneratedUniffiCoreGateway private constructor(
 
     fun deleteLibraryItemAsync(itemId: String): Future<CoreGatewayResult<Boolean>> =
         dispatcher.submit { deleteLibraryItem(itemId) }
+
+    fun listDownloadQueueAsync(): Future<CoreGatewayResult<List<CoreDownloadSnapshot>>> =
+        dispatcher.submit { listDownloadQueue() }
 
     override fun listLibrary(query: String?): CoreGatewayResult<List<CoreLibraryItem>> {
         checkNotMainThread()
@@ -116,15 +165,24 @@ class GeneratedUniffiCoreGateway private constructor(
         )
     }
 
+    override fun listDownloadQueue(): CoreGatewayResult<List<CoreDownloadSnapshot>> {
+        checkNotMainThread()
+        val result = callFfi("downloadQueue")
+        return CoreGatewayResult(
+            value = readList(result, "jobs").map(::mapDownloadSnapshot),
+            error = readError(result),
+        )
+    }
+
     override fun close() {
         dispatcher.close()
     }
 
-    private fun callFfi(methodName: String, argument: Any?): Any {
+    private fun callFfi(methodName: String, vararg arguments: Any?): Any {
         val method = ffiService.javaClass.methods.firstOrNull { method ->
-            method.name == methodName && method.parameterTypes.size == 1
-        } ?: error("Generated FFI service does not expose $methodName")
-        return method.invoke(ffiService, argument) ?: error("Generated FFI service returned null for $methodName")
+            method.name == methodName && method.parameterTypes.size == arguments.size
+        } ?: error("Generated FFI service does not expose $methodName/${arguments.size}")
+        return method.invoke(ffiService, *arguments) ?: error("Generated FFI service returned null for $methodName")
     }
 
     companion object {
@@ -156,8 +214,10 @@ class GeneratedUniffiCoreGateway private constructor(
 
 class FakeCoreGateway(
     initialItems: List<CoreLibraryItem> = emptyList(),
+    initialDownloads: List<CoreDownloadSnapshot> = emptyList(),
 ) : AppCoreGateway {
     private val items = initialItems.associateBy { it.itemId }.toMutableMap()
+    private val downloads = initialDownloads.associateBy { it.jobId }.toMutableMap()
 
     override fun listLibrary(query: String?): CoreGatewayResult<List<CoreLibraryItem>> {
         val normalized = query?.trim()?.lowercase().orEmpty()
@@ -173,10 +233,13 @@ class FakeCoreGateway(
     override fun deleteLibraryItem(itemId: String): CoreGatewayResult<Boolean> =
         CoreGatewayResult(value = items.remove(itemId) != null, error = null)
 
+    override fun listDownloadQueue(): CoreGatewayResult<List<CoreDownloadSnapshot>> =
+        CoreGatewayResult(value = downloads.values.sortedBy { it.jobId }, error = null)
+
     override fun close() = Unit
 }
 
-private fun checkNotMainThread() {
+internal fun checkNotMainThread() {
     check(Looper.myLooper() != Looper.getMainLooper()) {
         "Core gateway calls are blocking and must be dispatched off the Android main thread"
     }
@@ -199,6 +262,22 @@ private fun mapLibraryItem(record: Any): CoreLibraryItem {
         completed = readBoolean(record, "completed"),
     )
 }
+
+private fun mapDownloadSnapshot(record: Any): CoreDownloadSnapshot = CoreDownloadSnapshot(
+    jobId = readString(record, "jobId", "job_id"),
+    state = CoreDownloadState.fromGeneratedName(readRequired(record, "state").toString()),
+    bytesDownloaded = readNumber(record, "bytesDownloaded", "bytes_downloaded").toLong(),
+    totalBytes = (readNullable(record, "totalBytes", "total_bytes") as Number?)?.toLong(),
+    attempt = readNumber(record, "attempt").toInt(),
+    retryAtEpochMs = (readNullable(record, "retryAtEpochMs", "retry_at_epoch_ms") as Number?)?.toLong(),
+    lastError = readNullable(record, "lastError", "last_error")?.let { error ->
+        CoreGatewayError(
+            kind = readRequired(error, "kind").toString(),
+            message = readString(error, "message"),
+            retryable = readBoolean(error, "retryable"),
+        )
+    },
+)
 
 private fun readError(result: Any): CoreGatewayError? {
     val error = readNullable(result, "error") ?: return null

@@ -5,6 +5,7 @@ import java.lang.reflect.Method
 import java.util.concurrent.Future
 
 interface AppDownloadControlGateway : Closeable {
+    fun enqueue(jobId: String): CoreGatewayResult<Boolean>
     fun pause(jobId: String): CoreGatewayResult<Boolean>
     fun resume(jobId: String): CoreGatewayResult<Boolean>
     fun cancel(jobId: String): CoreGatewayResult<Boolean>
@@ -15,7 +16,17 @@ class GeneratedUniffiDownloadControlGateway private constructor(
     private val ffiService: Any,
     private val dispatcher: CoreCallDispatcher,
 ) : AppDownloadControlGateway {
+    fun enqueueAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { enqueue(jobId) }
+
     fun pauseAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { pause(jobId) }
+
+    fun resumeAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { resume(jobId) }
+
+    fun cancelAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { cancel(jobId) }
+
+    fun retryAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { retry(jobId) }
+
+    override fun enqueue(jobId: String): CoreGatewayResult<Boolean> = control("enqueue", jobId)
 
     override fun pause(jobId: String): CoreGatewayResult<Boolean> = control("pause", jobId)
 
@@ -30,6 +41,7 @@ class GeneratedUniffiDownloadControlGateway private constructor(
     }
 
     private fun control(methodName: String, jobId: String): CoreGatewayResult<Boolean> {
+        checkNotMainThread()
         val result = callFfi(methodName, jobId)
         return CoreGatewayResult(
             value = readBoolean(result, "updated"),
@@ -73,10 +85,16 @@ class GeneratedUniffiDownloadControlGateway private constructor(
 }
 
 class FakeDownloadControlGateway : AppDownloadControlGateway {
+    val enqueuedJobIds = mutableListOf<String>()
     val pausedJobIds = mutableListOf<String>()
     val resumedJobIds = mutableListOf<String>()
     val canceledJobIds = mutableListOf<String>()
     val retriedJobIds = mutableListOf<String>()
+
+    override fun enqueue(jobId: String): CoreGatewayResult<Boolean> {
+        enqueuedJobIds += jobId
+        return CoreGatewayResult(value = true, error = null)
+    }
 
     override fun pause(jobId: String): CoreGatewayResult<Boolean> {
         pausedJobIds += jobId
