@@ -1,6 +1,6 @@
 use crate::{
     CoreError, DirectFixtureSource, ErrorKind, FfiCancellationToken, FfiError, FfiMediaSummary,
-    FfiQualityChoice, FixtureMedia, MediaSource,
+    FfiQualityChoice, FixtureMedia, MediaSource, YouTubeSource,
 };
 use futures::executor::block_on;
 use std::sync::Arc;
@@ -115,6 +115,77 @@ impl FfiSourceService {
     }
 }
 
+/// Production YouTube source boundary for Android.
+///
+/// This is deliberately separate from [`FfiSourceService`], whose fixture-only constructor remains
+/// deterministic CI infrastructure. Production callers use this service so fixture configuration
+/// can never accidentally stand in for live provider resolution.
+#[derive(Debug, uniffi::Object)]
+pub struct FfiYouTubeSourceService {
+    source: YouTubeSource,
+}
+
+#[uniffi::export]
+impl FfiYouTubeSourceService {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            source: YouTubeSource::default(),
+        })
+    }
+
+    pub fn resolve(&self, url: String, cancel: Arc<FfiCancellationToken>) -> FfiResolveResult {
+        match resolve_source(&self.source, &url, &cancel) {
+            Ok(media) => FfiResolveResult {
+                media: Some(FfiMediaSummary::from(&media)),
+                error: None,
+            },
+            Err(error) => FfiResolveResult {
+                media: None,
+                error: Some(FfiError::from(&error)),
+            },
+        }
+    }
+
+    pub fn list_choices(
+        &self,
+        url: String,
+        cancel: Arc<FfiCancellationToken>,
+    ) -> FfiChoiceListResult {
+        match resolve_source(&self.source, &url, &cancel).and_then(|media| {
+            cancel.check()?;
+            block_on(self.source.choices(&media))
+        }) {
+            Ok(choices) => FfiChoiceListResult {
+                choices: choices.iter().map(FfiQualityChoice::from).collect(),
+                error: None,
+            },
+            Err(error) => FfiChoiceListResult {
+                choices: Vec::new(),
+                error: Some(FfiError::from(&error)),
+            },
+        }
+    }
+}
+
+fn resolve_source<S: MediaSource>(
+    source: &S,
+    url: &str,
+    cancel: &FfiCancellationToken,
+) -> Result<crate::MediaInfo, CoreError> {
+    cancel.check()?;
+    if !source.can_handle(url) {
+        return Err(CoreError::new(
+            ErrorKind::UnsupportedSource,
+            "This URL is not from a configured source",
+            false,
+        ));
+    }
+    let media = block_on(source.resolve(url))?;
+    cancel.check()?;
+    Ok(media)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,6 +224,25 @@ mod tests {
         assert!(listed.error.is_none());
         assert_eq!(listed.choices.len(), 1);
         assert_eq!(listed.choices[0].label, "720p");
+    }
+
+    #[test]
+    fn production_youtube_service_rejects_non_youtube_without_network_access() {
+        let service = FfiYouTubeSourceService::new();
+        let result = service.resolve(
+            "https://example.invalid/not-youtube".into(),
+            FfiCancellationToken::new(),
+        );
+        assert_eq!(result.error.unwrap().kind, FfiErrorKind::UnsupportedSource);
+    }
+
+    #[test]
+    fn production_youtube_service_honors_pre_cancellation_without_network_access() {
+        let service = FfiYouTubeSourceService::new();
+        let token = FfiCancellationToken::new();
+        token.cancel();
+        let result = service.resolve("https://www.youtube.com/watch?v=dQw4w9WgXcQ".into(), token);
+        assert_eq!(result.error.unwrap().kind, FfiErrorKind::Canceled);
     }
 
     #[test]
