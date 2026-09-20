@@ -61,7 +61,7 @@ internal object PortraitLayoutPolicy {
 }
 
 @Composable
-fun OfflineYTPlayerApp(
+internal fun OfflineYTPlayerApp(
     initialSharedUrl: String? = null,
     libraryState: LibraryScreenState = LibraryScreenState.Unavailable(
         "Library repository is not connected yet; no empty-library claim is being made.",
