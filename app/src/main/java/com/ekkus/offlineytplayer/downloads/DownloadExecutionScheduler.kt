@@ -88,13 +88,19 @@ internal class AndroidDownloadExecutionScheduler(
             )
             .setRequiredNetworkType(DownloadExecutionSchedulerPolicy.requiredNetworkType(request.networkPreference))
 
-        if (DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(sdkInt)) {
+        if (
+            DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(sdkInt) &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+        ) {
             builder.setEstimatedNetworkBytes(
                 request.estimatedDownloadBytes ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
                 JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
             )
         }
-        if (DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(sdkInt)) {
+        if (
+            DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(sdkInt) &&
+            Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk
+        ) {
             builder.setUserInitiated(true)
         }
 
