@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 
@@ -71,6 +72,7 @@ internal object LibraryPlaybackRoute {
 internal fun LibraryScreen(onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var layout by rememberSaveable { mutableStateOf(LibraryLayout.List) }
+    var message by rememberSaveable { mutableStateOf<String?>(null) }
     val allItems = emptyList<LibraryRowModel>()
     val visibleItems = allItems.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) }
     Column(
@@ -91,6 +93,7 @@ internal fun LibraryScreen(onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Un
             ) { Text(if (layout == LibraryLayout.List) "Grid" else "List") }
         }
         Text("Filter: All · ${layout.name}")
+        message?.let { Text(it) }
         if (visibleItems.isEmpty()) {
             Column(
                 Modifier.weight(1f).fillMaxWidth(),
@@ -105,14 +108,26 @@ internal fun LibraryScreen(onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Un
             ) { Text("Add video") }
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-                items(visibleItems, key = { it.id }) { item -> LibraryItemRow(item, onPlay) }
+                items(visibleItems, key = { it.id }) { item ->
+                    LibraryItemRow(
+                        item = item,
+                        onPlay = onPlay,
+                        onDetails = { selected -> message = "${selected.title}: ${selected.detail}" },
+                        onRemove = { selected -> message = "Remove requires repository-backed deletion for ${selected.title}." },
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun LibraryItemRow(item: LibraryRowModel, onPlay: (LocalPlaybackAsset) -> Unit) {
+private fun LibraryItemRow(
+    item: LibraryRowModel,
+    onPlay: (LocalPlaybackAsset) -> Unit,
+    onDetails: (LibraryRowModel) -> Unit,
+    onRemove: (LibraryRowModel) -> Unit,
+) {
     val playbackAsset = LibraryPlaybackRoute.assetFor(item)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text(item.title)
@@ -123,15 +138,16 @@ private fun LibraryItemRow(item: LibraryRowModel, onPlay: (LocalPlaybackAsset) -
                 enabled = playbackAsset != null,
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("Play") }
-            OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Details") }
-            OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Remove") }
+            OutlinedButton(onClick = { onDetails(item) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Details") }
+            OutlinedButton(onClick = { onRemove(item) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Remove") }
         }
     }
 }
 
 @Composable
-internal fun DownloadsScreen() {
+internal fun DownloadsScreen(controlGateway: AppDownloadControlGateway? = null) {
     var filter by rememberSaveable { mutableStateOf("All") }
+    var message by rememberSaveable { mutableStateOf<String?>(null) }
     val rows = emptyList<DownloadRowModel>()
     Column(
         Modifier.fillMaxSize().padding(MidnightTransit.ScreenSpacing),
@@ -145,32 +161,52 @@ internal fun DownloadsScreen() {
                 ) { Text(if (filter == value) "[$value]" else value) }
             }
         }
+        message?.let { Text(it) }
         if (rows.isEmpty()) {
             Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("No downloads yet")
             }
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-                items(rows, key = { it.id }) { row -> DownloadRow(row) }
+                items(rows, key = { it.id }) { row ->
+                    DownloadRow(
+                        row = row,
+                        onAction = { action ->
+                            val gateway = controlGateway
+                            message = if (gateway == null) {
+                                "Download control gateway is not connected for ${row.title}."
+                            } else if (DownloadRowControlBinding.invoke(action, row.id, gateway)) {
+                                "${action.name} requested for ${row.title}."
+                            } else {
+                                "${action.name} failed for ${row.title}."
+                            }
+                        },
+                        onDetails = { selected -> message = "${selected.title}: ${selected.state.name} · ${selected.percent.coerceIn(0, 100)}% · ${selected.size}" },
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DownloadRow(row: DownloadRowModel) {
+private fun DownloadRow(
+    row: DownloadRowModel,
+    onAction: (DownloadRowAction) -> Unit,
+    onDetails: (DownloadRowModel) -> Unit,
+) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text(row.title)
         Text("${row.state.name} · ${row.percent.coerceIn(0, 100)}% · ${row.size}")
         row.error?.let { Text("Error: $it") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             when (row.state) {
-                DownloadUiState.Active -> OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Pause") }
-                DownloadUiState.Paused -> OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Resume") }
-                DownloadUiState.Failed -> OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Retry") }
-                DownloadUiState.Completed -> OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Details") }
+                DownloadUiState.Active -> OutlinedButton(onClick = { onAction(DownloadRowAction.Pause) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Pause") }
+                DownloadUiState.Paused -> OutlinedButton(onClick = { onAction(DownloadRowAction.Resume) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Resume") }
+                DownloadUiState.Failed -> OutlinedButton(onClick = { onAction(DownloadRowAction.Retry) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Retry") }
+                DownloadUiState.Completed -> OutlinedButton(onClick = { onDetails(row) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Details") }
             }
-            OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Cancel") }
+            OutlinedButton(onClick = { onAction(DownloadRowAction.Cancel) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Cancel") }
         }
     }
 }
