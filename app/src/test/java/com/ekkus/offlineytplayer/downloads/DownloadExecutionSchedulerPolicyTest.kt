@@ -4,6 +4,7 @@ import android.app.job.JobInfo
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,6 +34,27 @@ class DownloadExecutionSchedulerPolicyTest {
         assertFalse(DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(33))
         assertTrue(DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(34))
         assertTrue(DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(36))
+    }
+
+    @Test
+    fun api26Through33UseForegroundFallbackInsteadOfDuplicatedSchedulerState() {
+        assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(26))
+        assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(33))
+        assertFalse(DownloadExecutionSchedulerPolicy.usesForegroundFallback(34))
+        assertTrue(DownloadServicePolicy.ReconcilesDurableQueueOnStart)
+        assertTrue(DownloadExecutionSchedulerPolicy.UsesSharedDurableQueue)
+        assertEquals(DownloadForegroundService.ACTION_SCHEDULE_WORK, "com.ekkus.offlineytplayer.download.SCHEDULE_WORK")
+        assertEquals(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, DownloadUserInitiatedJobService.ExtraQueueItemId)
+    }
+
+    @Test
+    fun uidtJobCarriesOnlyDurableQueueIdentityInExtras() {
+        val extras = DownloadExecutionSchedulerPolicy.durableQueueItemExtras("queue-42")
+
+        assertEquals("queue-42", extras.getString(DownloadUserInitiatedJobService.ExtraQueueItemId))
+        assertNull(extras.getString("url"))
+        assertNull(extras.getString("title"))
+        assertNull(extras.getString("provider_payload"))
     }
 
     @Test

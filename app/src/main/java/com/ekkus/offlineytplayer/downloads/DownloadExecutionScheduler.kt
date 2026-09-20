@@ -60,6 +60,14 @@ internal object DownloadExecutionSchedulerPolicy {
         DownloadNetworkPreference.WifiOnly -> JobInfo.NETWORK_TYPE_UNMETERED
     }
 
+    fun usesForegroundFallback(sdkInt: Int): Boolean =
+        schedulerKindForSdk(sdkInt) == DownloadSchedulerKind.ForegroundServiceFallback
+
+    fun durableQueueItemExtras(queueItemId: String): PersistableBundle =
+        PersistableBundle().apply {
+            putString(DownloadUserInitiatedJobService.ExtraQueueItemId, queueItemId)
+        }
+
     fun stableJobId(queueItemId: String): Int =
         DownloadUserInitiatedJobService.JobIdBase + (queueItemId.hashCode().absoluteValue % DownloadUserInitiatedJobService.JobIdRange)
 }
@@ -81,11 +89,7 @@ internal class AndroidDownloadExecutionScheduler(
             jobId,
             ComponentName(context, DownloadUserInitiatedJobService::class.java),
         )
-            .setExtras(
-                PersistableBundle().apply {
-                    putString(DownloadUserInitiatedJobService.ExtraQueueItemId, request.queueItemId)
-                },
-            )
+            .setExtras(DownloadExecutionSchedulerPolicy.durableQueueItemExtras(request.queueItemId))
             .setRequiredNetworkType(DownloadExecutionSchedulerPolicy.requiredNetworkType(request.networkPreference))
 
         if (
