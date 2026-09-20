@@ -5,7 +5,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -28,6 +30,12 @@ class GeneratedUniffiCoreGatewaySmokeTest {
                     val emptyQueue = gateway.listDownloadQueueAsync().get(10, TimeUnit.SECONDS)
                     assertEquals(emptyList<CoreDownloadSnapshot>(), emptyQueue.value)
                     assertNull(emptyQueue.error)
+
+                    val invalid = controls.enqueueAsync("   ").get(10, TimeUnit.SECONDS)
+                    assertFalse(invalid.value ?: true)
+                    assertNotNull(invalid.error)
+                    assertFalse(invalid.error?.retryable ?: true)
+                    assertTrue(invalid.error?.message?.contains("must not be empty") == true)
 
                     val enqueued = controls.enqueueAsync("job-smoke").get(10, TimeUnit.SECONDS)
                     assertEquals(true, enqueued.value)
