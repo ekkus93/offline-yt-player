@@ -14,6 +14,7 @@ import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceAnalysisGateway
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionStateStore
 import com.ekkus.offlineytplayer.ui.DownloadRowModel
@@ -32,21 +33,16 @@ class MainActivity : ComponentActivity() {
     }
     private var coreGateway: GeneratedUniffiCoreGateway? = null
     private var downloadControlGateway: GeneratedUniffiDownloadControlGateway? = null
+    private var sourceAnalysisGateway: GeneratedUniffiSourceAnalysisGateway? = null
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        DownloadNotificationPermissionStateStore.recordGrantState(this, granted)
-    }
+    ) { granted -> DownloadNotificationPermissionStateStore.recordGrantState(this, granted) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermissionIfNeeded()
-        val sharedUrl = ShareInput.parse(
-            intent?.action,
-            intent?.type,
-            intent?.getStringExtra(Intent.EXTRA_TEXT),
-        )
+        val sharedUrl = ShareInput.parse(intent?.action, intent?.type, intent?.getStringExtra(Intent.EXTRA_TEXT))
         setContent {
             OfflineYTPlayerApp(
                 initialSharedUrl = sharedUrl,
@@ -60,6 +56,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         coreGateway?.close()
         downloadControlGateway?.close()
+        sourceAnalysisGateway?.close()
         bootstrapExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -69,37 +66,34 @@ class MainActivity : ComponentActivity() {
         bootstrapExecutor.execute {
             val core = runCatching { GeneratedUniffiCoreGateway.open(databasePath) }
             val controls = runCatching { GeneratedUniffiDownloadControlGateway.open(databasePath) }
+            val sources = runCatching { GeneratedUniffiSourceAnalysisGateway.open() }
             val libraryState = core.fold(
-                onSuccess = { gateway ->
-                    gateway.listLibrary().toLibraryScreenState()
-                },
-                onFailure = { error -> LibraryScreenState.Failed(error.safeUiMessage()) },
+                onSuccess = { it.listLibrary().toLibraryScreenState() },
+                onFailure = { LibraryScreenState.Failed(it.safeUiMessage()) },
             )
             val downloadsState = core.fold(
-                onSuccess = { gateway ->
-                    gateway.listDownloadQueue().toDownloadsScreenState()
-                },
-                onFailure = { error -> DownloadsScreenState.Failed(error.safeUiMessage()) },
+                onSuccess = { it.listDownloadQueue().toDownloadsScreenState() },
+                onFailure = { DownloadsScreenState.Failed(it.safeUiMessage()) },
             )
             if (isFinishing || isDestroyed) {
-                core.getOrNull()?.close()
-                controls.getOrNull()?.close()
+                core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
                 return@execute
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) {
-                    core.getOrNull()?.close()
-                    controls.getOrNull()?.close()
+                    core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
                     return@runOnUiThread
                 }
                 coreGateway = core.getOrNull()
                 downloadControlGateway = controls.getOrNull()
+                sourceAnalysisGateway = sources.getOrNull()
                 setContent {
                     OfflineYTPlayerApp(
                         initialSharedUrl = sharedUrl,
                         libraryState = libraryState,
                         downloadsState = downloadsState,
                         downloadControlGateway = downloadControlGateway,
+                        sourceAnalysisGateway = sourceAnalysisGateway,
                     )
                 }
             }
@@ -121,13 +115,7 @@ class MainActivity : ComponentActivity() {
 private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(): LibraryScreenState {
     error?.let { return LibraryScreenState.Failed(it.message) }
     return LibraryScreenState.Ready(value.orEmpty().map { item ->
-        LibraryRowModel(
-            id = item.itemId,
-            title = item.displayTitle,
-            detail = listOfNotNull(item.qualityLabel, item.durationMs?.let(::formatDuration)).joinToString(" · "),
-            completed = item.completed,
-            resumePositionMs = item.playbackPositionMs,
-        )
+        LibraryRowModel(item.itemId, item.displayTitle, listOfNotNull(item.qualityLabel, item.durationMs?.let(::formatDuration)).joinToString(" · "), item.completed, item.playbackPositionMs)
     })
 }
 
@@ -135,19 +123,8 @@ private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreDow
     error?.let { return DownloadsScreenState.Failed(it.message) }
     return DownloadsScreenState.Ready(value.orEmpty().map { snapshot ->
         val total = snapshot.totalBytes
-        val percent = if (total != null && total > 0) {
-            ((snapshot.bytesDownloaded.coerceAtMost(total) * 100L) / total).toInt()
-        } else {
-            0
-        }
-        DownloadRowModel(
-            id = snapshot.jobId,
-            title = snapshot.jobId,
-            state = snapshot.state.toUiState(),
-            percent = percent,
-            size = if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes",
-            error = snapshot.lastError?.message,
-        )
+        val percent = if (total != null && total > 0) ((snapshot.bytesDownloaded.coerceAtMost(total) * 100L) / total).toInt() else 0
+        DownloadRowModel(snapshot.jobId, snapshot.jobId, snapshot.state.toUiState(), percent, if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes", snapshot.lastError?.message)
     })
 }
 
