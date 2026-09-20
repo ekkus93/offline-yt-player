@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -154,31 +155,46 @@ private fun SettingToggle(label: String, initial: Boolean) {
 
 @Composable
 private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?) {
+    val clipboard = LocalClipboardManager.current
     var url by rememberSaveable(initialSharedUrl) { mutableStateOf(initialSharedUrl.orEmpty()) }
     var analyzed by rememberSaveable(initialSharedUrl) { mutableStateOf(!initialSharedUrl.isNullOrBlank()) }
     var advanced by rememberSaveable { mutableStateOf(false) }
+    var status by rememberSaveable { mutableStateOf<String?>(null) }
     if (advanced) { AdvancedDownloadOptions(padding) { advanced = false }; return }
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Download a supported video for offline playback.")
-        OutlinedTextField(value = url, onValueChange = { url = it; analyzed = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
+        OutlinedTextField(value = url, onValueChange = { url = it; analyzed = false; status = null }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-            OutlinedButton(onClick = {}, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Paste") }
-            Button(onClick = { analyzed = DownloadSetupRoute.previewFor(url) != null }, enabled = url.isNotBlank(), modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Analyze") }
+            OutlinedButton(
+                onClick = {
+                    val pasted = clipboard.getText()?.text?.takeIf { it.isNotBlank() }
+                    if (pasted == null) {
+                        status = "Clipboard does not contain a video URL."
+                    } else {
+                        url = pasted.take(4096)
+                        analyzed = false
+                        status = "Pasted clipboard text. Choose Analyze to validate it."
+                    }
+                },
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Paste") }
+            Button(onClick = { analyzed = DownloadSetupRoute.previewFor(url) != null; status = if (analyzed) null else "Unsupported or invalid video URL." }, enabled = url.isNotBlank(), modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Analyze") }
         }
         Text("Supports recognized YouTube video URLs. Playlists and channel pages are not supported.")
-        if (analyzed) DownloadSetupRoute.previewFor(url)?.let { DownloadSetupPreview(it) { advanced = true } }
+        status?.let { Text(it) }
+        if (analyzed) DownloadSetupRoute.previewFor(url)?.let { DownloadSetupPreview(it, onOptions = { advanced = true }, onDownload = { status = "Download scheduling requires the durable production worker wiring tracked by RMD-500/RMD-703." }) }
     }
 }
 
 @Composable
-private fun DownloadSetupPreview(setup: DownloadSetupState, onOptions: () -> Unit) {
+private fun DownloadSetupPreview(setup: DownloadSetupState, onOptions: () -> Unit, onDownload: () -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Download setup")
         Text(setup.title)
         Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = onOptions, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }
-            Button(onClick = {}, enabled = setup.readyForDownload, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") }
+            Button(onClick = onDownload, enabled = setup.readyForDownload, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") }
         }
     }
 }
