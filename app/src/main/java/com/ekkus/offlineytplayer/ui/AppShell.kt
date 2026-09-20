@@ -24,6 +24,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -33,8 +34,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import com.ekkus.offlineytplayer.coregateway.AppCoreGateway
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal enum class AppDestination(val label: String, val accessibilityLabel: String) {
     Library("Library", "Open offline library"), Downloads("Downloads", "Open downloads"),
@@ -63,14 +67,37 @@ internal object PortraitLayoutPolicy {
 @Composable
 internal fun OfflineYTPlayerApp(
     initialSharedUrl: String? = null,
-    libraryState: LibraryScreenState = LibraryScreenState.Unavailable(
-        "Library repository is not connected yet; no empty-library claim is being made.",
-    ),
-    downloadsState: DownloadsScreenState = DownloadsScreenState.Unavailable(
-        "Downloads repository is not connected yet; no empty-queue claim is being made.",
-    ),
+    coreGateway: AppCoreGateway? = null,
+    libraryState: LibraryScreenState? = null,
+    downloadsState: DownloadsScreenState? = null,
     downloadControlGateway: AppDownloadControlGateway? = null,
 ) {
+    val loadedLibraryState by produceState<LibraryScreenState>(
+        initialValue = libraryState ?: if (coreGateway == null) {
+            LibraryScreenState.Unavailable("Library repository is not connected.")
+        } else {
+            LibraryScreenState.Loading
+        },
+        coreGateway,
+        libraryState,
+    ) {
+        if (libraryState == null && coreGateway != null) {
+            value = withContext(Dispatchers.IO) { loadLibraryScreenState(coreGateway) }
+        }
+    }
+    val loadedDownloadsState by produceState<DownloadsScreenState>(
+        initialValue = downloadsState ?: if (coreGateway == null) {
+            DownloadsScreenState.Unavailable("Downloads repository is not connected.")
+        } else {
+            DownloadsScreenState.Loading
+        },
+        coreGateway,
+        downloadsState,
+    ) {
+        if (downloadsState == null && coreGateway != null) {
+            value = withContext(Dispatchers.IO) { loadDownloadsScreenState(coreGateway) }
+        }
+    }
     OfflineYTPlayerTheme {
         var destination by rememberSaveable(initialSharedUrl) { mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add) }
         var playbackAsset by remember { mutableStateOf<LocalPlaybackAsset?>(null) }
@@ -83,8 +110,8 @@ internal fun OfflineYTPlayerApp(
                     destination = destination,
                     padding = padding,
                     initialSharedUrl = initialSharedUrl,
-                    libraryState = libraryState,
-                    downloadsState = downloadsState,
+                    libraryState = loadedLibraryState,
+                    downloadsState = loadedDownloadsState,
                     downloadControlGateway = downloadControlGateway,
                     onAdd = { destination = AppDestination.Add },
                     onPlay = { playbackAsset = it },
