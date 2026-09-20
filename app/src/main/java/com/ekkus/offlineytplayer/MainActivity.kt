@@ -76,12 +76,16 @@ class MainActivity : ComponentActivity() {
                 onFailure = { DownloadsScreenState.Failed(it.safeUiMessage()) },
             )
             if (isFinishing || isDestroyed) {
-                core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
+                core.getOrNull()?.close()
+                controls.getOrNull()?.close()
+                sources.getOrNull()?.close()
                 return@execute
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) {
-                    core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
+                    core.getOrNull()?.close()
+                    controls.getOrNull()?.close()
+                    sources.getOrNull()?.close()
                     return@runOnUiThread
                 }
                 coreGateway = core.getOrNull()
@@ -115,7 +119,13 @@ class MainActivity : ComponentActivity() {
 private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(): LibraryScreenState {
     error?.let { return LibraryScreenState.Failed(it.message) }
     return LibraryScreenState.Ready(value.orEmpty().map { item ->
-        LibraryRowModel(item.itemId, item.displayTitle, listOfNotNull(item.qualityLabel, item.durationMs?.let(::formatDuration)).joinToString(" · "), item.completed, item.playbackPositionMs)
+        LibraryRowModel(
+            id = item.itemId,
+            title = item.displayTitle,
+            detail = listOfNotNull(item.qualityLabel, item.durationMs?.let(::formatDuration)).joinToString(" · "),
+            completed = item.completed,
+            resumePositionMs = item.playbackPositionMs,
+        )
     })
 }
 
@@ -124,7 +134,14 @@ private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreDow
     return DownloadsScreenState.Ready(value.orEmpty().map { snapshot ->
         val total = snapshot.totalBytes
         val percent = if (total != null && total > 0) ((snapshot.bytesDownloaded.coerceAtMost(total) * 100L) / total).toInt() else 0
-        DownloadRowModel(snapshot.jobId, snapshot.jobId, snapshot.state.toUiState(), percent, if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes", snapshot.lastError?.message)
+        DownloadRowModel(
+            id = snapshot.jobId,
+            title = snapshot.jobId,
+            state = snapshot.state.toUiState(),
+            percent = percent,
+            size = if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes",
+            error = snapshot.lastError?.message,
+        )
     })
 }
 
