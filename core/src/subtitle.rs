@@ -261,11 +261,7 @@ mod tests {
         };
         assert_eq!(
             vec![&subtitle],
-            local_subtitle_assets(&[
-                subtitle.clone(),
-                unsafe_subtitle,
-                unsupported_subtitle,
-            ])
+            local_subtitle_assets(&[subtitle.clone(), unsafe_subtitle, unsupported_subtitle,])
         );
     }
 }
