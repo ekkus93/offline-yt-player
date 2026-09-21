@@ -40,6 +40,63 @@ class LocalPlaybackPolicyTest {
     }
 
     @Test
+    fun subtitlePlanKeepsPersistedLocalTrackIdentity() {
+        val subtitle = LocalSubtitleAsset(
+            path = "/library/subtitles/en-US.vtt",
+            mimeType = "text/vtt",
+            language = "en-US",
+            label = "English",
+        )
+        val plan = LocalPlaybackPolicy.mediaSourcePlanFor(
+            LocalPlaybackAsset(
+                videoPath = "/library/combined.mp4",
+                title = "Fixture title",
+                subtitles = listOf(subtitle),
+            ),
+        )
+
+        assertEquals(listOf(subtitle), plan.subtitles)
+    }
+
+    @Test
+    fun subtitlePlanRejectsRemoteTrack() {
+        expectIllegalArgument("remote playback URIs are forbidden") {
+            LocalPlaybackPolicy.mediaSourcePlanFor(
+                LocalPlaybackAsset(
+                    videoPath = "/library/combined.mp4",
+                    title = "Fixture title",
+                    subtitles = listOf(
+                        LocalSubtitleAsset(
+                            path = "https://example.invalid/en.vtt",
+                            mimeType = "text/vtt",
+                            language = "en",
+                        ),
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun subtitlePlanRejectsUnsupportedMimeType() {
+        expectIllegalArgument("unsupported subtitle MIME type") {
+            LocalPlaybackPolicy.mediaSourcePlanFor(
+                LocalPlaybackAsset(
+                    videoPath = "/library/combined.mp4",
+                    title = "Fixture title",
+                    subtitles = listOf(
+                        LocalSubtitleAsset(
+                            path = "/library/subtitles/en.ass",
+                            mimeType = "text/x-ssa",
+                            language = "en",
+                        ),
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
     fun adaptivePlanRejectsRemoteAudioAsset() {
         expectIllegalArgument("remote playback URIs are forbidden") {
             LocalPlaybackPolicy.mediaSourcePlanFor(

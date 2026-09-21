@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
@@ -35,13 +36,19 @@ internal object PlayerLayoutPolicy {
 internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit) {
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
     val context = LocalContext.current
-    val player = remember(validated.videoPath) {
+    val player = remember(validated) {
         ExoPlayer.Builder(context)
             .setSeekBackIncrementMs(LocalPlaybackPolicy.SkipIntervalMs)
             .setSeekForwardIncrementMs(LocalPlaybackPolicy.SkipIntervalMs)
             .build()
             .apply {
-                setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated.videoPath), validated.startPositionMs)
+                setMediaSource(
+                    LocalPlaybackPolicy.mediaSourceFor(
+                        validated,
+                        DefaultMediaSourceFactory(context),
+                    ),
+                    validated.startPositionMs,
+                )
                 prepare()
             }
     }
