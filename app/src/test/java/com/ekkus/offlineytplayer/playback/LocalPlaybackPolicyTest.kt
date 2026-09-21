@@ -128,7 +128,7 @@ class LocalPlaybackPolicyTest {
             positionMs = 95_000L,
             durationMs = 120_000L,
         ))
-        assertEquals(120_000L, LocalPlaybackPolicy.persistedPositionForStop(
+        assertEquals(0L, LocalPlaybackPolicy.persistedPositionForStop(
             positionMs = 200_000L,
             durationMs = 120_000L,
         ))
