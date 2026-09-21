@@ -30,7 +30,6 @@ import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 
 internal enum class LibraryLayout { List, Grid }
 internal enum class DownloadUiState { Active, Paused, Failed, Completed }
-internal enum class DownloadRowAction { Pause, Resume, Retry, Cancel, Details }
 
 internal data class LibraryRowModel(
     val id: String,
@@ -65,8 +64,7 @@ internal sealed class DownloadsScreenState {
     object Loading : DownloadsScreenState()
     data class Ready(val rows: List<DownloadRowModel>) : DownloadsScreenState()
     data class Unavailable(val reason: String) : DownloadsScreenState()
-    data class Failed(val message: String)
-        : DownloadsScreenState()
+    data class Failed(val message: String) : DownloadsScreenState()
 }
 
 internal object CollectionLayoutPolicy {
@@ -102,7 +100,7 @@ internal object DownloadScreenPolicy {
         DownloadUiState.Active -> listOf(DownloadRowAction.Pause, DownloadRowAction.Cancel)
         DownloadUiState.Paused -> listOf(DownloadRowAction.Resume, DownloadRowAction.Cancel)
         DownloadUiState.Failed -> listOf(DownloadRowAction.Retry, DownloadRowAction.Cancel)
-        DownloadUiState.Completed -> listOf(DownloadRowAction.Details)
+        DownloadUiState.Completed -> emptyList()
     }
 
     fun detail(row: DownloadRowModel): String = listOf(
@@ -308,10 +306,6 @@ internal fun DownloadsScreen(
                             DownloadRow(
                                 row = row,
                                 onAction = { action ->
-                                    if (action == DownloadRowAction.Details) {
-                                        message = "${row.title}: ${DownloadScreenPolicy.detail(row)}"
-                                        return@DownloadRow
-                                    }
                                     val gateway = controlGateway
                                     message = if (gateway == null) {
                                         "Download control gateway is not connected for ${row.title}."
@@ -320,6 +314,9 @@ internal fun DownloadsScreen(
                                     } else {
                                         "${action.name} failed for ${row.title}."
                                     }
+                                },
+                                onDetails = { selected ->
+                                    message = "${selected.title}: ${DownloadScreenPolicy.detail(selected)}"
                                 },
                             )
                         }
@@ -334,6 +331,7 @@ internal fun DownloadsScreen(
 private fun DownloadRow(
     row: DownloadRowModel,
     onAction: (DownloadRowAction) -> Unit,
+    onDetails: (DownloadRowModel) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text(row.title)
@@ -346,6 +344,10 @@ private fun DownloadRow(
                     modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
                 ) { Text(action.name) }
             }
+            OutlinedButton(
+                onClick = { onDetails(row) },
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Details") }
         }
     }
 }

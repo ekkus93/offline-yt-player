@@ -28,7 +28,7 @@ class DownloadsOperationalScreenTest {
     @Test
     fun completedDownloadsDoNotExposeIllegalCancelAction() {
         assertEquals(
-            listOf(DownloadRowAction.Details),
+            emptyList<DownloadRowAction>(),
             DownloadScreenPolicy.legalActions(row(DownloadUiState.Completed)),
         )
         assertEquals(
