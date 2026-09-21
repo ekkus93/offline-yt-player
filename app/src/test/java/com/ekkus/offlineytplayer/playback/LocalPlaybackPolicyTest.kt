@@ -91,6 +91,54 @@ class LocalPlaybackPolicyTest {
     }
 
     @Test
+    fun playbackRequestNormalizesRestoredStartPosition() {
+        val request = LocalPlaybackPolicy.playbackRequestFor(
+            LocalPlaybackAsset(
+                videoPath = "/library/video-1080p.mp4",
+                title = "Fixture title",
+                startPositionMs = 12_345L,
+            ),
+        )
+
+        assertEquals(12_345L, request.startPositionMs)
+        assertEquals(0L, LocalPlaybackPolicy.restoredStartPosition(-1L))
+    }
+
+    @Test
+    fun positionPersistenceUsesBoundedCadence() {
+        assertFalse(LocalPlaybackPolicy.shouldPersistPosition(
+            lastPersistedPositionMs = 10_000L,
+            currentPositionMs = 12_000L,
+            durationMs = 120_000L,
+        ))
+        assertTrue(LocalPlaybackPolicy.shouldPersistPosition(
+            lastPersistedPositionMs = 10_000L,
+            currentPositionMs = 15_000L,
+            durationMs = 120_000L,
+        ))
+    }
+
+    @Test
+    fun stopPersistenceResetsCompletedPlaybackAndClampsPositions() {
+        assertEquals(42_000L, LocalPlaybackPolicy.persistedPositionForStop(
+            positionMs = 42_000L,
+            durationMs = 120_000L,
+        ))
+        assertEquals(0L, LocalPlaybackPolicy.persistedPositionForStop(
+            positionMs = 95_000L,
+            durationMs = 120_000L,
+        ))
+        assertEquals(120_000L, LocalPlaybackPolicy.persistedPositionForStop(
+            positionMs = 200_000L,
+            durationMs = 120_000L,
+        ))
+        assertEquals(0L, LocalPlaybackPolicy.persistedPositionForStop(
+            positionMs = -50L,
+            durationMs = 120_000L,
+        ))
+    }
+
+    @Test
     fun audioSelectionIsDisabledWhenOneOrZeroTracksAreAvailable() {
         assertFalse(LocalPlaybackPolicy.shouldEnableAudioSelection(
             LocalPlaybackAsset(videoPath = "/library/video.mp4", title = "Fixture title"),

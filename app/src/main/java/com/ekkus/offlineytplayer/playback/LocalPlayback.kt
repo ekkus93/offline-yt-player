@@ -55,9 +55,15 @@ internal data class LocalPlaybackRequest(
     val audioTracks: List<LocalAudioTrack> = emptyList(),
 )
 
+internal data class PlaybackPositionSnapshot(
+    val positionMs: Long,
+    val durationMs: Long,
+)
+
 internal object LocalPlaybackPolicy {
     const val SkipIntervalMs = 10_000L
     const val NearEndCompletedThresholdMs = 30_000L
+    const val PositionPersistCadenceMs = 5_000L
     const val UsesNetworkUris = false
     const val SupportsLandscapeAction = false
 
@@ -91,7 +97,7 @@ internal object LocalPlaybackPolicy {
         return LocalPlaybackRequest(
             videoPath = validated.videoPath,
             audioPath = validated.audioPath,
-            startPositionMs = validated.startPositionMs,
+            startPositionMs = restoredStartPosition(validated.startPositionMs),
             subtitleTracks = validated.subtitleTracks,
             audioTracks = validated.audioTracks,
         )
@@ -126,6 +132,24 @@ internal object LocalPlaybackPolicy {
 
     fun shouldEnableAudioSelection(asset: LocalPlaybackAsset): Boolean = availableAudioLabels(asset).size > 1
 
+    fun restoredStartPosition(positionMs: Long): Long = positionMs.coerceAtLeast(0)
+
+    fun shouldPersistPosition(
+        lastPersistedPositionMs: Long,
+        currentPositionMs: Long,
+        durationMs: Long,
+    ): Boolean {
+        val snapshot = normalizedPositionSnapshot(currentPositionMs, durationMs)
+        if (completedByPosition(snapshot.positionMs, snapshot.durationMs)) return true
+        val last = restoredStartPosition(lastPersistedPositionMs)
+        return kotlin.math.abs(snapshot.positionMs - last) >= PositionPersistCadenceMs
+    }
+
+    fun persistedPositionForStop(positionMs: Long, durationMs: Long): Long {
+        val snapshot = normalizedPositionSnapshot(positionMs, durationMs)
+        return if (completedByPosition(snapshot.positionMs, snapshot.durationMs)) 0L else snapshot.positionMs
+    }
+
     @OptIn(UnstableApi::class)
     fun mediaSourceFor(
         asset: LocalPlaybackAsset,
@@ -141,6 +165,16 @@ internal object LocalPlaybackPolicy {
     fun completedByPosition(positionMs: Long, durationMs: Long): Boolean {
         if (durationMs <= 0) return false
         return durationMs - positionMs.coerceAtMost(durationMs) <= NearEndCompletedThresholdMs
+    }
+
+    private fun normalizedPositionSnapshot(positionMs: Long, durationMs: Long): PlaybackPositionSnapshot {
+        val normalizedDuration = durationMs.coerceAtLeast(0)
+        val normalizedPosition = if (normalizedDuration == 0L) {
+            positionMs.coerceAtLeast(0)
+        } else {
+            positionMs.coerceIn(0L, normalizedDuration)
+        }
+        return PlaybackPositionSnapshot(normalizedPosition, normalizedDuration)
     }
 
     private fun validateSubtitleTrack(track: LocalSubtitleTrack) {
