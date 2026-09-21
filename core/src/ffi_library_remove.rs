@@ -1,4 +1,4 @@
-use crate::{CoreError, LibraryStore, delete_library_item_owned_assets};
+use crate::{delete_library_item_owned_assets, CoreError, LibraryStore};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -126,7 +126,9 @@ mod tests {
         let store = LibraryStore::open_in_memory().unwrap();
         let root = tempdir().unwrap();
         let item = persist_with_files(&store, root.path());
-        let service = FfiLibraryRemoveService { library: store.clone() };
+        let service = FfiLibraryRemoveService {
+            library: store.clone(),
+        };
 
         let result = service.remove_library_item(
             root.path().to_string_lossy().into_owned(),
@@ -145,7 +147,9 @@ mod tests {
         let store = LibraryStore::open_in_memory().unwrap();
         let root = tempdir().unwrap();
         let item = persist_with_files(&store, root.path());
-        let service = FfiLibraryRemoveService { library: store.clone() };
+        let service = FfiLibraryRemoveService {
+            library: store.clone(),
+        };
 
         let result = service.remove_library_item(
             root.path().to_string_lossy().into_owned(),
@@ -175,6 +179,9 @@ mod tests {
         );
 
         assert!(!result.removed);
-        assert_eq!(result.error_message.as_deref(), Some("Library item was not found"));
+        assert_eq!(
+            result.error_message.as_deref(),
+            Some("Library item was not found")
+        );
     }
 }
