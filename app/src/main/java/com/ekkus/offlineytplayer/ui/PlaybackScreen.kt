@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,9 +45,11 @@ internal object PlayerLayoutPolicy {
 internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit) {
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
     val context = LocalContext.current
+    val subtitleLabels = remember(validated) { LocalPlaybackPolicy.availableSubtitleLabels(validated) }
+    var selectedSubtitleIndex by remember(validated) { mutableIntStateOf(if (subtitleLabels.isEmpty()) -1 else 0) }
     var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
 
-    DisposableEffect(context, validated.videoPath, validated.audioPath, validated.startPositionMs) {
+    DisposableEffect(context, validated.videoPath, validated.audioPath, validated.subtitleTracks, validated.startPositionMs) {
         val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         val mainHandler = Handler(Looper.getMainLooper())
@@ -128,7 +131,12 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
             SecondaryControl("Speed", enabled = controller != null) {
                 controller?.let { it.setPlaybackSpeed(nextSpeed(it.playbackParameters.speed)) }
             }
-            SecondaryControl("Subtitles", enabled = false) { }
+            SecondaryControl(
+                label = subtitleControlLabel(subtitleLabels, selectedSubtitleIndex),
+                enabled = controller != null && subtitleLabels.isNotEmpty(),
+            ) {
+                selectedSubtitleIndex = (selectedSubtitleIndex + 1) % subtitleLabels.size
+            }
             SecondaryControl("Audio", enabled = false) { }
         }
     }
@@ -145,6 +153,12 @@ private fun androidx.compose.foundation.layout.RowScope.SecondaryControl(
         enabled = enabled,
         modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
     ) { Text(label) }
+}
+
+private fun subtitleControlLabel(labels: List<String>, selectedIndex: Int): String = when {
+    labels.isEmpty() -> "Subtitles"
+    selectedIndex in labels.indices -> "Subtitles: ${labels[selectedIndex]}"
+    else -> "Subtitles"
 }
 
 private fun nextSpeed(current: Float): Float = when {

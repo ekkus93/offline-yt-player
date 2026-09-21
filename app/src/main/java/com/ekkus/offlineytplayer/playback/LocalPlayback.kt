@@ -3,23 +3,34 @@ package com.ekkus.offlineytplayer.playback
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaItem.SubtitleConfiguration
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import java.io.File
 
+internal data class LocalSubtitleTrack(
+    val path: String,
+    val language: String,
+    val label: String? = null,
+    val mimeType: String,
+)
+
 internal data class LocalPlaybackAsset(
     val videoPath: String,
     val audioPath: String? = null,
     val title: String,
     val startPositionMs: Long = 0,
+    val subtitleTracks: List<LocalSubtitleTrack> = emptyList(),
 )
 
 internal data class LocalPlaybackSourcePlan(
     val videoPath: String,
     val audioPath: String? = null,
     val startPositionMs: Long = 0,
+    val subtitleTracks: List<LocalSubtitleTrack> = emptyList(),
 ) {
     val usesSeparateAudioVideoAssets: Boolean
         get() = audioPath != null
@@ -29,6 +40,7 @@ internal data class LocalPlaybackRequest(
     val videoPath: String,
     val audioPath: String? = null,
     val startPositionMs: Long = 0,
+    val subtitleTracks: List<LocalSubtitleTrack> = emptyList(),
 )
 
 internal object LocalPlaybackPolicy {
@@ -45,6 +57,7 @@ internal object LocalPlaybackPolicy {
             require(!looksRemote(it)) { "remote playback URIs are forbidden" }
             require(it != asset.videoPath) { "separate audio and video assets must use distinct paths" }
         }
+        asset.subtitleTracks.forEach(::validateSubtitleTrack)
         require(asset.startPositionMs >= 0) { "start position must be non-negative" }
         return asset
     }
@@ -55,6 +68,7 @@ internal object LocalPlaybackPolicy {
             videoPath = validated.videoPath,
             audioPath = validated.audioPath,
             startPositionMs = validated.startPositionMs,
+            subtitleTracks = validated.subtitleTracks,
         )
     }
 
@@ -64,12 +78,15 @@ internal object LocalPlaybackPolicy {
             videoPath = validated.videoPath,
             audioPath = validated.audioPath,
             startPositionMs = validated.startPositionMs,
+            subtitleTracks = validated.subtitleTracks,
         )
     }
 
     fun mediaItemFor(asset: LocalPlaybackAsset): MediaItem {
         val request = playbackRequestFor(asset)
+        val subtitleConfigurations = request.subtitleTracks.map(::subtitleConfigurationFor)
         return mediaItemBuilderFor(request.videoPath)
+            .setSubtitleConfigurations(subtitleConfigurations)
             .setTag(request.audioPath)
             .build()
     }
@@ -82,13 +99,17 @@ internal object LocalPlaybackPolicy {
 
     fun splitAudioPathFrom(item: MediaItem): String? = item.localConfiguration?.tag as? String
 
+    fun availableSubtitleLabels(asset: LocalPlaybackAsset): List<String> = validate(asset).subtitleTracks.map { track ->
+        track.label?.takeIf(String::isNotBlank) ?: track.language
+    }
+
     @OptIn(UnstableApi::class)
     fun mediaSourceFor(
         asset: LocalPlaybackAsset,
         mediaSourceFactory: DefaultMediaSourceFactory,
     ): MediaSource {
         val plan = mediaSourcePlanFor(asset)
-        val videoSource = mediaSourceFactory.createMediaSource(mediaItemFor(plan.videoPath))
+        val videoSource = mediaSourceFactory.createMediaSource(mediaItemFor(asset))
         val audioPath = plan.audioPath ?: return videoSource
         val audioSource = mediaSourceFactory.createMediaSource(mediaItemFor(audioPath))
         return MergingMediaSource(videoSource, audioSource)
@@ -98,6 +119,20 @@ internal object LocalPlaybackPolicy {
         if (durationMs <= 0) return false
         return durationMs - positionMs.coerceAtMost(durationMs) <= NearEndCompletedThresholdMs
     }
+
+    private fun validateSubtitleTrack(track: LocalSubtitleTrack) {
+        require(track.path.isNotBlank()) { "subtitle path is required" }
+        require(!looksRemote(track.path)) { "remote playback URIs are forbidden" }
+        require(track.language.isNotBlank()) { "subtitle language is required" }
+        require(track.mimeType in supportedSubtitleMimeTypes) { "unsupported subtitle mime type" }
+    }
+
+    private fun subtitleConfigurationFor(track: LocalSubtitleTrack): SubtitleConfiguration =
+        SubtitleConfiguration.Builder(Uri.fromFile(File(track.path)))
+            .setMimeType(track.mimeType)
+            .setLanguage(track.language)
+            .setLabel(track.label)
+            .build()
 
     private fun mediaItemBuilderFor(path: String): MediaItem.Builder {
         require(path.isNotBlank()) { "local path is required" }
@@ -109,4 +144,10 @@ internal object LocalPlaybackPolicy {
         val normalized = value.trim().lowercase()
         return normalized.startsWith("http://") || normalized.startsWith("https://")
     }
+
+    private val supportedSubtitleMimeTypes = setOf(
+        MimeTypes.TEXT_VTT,
+        MimeTypes.APPLICATION_SUBRIP,
+        MimeTypes.APPLICATION_TTML,
+    )
 }

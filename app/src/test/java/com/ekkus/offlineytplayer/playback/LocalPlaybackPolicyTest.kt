@@ -1,5 +1,6 @@
 package com.ekkus.offlineytplayer.playback
 
+import androidx.media3.common.MimeTypes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,6 +39,68 @@ class LocalPlaybackPolicyTest {
         assertEquals("/library/video-1080p.mp4", request.videoPath)
         assertEquals("/library/audio-128k.m4a", request.audioPath)
         assertEquals(42_000L, request.startPositionMs)
+    }
+
+    @Test
+    fun playbackRequestCarriesLocalSubtitleTracks() {
+        val request = LocalPlaybackPolicy.playbackRequestFor(
+            LocalPlaybackAsset(
+                videoPath = "/library/video-1080p.mp4",
+                title = "Fixture title",
+                subtitleTracks = listOf(
+                    LocalSubtitleTrack(
+                        path = "/library/subtitles/en.vtt",
+                        language = "en-US",
+                        label = "English",
+                        mimeType = MimeTypes.TEXT_VTT,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(1, request.subtitleTracks.size)
+        assertEquals("/library/subtitles/en.vtt", request.subtitleTracks.single().path)
+        assertEquals(listOf("English"), LocalPlaybackPolicy.availableSubtitleLabels(
+            LocalPlaybackAsset(
+                videoPath = "/library/video-1080p.mp4",
+                title = "Fixture title",
+                subtitleTracks = request.subtitleTracks,
+            ),
+        ))
+    }
+
+    @Test
+    fun subtitleTracksRejectRemotePathsAndUnsupportedMimeTypes() {
+        expectIllegalArgument("remote playback URIs are forbidden") {
+            LocalPlaybackPolicy.playbackRequestFor(
+                LocalPlaybackAsset(
+                    videoPath = "/library/video.mp4",
+                    title = "Fixture title",
+                    subtitleTracks = listOf(
+                        LocalSubtitleTrack(
+                            path = "https://example.invalid/en.vtt",
+                            language = "en",
+                            mimeType = MimeTypes.TEXT_VTT,
+                        ),
+                    ),
+                ),
+            )
+        }
+        expectIllegalArgument("unsupported subtitle mime type") {
+            LocalPlaybackPolicy.playbackRequestFor(
+                LocalPlaybackAsset(
+                    videoPath = "/library/video.mp4",
+                    title = "Fixture title",
+                    subtitleTracks = listOf(
+                        LocalSubtitleTrack(
+                            path = "/library/en.txt",
+                            language = "en",
+                            mimeType = "text/plain",
+                        ),
+                    ),
+                ),
+            )
+        }
     }
 
     @Test
