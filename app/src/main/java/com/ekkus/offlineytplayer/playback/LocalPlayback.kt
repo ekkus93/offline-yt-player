@@ -31,6 +31,7 @@ internal data class LocalPlaybackAsset(
     val startPositionMs: Long = 0,
     val subtitleTracks: List<LocalSubtitleTrack> = emptyList(),
     val audioTracks: List<LocalAudioTrack> = emptyList(),
+    val itemId: String? = null,
 )
 
 internal data class LocalPlaybackSourcePlan(
@@ -133,6 +134,9 @@ internal object LocalPlaybackPolicy {
     fun shouldEnableAudioSelection(asset: LocalPlaybackAsset): Boolean = availableAudioLabels(asset).size > 1
 
     fun restoredStartPosition(positionMs: Long): Long = positionMs.coerceAtLeast(0)
+
+    fun persistableItemId(asset: LocalPlaybackAsset): String? =
+        asset.itemId?.takeIf { it.isNotBlank() }
 
     fun shouldPersistPosition(
         lastPersistedPositionMs: Long,

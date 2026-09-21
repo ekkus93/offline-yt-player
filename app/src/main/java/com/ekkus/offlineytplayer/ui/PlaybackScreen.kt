@@ -25,13 +25,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiPlaybackPositionGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 import com.ekkus.offlineytplayer.playback.PlaybackSessionService
 import java.util.concurrent.Executor
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 internal object PlayerLayoutPolicy {
     const val VideoAspectRatio = 16f / 9f
@@ -51,12 +55,60 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
     var selectedAudioIndex by remember(validated) { mutableIntStateOf(if (audioLabels.isEmpty()) -1 else 0) }
     var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
 
-    DisposableEffect(context, validated.videoPath, validated.audioPath, validated.subtitleTracks, validated.audioTracks, validated.startPositionMs) {
+    DisposableEffect(
+        context,
+        validated.videoPath,
+        validated.audioPath,
+        validated.subtitleTracks,
+        validated.audioTracks,
+        validated.startPositionMs,
+        validated.itemId,
+    ) {
         val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         val mainHandler = Handler(Looper.getMainLooper())
         val mainExecutor = Executor { command -> mainHandler.post(command) }
+        val persistenceExecutor = playbackPersistenceExecutor()
+        val databasePath = java.io.File(context.filesDir, "offline-yt-player.sqlite3").absolutePath
+        val persistableItemId = LocalPlaybackPolicy.persistableItemId(validated)
         var acquiredController: MediaController? = null
+        var disposed = false
+        var lastSavedPositionMs = LocalPlaybackPolicy.restoredStartPosition(validated.startPositionMs)
+
+        fun persistPlaybackPosition(finalTransition: Boolean) {
+            val itemId = persistableItemId ?: return
+            val activeController = acquiredController ?: return
+            val durationMs = activeController.knownDurationMs()
+            val currentPositionMs = activeController.knownPositionMs()
+            val persistedPositionMs = if (durationMs == null) {
+                currentPositionMs
+            } else {
+                LocalPlaybackPolicy.persistedPositionForStop(currentPositionMs, durationMs)
+            }
+            if (!finalTransition && durationMs != null && !LocalPlaybackPolicy.shouldPersistPosition(
+                    lastPersistedPositionMs = lastSavedPositionMs,
+                    currentPositionMs = currentPositionMs,
+                    durationMs = durationMs,
+                )
+            ) {
+                return
+            }
+            lastSavedPositionMs = persistedPositionMs
+            persistenceExecutor.execute {
+                GeneratedUniffiPlaybackPositionGateway.open(databasePath).use { gateway ->
+                    gateway.savePlaybackPosition(itemId, persistedPositionMs, durationMs)
+                }
+            }
+        }
+
+        val periodicSaver = object : Runnable {
+            override fun run() {
+                if (disposed) return
+                persistPlaybackPosition(finalTransition = false)
+                mainHandler.postDelayed(this, LocalPlaybackPolicy.PositionPersistCadenceMs)
+            }
+        }
+
         future.addListener(
             {
                 if (!future.isCancelled) {
@@ -64,19 +116,24 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
                         acquiredController = connected
                         connected.setMediaItem(
                             LocalPlaybackPolicy.mediaItemFor(validated),
-                            validated.startPositionMs,
+                            LocalPlaybackPolicy.restoredStartPosition(validated.startPositionMs),
                         )
                         connected.prepare()
                         controller = connected
+                        mainHandler.postDelayed(periodicSaver, LocalPlaybackPolicy.PositionPersistCadenceMs)
                     }
                 }
             },
             mainExecutor,
         )
         onDispose {
+            disposed = true
+            mainHandler.removeCallbacks(periodicSaver)
+            persistPlaybackPosition(finalTransition = true)
             future.cancel(true)
             if (controller === acquiredController) controller = null
             acquiredController?.release()
+            persistenceExecutor.shutdown()
         }
     }
 
@@ -181,3 +238,13 @@ private fun nextSpeed(current: Float): Float = when {
     current < 2f -> 2f
     else -> 0.75f
 }
+
+private fun playbackPersistenceExecutor(): ExecutorService =
+    Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "offline-yt-playback-position").apply { isDaemon = true }
+    }
+
+private fun MediaController.knownPositionMs(): Long = currentPosition.coerceAtLeast(0L)
+
+private fun MediaController.knownDurationMs(): Long? =
+    duration.takeIf { value -> value > 0L && value != C.TIME_UNSET }

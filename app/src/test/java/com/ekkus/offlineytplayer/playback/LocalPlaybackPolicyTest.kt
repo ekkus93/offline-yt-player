@@ -139,6 +139,18 @@ class LocalPlaybackPolicyTest {
     }
 
     @Test
+    fun persistedPlaybackAssetsCarryLibraryIdentityWhenAvailable() {
+        val asset = LocalPlaybackAsset(
+            videoPath = "/library/video-1080p.mp4",
+            title = "Fixture title",
+            itemId = "item-1",
+        )
+
+        assertEquals("item-1", LocalPlaybackPolicy.persistableItemId(asset))
+        assertEquals(null, LocalPlaybackPolicy.persistableItemId(asset.copy(itemId = "")))
+    }
+
+    @Test
     fun audioSelectionIsDisabledWhenOneOrZeroTracksAreAvailable() {
         assertFalse(LocalPlaybackPolicy.shouldEnableAudioSelection(
             LocalPlaybackAsset(videoPath = "/library/video.mp4", title = "Fixture title"),

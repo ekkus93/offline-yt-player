@@ -51,6 +51,7 @@ class PlaybackPolicyTest {
         requireNotNull(asset)
         assertEquals("Offline fixture", asset.title)
         assertEquals(12_345, asset.startPositionMs)
+        assertEquals("item-1", asset.itemId)
         assertFalse(LocalPlaybackPolicy.UsesNetworkUris)
     }
 
