@@ -1,4 +1,4 @@
-use crate::{LibraryItem, LibraryStore, MediaKind, validate_relative_library_path};
+use crate::{validate_relative_library_path, LibraryItem, LibraryStore, MediaKind};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -57,7 +57,10 @@ fn playback_asset(item: &LibraryItem) -> FfiLibraryPlaybackAsset {
         return unavailable(item, "Download is incomplete");
     }
 
-    let video = item.assets.iter().find(|asset| asset.kind == MediaKind::Video);
+    let video = item
+        .assets
+        .iter()
+        .find(|asset| asset.kind == MediaKind::Video);
     let Some(video) = video else {
         return unavailable(item, "Completed item has no local video asset");
     };
@@ -65,7 +68,10 @@ fn playback_asset(item: &LibraryItem) -> FfiLibraryPlaybackAsset {
         return unavailable(item, "Local video asset path is invalid");
     }
 
-    let audio = item.assets.iter().find(|asset| asset.kind == MediaKind::Audio);
+    let audio = item
+        .assets
+        .iter()
+        .find(|asset| asset.kind == MediaKind::Audio);
     if let Some(audio) = audio {
         if validate_relative_library_path(&audio.relative_path).is_err() {
             return unavailable(item, "Local audio asset path is invalid");
@@ -131,8 +137,14 @@ mod tests {
             ],
         ));
         assert!(descriptor.playable);
-        assert_eq!(descriptor.video_relative_path.as_deref(), Some("items/item-1/video.mp4"));
-        assert_eq!(descriptor.audio_relative_path.as_deref(), Some("items/item-1/audio.m4a"));
+        assert_eq!(
+            descriptor.video_relative_path.as_deref(),
+            Some("items/item-1/video.mp4")
+        );
+        assert_eq!(
+            descriptor.audio_relative_path.as_deref(),
+            Some("items/item-1/audio.m4a")
+        );
         assert!(descriptor.unavailable_reason.is_none());
     }
 
@@ -140,11 +152,17 @@ mod tests {
     fn incomplete_or_missing_video_is_explicitly_unavailable() {
         let incomplete = playback_asset(&item(false, vec![]));
         assert!(!incomplete.playable);
-        assert_eq!(incomplete.unavailable_reason.as_deref(), Some("Download is incomplete"));
+        assert_eq!(
+            incomplete.unavailable_reason.as_deref(),
+            Some("Download is incomplete")
+        );
 
         let missing = playback_asset(&item(true, vec![]));
         assert!(!missing.playable);
-        assert_eq!(missing.unavailable_reason.as_deref(), Some("Completed item has no local video asset"));
+        assert_eq!(
+            missing.unavailable_reason.as_deref(),
+            Some("Completed item has no local video asset")
+        );
     }
 
     #[test]
@@ -155,6 +173,9 @@ mod tests {
         ));
         assert!(!descriptor.playable);
         assert!(descriptor.video_relative_path.is_none());
-        assert_eq!(descriptor.unavailable_reason.as_deref(), Some("Local video asset path is invalid"));
+        assert_eq!(
+            descriptor.unavailable_reason.as_deref(),
+            Some("Local video asset path is invalid")
+        );
     }
 }
