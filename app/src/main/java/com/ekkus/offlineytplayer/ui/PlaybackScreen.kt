@@ -25,11 +25,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
+import com.ekkus.offlineytplayer.playback.LocalSubtitleTrack
 import com.ekkus.offlineytplayer.playback.PlaybackSessionService
 import java.util.concurrent.Executor
 
@@ -46,7 +48,7 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
     val context = LocalContext.current
     val subtitleLabels = remember(validated) { LocalPlaybackPolicy.availableSubtitleLabels(validated) }
-    var selectedSubtitleIndex by remember(validated) { mutableIntStateOf(if (subtitleLabels.isEmpty()) -1 else 0) }
+    var selectedSubtitleIndex by remember(validated) { mutableIntStateOf(-1) }
     var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
 
     DisposableEffect(context, validated.videoPath, validated.audioPath, validated.subtitleTracks, validated.startPositionMs) {
@@ -64,6 +66,7 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
                             LocalPlaybackPolicy.mediaItemFor(validated),
                             validated.startPositionMs,
                         )
+                        applySubtitleSelection(connected, validated.subtitleTracks, selectedSubtitleIndex)
                         connected.prepare()
                         controller = connected
                     }
@@ -135,7 +138,9 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
                 label = subtitleControlLabel(subtitleLabels, selectedSubtitleIndex),
                 enabled = controller != null && subtitleLabels.isNotEmpty(),
             ) {
-                selectedSubtitleIndex = (selectedSubtitleIndex + 1) % subtitleLabels.size
+                val nextIndex = nextSubtitleIndex(selectedSubtitleIndex, subtitleLabels.size)
+                selectedSubtitleIndex = nextIndex
+                controller?.let { applySubtitleSelection(it, validated.subtitleTracks, nextIndex) }
             }
             SecondaryControl("Audio", enabled = false) { }
         }
@@ -155,10 +160,33 @@ private fun androidx.compose.foundation.layout.RowScope.SecondaryControl(
     ) { Text(label) }
 }
 
-private fun subtitleControlLabel(labels: List<String>, selectedIndex: Int): String = when {
+private fun applySubtitleSelection(
+    controller: MediaController,
+    tracks: List<LocalSubtitleTrack>,
+    selectedIndex: Int,
+) {
+    val parameters = controller.trackSelectionParameters.buildUpon()
+    if (selectedIndex in tracks.indices) {
+        parameters
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .setPreferredTextLanguage(tracks[selectedIndex].language)
+    } else {
+        parameters
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .setPreferredTextLanguage(null)
+    }
+    controller.trackSelectionParameters = parameters.build()
+}
+
+internal fun nextSubtitleIndex(currentIndex: Int, trackCount: Int): Int {
+    if (trackCount <= 0) return -1
+    return if (currentIndex < trackCount - 1) currentIndex + 1 else -1
+}
+
+internal fun subtitleControlLabel(labels: List<String>, selectedIndex: Int): String = when {
     labels.isEmpty() -> "Subtitles"
     selectedIndex in labels.indices -> "Subtitles: ${labels[selectedIndex]}"
-    else -> "Subtitles"
+    else -> "Subtitles: Off"
 }
 
 private fun nextSpeed(current: Float): Float = when {
