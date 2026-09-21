@@ -72,18 +72,29 @@ mod tests {
         drop(store);
 
         let path = database.to_string_lossy().into_owned();
-        let saved = ffi_save_playback_position(path.clone(), "item-1".into(), 25_000, Some(60_000));
+        let saved =
+            ffi_save_playback_position(path.clone(), "item-1".into(), 25_000, Some(60_000));
         assert!(saved.saved);
         assert!(saved.error.is_none());
         assert_eq!(
-            LibraryStore::open(&database).unwrap().get("item-1").unwrap().unwrap().playback_position_ms,
+            LibraryStore::open(&database)
+                .unwrap()
+                .get("item-1")
+                .unwrap()
+                .unwrap()
+                .playback_position_ms,
             25_000,
         );
 
         let completed = ffi_save_playback_position(path, "item-1".into(), 55_000, Some(60_000));
         assert!(completed.saved);
         assert_eq!(
-            LibraryStore::open(&database).unwrap().get("item-1").unwrap().unwrap().playback_position_ms,
+            LibraryStore::open(&database)
+                .unwrap()
+                .get("item-1")
+                .unwrap()
+                .unwrap()
+                .playback_position_ms,
             60_000,
         );
     }
