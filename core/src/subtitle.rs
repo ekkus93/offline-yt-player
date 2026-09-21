@@ -1,4 +1,6 @@
-use crate::{CoreError, ErrorKind, LocalAsset, MediaInfo, MediaKind, SubtitleTrack};
+use crate::{
+    CoreError, DownloadPlanAsset, ErrorKind, LocalAsset, MediaInfo, MediaKind, SubtitleTrack,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubtitleAssetPlan {
@@ -62,10 +64,40 @@ pub fn subtitle_asset_plan(
     })
 }
 
+/// Converts a selected, freshly resolved subtitle track and URL into the same bounded,
+/// provider-neutral asset model used by the download worker. Provider URLs are deliberately not
+/// persisted in `LocalAsset`; only the resulting local path, language-bearing asset id, MIME, size,
+/// and hash survive promotion.
+pub fn subtitle_download_asset(
+    item_id: &str,
+    track: &SubtitleTrack,
+    url: &str,
+) -> Result<DownloadPlanAsset, CoreError> {
+    crate::validate_http_url(url)?;
+    let plan = subtitle_asset_plan(item_id, track)?;
+    Ok(DownloadPlanAsset {
+        asset_id: format!("subtitle:{}:{}", plan.language, plan.track_id),
+        kind: MediaKind::Subtitle,
+        url: url.to_owned(),
+        relative_path: plan.relative_path,
+        expected_bytes: track.estimated_bytes,
+        expected_sha256: None,
+        mime_type: Some(plan.mime_type),
+    })
+}
+
 pub fn local_subtitle_assets(assets: &[LocalAsset]) -> Vec<&LocalAsset> {
     assets
         .iter()
-        .filter(|asset| asset.kind == MediaKind::Subtitle && !asset.relative_path.is_empty())
+        .filter(|asset| {
+            asset.kind == MediaKind::Subtitle
+                && !asset.relative_path.is_empty()
+                && crate::validate_relative_library_path(&asset.relative_path).is_ok()
+                && matches!(
+                    asset.mime_type.as_deref(),
+                    Some("text/vtt" | "application/x-subrip" | "application/ttml+xml")
+                )
+        })
         .collect()
 }
 
@@ -160,6 +192,41 @@ mod tests {
     }
 
     #[test]
+    fn selected_track_becomes_bounded_managed_download_asset() {
+        let asset = subtitle_download_asset(
+            "item-1",
+            &track("human-en", "en", "vtt", false),
+            "https://media.example/captions/en.vtt?token=ephemeral",
+        )
+        .unwrap();
+        assert_eq!(asset.asset_id, "subtitle:en:human-en");
+        assert_eq!(asset.kind, MediaKind::Subtitle);
+        assert_eq!(asset.relative_path, "items/item-1/subtitles/en.vtt");
+        assert_eq!(asset.expected_bytes, Some(42));
+        assert_eq!(asset.mime_type.as_deref(), Some("text/vtt"));
+    }
+
+    #[test]
+    fn subtitle_download_rejects_unsafe_url_and_unsupported_format() {
+        assert!(
+            subtitle_download_asset(
+                "item-1",
+                &track("human-en", "en", "vtt", false),
+                "file:///tmp/en.vtt"
+            )
+            .is_err()
+        );
+        assert!(
+            subtitle_download_asset(
+                "item-1",
+                &track("human-en", "en", "ass", false),
+                "https://media.example/en.ass"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn rejects_unsafe_or_unsupported_subtitle_paths() {
         assert!(subtitle_asset_plan("../item", &track("en", "en", "vtt", false)).is_err());
         assert!(subtitle_asset_plan("item", &track("../en", "en", "vtt", false)).is_err());
@@ -167,26 +234,34 @@ mod tests {
     }
 
     #[test]
-    fn local_playback_discovers_only_subtitle_assets() {
+    fn local_playback_discovers_only_safe_supported_subtitle_assets() {
         let subtitle = LocalAsset {
-            asset_id: "subtitle-en".into(),
+            asset_id: "subtitle:en:human-en".into(),
             kind: MediaKind::Subtitle,
             relative_path: "items/item/subtitles/en.vtt".into(),
             bytes: 42,
             sha256: None,
             mime_type: Some("text/vtt".into()),
         };
-        let video = LocalAsset {
-            asset_id: "video".into(),
-            kind: MediaKind::Video,
-            relative_path: "items/item/video.mp4".into(),
-            bytes: 100,
+        let unsafe_subtitle = LocalAsset {
+            asset_id: "subtitle:bad".into(),
+            kind: MediaKind::Subtitle,
+            relative_path: "../outside.vtt".into(),
+            bytes: 42,
             sha256: None,
-            mime_type: Some("video/mp4".into()),
+            mime_type: Some("text/vtt".into()),
+        };
+        let unsupported_subtitle = LocalAsset {
+            asset_id: "subtitle:ass".into(),
+            kind: MediaKind::Subtitle,
+            relative_path: "items/item/subtitles/en.ass".into(),
+            bytes: 42,
+            sha256: None,
+            mime_type: Some("text/x-ssa".into()),
         };
         assert_eq!(
             vec![&subtitle],
-            local_subtitle_assets(&[subtitle.clone(), video])
+            local_subtitle_assets(&[subtitle.clone(), unsafe_subtitle, unsupported_subtitle,])
         );
     }
 }
