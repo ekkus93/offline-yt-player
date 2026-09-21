@@ -80,7 +80,7 @@ fn delete_io_error(error: std::io::Error) -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{LibraryItem, LocalAsset, MediaKind, SourceIdentity};
+    use crate::{LibraryItem, LocalAsset, MediaKind, SourceIdentity, THUMBNAIL_ASSET_ID};
     use tempfile::tempdir;
 
     fn item() -> LibraryItem {
@@ -110,6 +110,14 @@ mod tests {
                     bytes: 3,
                     sha256: None,
                     mime_type: Some("text/vtt".into()),
+                },
+                LocalAsset {
+                    asset_id: THUMBNAIL_ASSET_ID.into(),
+                    kind: MediaKind::Thumbnail,
+                    relative_path: "items/item-1/thumbnails/thumbnail.jpg".into(),
+                    bytes: 5,
+                    sha256: None,
+                    mime_type: Some("image/jpeg".into()),
                 },
             ],
             created_at_epoch_ms: 1,
@@ -145,9 +153,31 @@ mod tests {
     }
 
     #[test]
-    fn partial_failure_keeps_metadata_and_retry_reconciles() {
+    fn deleting_item_removes_managed_thumbnail_before_metadata() {
         let store = LibraryStore::open_in_memory().unwrap();
         let item = item();
+        persist(&store, &item);
+        let root = tempdir().unwrap();
+        let thumbnail = item
+            .assets
+            .iter()
+            .find(|asset| asset.kind == MediaKind::Thumbnail)
+            .unwrap();
+        let thumbnail_path = root.path().join(&thumbnail.relative_path);
+        std::fs::create_dir_all(thumbnail_path.parent().unwrap()).unwrap();
+        std::fs::write(&thumbnail_path, [1_u8; 5]).unwrap();
+
+        delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap();
+
+        assert!(!thumbnail_path.exists());
+        assert!(store.get("item-1").unwrap().is_none());
+    }
+
+    #[test]
+    fn partial_failure_keeps_metadata_and_retry_reconciles() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut item = item();
+        item.assets.truncate(2);
         persist(&store, &item);
         let root = tempdir().unwrap();
         let video = root.path().join(&item.assets[0].relative_path);
