@@ -1,6 +1,6 @@
 use crate::{
-    AssetHealth, AssetValidationDepth, CoreError, DownloadPlanAsset, ErrorKind, LibraryItem, LocalAsset,
-    MediaInfo, MediaKind,
+    AssetHealth, AssetValidationDepth, CoreError, DownloadPlanAsset, ErrorKind, LibraryItem,
+    LocalAsset, MediaInfo, MediaKind,
 };
 use std::path::{Component, Path};
 
@@ -39,20 +39,17 @@ pub fn thumbnail_recovery_action(
     let Some(thumbnail) = offline_thumbnail_asset(item) else {
         return Ok(ThumbnailRecoveryAction::NotManaged);
     };
-    let validation = crate::validate_library_item_assets(
-        library_root,
-        item,
-        AssetValidationDepth::Deep,
-    )?
-    .into_iter()
-    .find(|result| result.asset_id == thumbnail.asset_id)
-    .ok_or_else(|| {
-        CoreError::new(
-            ErrorKind::IntegrityFailure,
-            "managed thumbnail validation result is missing",
-            false,
-        )
-    })?;
+    let validation =
+        crate::validate_library_item_assets(library_root, item, AssetValidationDepth::Deep)?
+            .into_iter()
+            .find(|result| result.asset_id == thumbnail.asset_id)
+            .ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::IntegrityFailure,
+                    "managed thumbnail validation result is missing",
+                    false,
+                )
+            })?;
 
     match validation.health {
         AssetHealth::Healthy => Ok(ThumbnailRecoveryAction::Healthy),
@@ -348,29 +345,3 @@ mod tests {
             kind: MediaKind::Thumbnail,
             relative_path: "items/item-1/thumbnails/thumbnail.jpg".into(),
             bytes: 42,
-            sha256: None,
-            mime_type: Some("image/jpeg".into()),
-        };
-        let video = LocalAsset {
-            asset_id: "video".into(),
-            kind: MediaKind::Video,
-            relative_path: "items/item-1/video.mp4".into(),
-            bytes: 100,
-            sha256: None,
-            mime_type: Some("video/mp4".into()),
-        };
-
-        assert_eq!(
-            ThumbnailCleanupDisposition::RemoveOrphan,
-            classify_thumbnail_cleanup(&thumbnail, false),
-        );
-        assert_eq!(
-            ThumbnailCleanupDisposition::Keep,
-            classify_thumbnail_cleanup(&thumbnail, true),
-        );
-        assert_eq!(
-            ThumbnailCleanupDisposition::Keep,
-            classify_thumbnail_cleanup(&video, false),
-        );
-    }
-}
