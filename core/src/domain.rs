@@ -111,6 +111,13 @@ pub struct MediaInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubtitleAssetIdentity {
+    pub language: String,
+    pub format: String,
+    pub track_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocalAsset {
     pub asset_id: String,
     pub kind: MediaKind,
