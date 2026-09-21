@@ -1,5 +1,8 @@
 package com.ekkus.offlineytplayer.ui
 
+import android.content.ComponentName
+import android.os.Handler
+import android.os.Looper
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,14 +17,20 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
+import com.ekkus.offlineytplayer.playback.PlaybackSessionService
+import java.util.concurrent.Executor
 
 internal object PlayerLayoutPolicy {
     const val VideoAspectRatio = 16f / 9f
@@ -35,17 +44,36 @@ internal object PlayerLayoutPolicy {
 internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit) {
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
     val context = LocalContext.current
-    val player = remember(validated.videoPath) {
-        ExoPlayer.Builder(context)
-            .setSeekBackIncrementMs(LocalPlaybackPolicy.SkipIntervalMs)
-            .setSeekForwardIncrementMs(LocalPlaybackPolicy.SkipIntervalMs)
-            .build()
-            .apply {
-                setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated.videoPath), validated.startPositionMs)
-                prepare()
-            }
+    var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
+
+    DisposableEffect(context, validated.videoPath, validated.startPositionMs) {
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val future = MediaController.Builder(context, token).buildAsync()
+        val mainHandler = Handler(Looper.getMainLooper())
+        val mainExecutor = Executor { command -> mainHandler.post(command) }
+        var acquiredController: MediaController? = null
+        future.addListener(
+            {
+                if (!future.isCancelled) {
+                    runCatching { future.get() }.getOrNull()?.let { connected ->
+                        acquiredController = connected
+                        connected.setMediaItem(
+                            LocalPlaybackPolicy.mediaItemFor(validated.videoPath),
+                            validated.startPositionMs,
+                        )
+                        connected.prepare()
+                        controller = connected
+                    }
+                }
+            },
+            mainExecutor,
+        )
+        onDispose {
+            future.cancel(true)
+            if (controller === acquiredController) controller = null
+            acquiredController?.release()
+        }
     }
-    DisposableEffect(player) { onDispose { player.release() } }
 
     Column(
         Modifier.fillMaxSize().padding(MidnightTransit.ScreenSpacing),
@@ -67,26 +95,29 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
                         FrameLayout.LayoutParams.MATCH_PARENT,
                     )
                     useController = false
-                    this.player = player
+                    player = controller
                 }
             },
-            update = { it.player = player },
+            update = { it.player = controller },
         )
-        Text("Offline local playback")
+        Text(if (controller == null) "Connecting to playback session…" else "Offline local playback")
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
         ) {
             OutlinedButton(
-                onClick = { player.seekBack() },
+                onClick = { controller?.seekBack() },
+                enabled = controller != null,
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("-10s") }
             Button(
-                onClick = { if (player.isPlaying) player.pause() else player.play() },
+                onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } },
+                enabled = controller != null,
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("Play/Pause") }
             OutlinedButton(
-                onClick = { player.seekForward() },
+                onClick = { controller?.seekForward() },
+                enabled = controller != null,
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("+10s") }
         }
@@ -94,9 +125,11 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
         ) {
-            SecondaryControl("Speed") { player.setPlaybackSpeed(nextSpeed(player.playbackParameters.speed)) }
-            SecondaryControl("Subtitles") { }
-            SecondaryControl("Audio") { }
+            SecondaryControl("Speed", enabled = controller != null) {
+                controller?.let { it.setPlaybackSpeed(nextSpeed(it.playbackParameters.speed)) }
+            }
+            SecondaryControl("Subtitles", enabled = false) { }
+            SecondaryControl("Audio", enabled = false) { }
         }
     }
 }
@@ -104,10 +137,12 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.SecondaryControl(
     label: String,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
     ) { Text(label) }
 }
