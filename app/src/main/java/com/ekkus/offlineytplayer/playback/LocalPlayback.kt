@@ -25,6 +25,12 @@ internal data class LocalPlaybackSourcePlan(
         get() = audioPath != null
 }
 
+internal data class LocalPlaybackRequest(
+    val videoPath: String,
+    val audioPath: String? = null,
+    val startPositionMs: Long = 0,
+)
+
 internal object LocalPlaybackPolicy {
     const val SkipIntervalMs = 10_000L
     const val NearEndCompletedThresholdMs = 30_000L
@@ -52,10 +58,19 @@ internal object LocalPlaybackPolicy {
         )
     }
 
-    fun mediaItemFor(asset: LocalPlaybackAsset): MediaItem {
+    fun playbackRequestFor(asset: LocalPlaybackAsset): LocalPlaybackRequest {
         val validated = validate(asset)
-        return mediaItemBuilderFor(validated.videoPath)
-            .setTag(validated.audioPath)
+        return LocalPlaybackRequest(
+            videoPath = validated.videoPath,
+            audioPath = validated.audioPath,
+            startPositionMs = validated.startPositionMs,
+        )
+    }
+
+    fun mediaItemFor(asset: LocalPlaybackAsset): MediaItem {
+        val request = playbackRequestFor(asset)
+        return mediaItemBuilderFor(request.videoPath)
+            .setTag(request.audioPath)
             .build()
     }
 

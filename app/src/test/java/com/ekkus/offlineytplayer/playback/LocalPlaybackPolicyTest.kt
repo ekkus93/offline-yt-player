@@ -25,17 +25,19 @@ class LocalPlaybackPolicyTest {
     }
 
     @Test
-    fun mediaItemCarriesSplitAudioAssetForSessionPlayback() {
-        val item = LocalPlaybackPolicy.mediaItemFor(
+    fun playbackRequestCarriesSplitAudioAssetForSessionPlayback() {
+        val request = LocalPlaybackPolicy.playbackRequestFor(
             LocalPlaybackAsset(
                 videoPath = "/library/video-1080p.mp4",
                 audioPath = "/library/audio-128k.m4a",
                 title = "Fixture title",
+                startPositionMs = 42_000L,
             ),
         )
 
-        assertEquals("/library/audio-128k.m4a", LocalPlaybackPolicy.splitAudioPathFrom(item))
-        assertEquals("file:///library/video-1080p.mp4", item.localConfiguration?.uri.toString())
+        assertEquals("/library/video-1080p.mp4", request.videoPath)
+        assertEquals("/library/audio-128k.m4a", request.audioPath)
+        assertEquals(42_000L, request.startPositionMs)
     }
 
     @Test
