@@ -1,7 +1,6 @@
 package com.ekkus.offlineytplayer.playback
 
 import android.net.Uri
-import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
@@ -31,7 +30,6 @@ internal object LocalPlaybackPolicy {
     const val NearEndCompletedThresholdMs = 30_000L
     const val UsesNetworkUris = false
     const val SupportsLandscapeAction = false
-    const val ExtraSplitAudioPath = "com.ekkus.offlineytplayer.extra.SPLIT_AUDIO_PATH"
 
     fun validate(asset: LocalPlaybackAsset): LocalPlaybackAsset {
         require(asset.videoPath.isNotBlank()) { "video path is required" }
@@ -56,15 +54,9 @@ internal object LocalPlaybackPolicy {
 
     fun mediaItemFor(asset: LocalPlaybackAsset): MediaItem {
         val validated = validate(asset)
-        val builder = mediaItemBuilderFor(validated.videoPath)
-        validated.audioPath?.let { audioPath ->
-            builder.setRequestMetadata(
-                MediaItem.RequestMetadata.Builder()
-                    .setExtras(Bundle().apply { putString(ExtraSplitAudioPath, audioPath) })
-                    .build(),
-            )
-        }
-        return builder.build()
+        return mediaItemBuilderFor(validated.videoPath)
+            .setTag(validated.audioPath)
+            .build()
     }
 
     fun mediaItemFor(path: String): MediaItem {
@@ -73,8 +65,7 @@ internal object LocalPlaybackPolicy {
         return mediaItemBuilderFor(path).build()
     }
 
-    fun splitAudioPathFrom(item: MediaItem): String? =
-        item.requestMetadata.extras?.getString(ExtraSplitAudioPath)
+    fun splitAudioPathFrom(item: MediaItem): String? = item.localConfiguration?.tag as? String
 
     @OptIn(UnstableApi::class)
     fun mediaSourceFor(
