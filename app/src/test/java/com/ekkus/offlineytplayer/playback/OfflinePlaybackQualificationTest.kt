@@ -41,7 +41,7 @@ class OfflinePlaybackQualificationTest {
         assertTrue(controller.contains("player.setMediaSource(LocalPlaybackPolicy.mediaSourceFor"))
         assertTrue(controller.contains("player.seekTo(plan.startPositionMs)"))
         assertTrue(controller.contains("player.prepare()"))
-        assertTrue(playback.contains("MediaItem.fromUri(Uri.fromFile(File(path)))"))
+        assertTrue(playback.contains("MediaItem.Builder().setUri(Uri.fromFile(File(path)))"))
         assertTrue(playback.contains("remote playback URIs are forbidden"))
     }
 }

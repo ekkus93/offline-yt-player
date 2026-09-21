@@ -25,6 +25,12 @@ internal data class LocalPlaybackSourcePlan(
         get() = audioPath != null
 }
 
+internal data class LocalPlaybackRequest(
+    val videoPath: String,
+    val audioPath: String? = null,
+    val startPositionMs: Long = 0,
+)
+
 internal object LocalPlaybackPolicy {
     const val SkipIntervalMs = 10_000L
     const val NearEndCompletedThresholdMs = 30_000L
@@ -52,11 +58,29 @@ internal object LocalPlaybackPolicy {
         )
     }
 
+    fun playbackRequestFor(asset: LocalPlaybackAsset): LocalPlaybackRequest {
+        val validated = validate(asset)
+        return LocalPlaybackRequest(
+            videoPath = validated.videoPath,
+            audioPath = validated.audioPath,
+            startPositionMs = validated.startPositionMs,
+        )
+    }
+
+    fun mediaItemFor(asset: LocalPlaybackAsset): MediaItem {
+        val request = playbackRequestFor(asset)
+        return mediaItemBuilderFor(request.videoPath)
+            .setTag(request.audioPath)
+            .build()
+    }
+
     fun mediaItemFor(path: String): MediaItem {
         require(path.isNotBlank()) { "local path is required" }
         require(!looksRemote(path)) { "remote playback URIs are forbidden" }
-        return MediaItem.fromUri(Uri.fromFile(File(path)))
+        return mediaItemBuilderFor(path).build()
     }
+
+    fun splitAudioPathFrom(item: MediaItem): String? = item.localConfiguration?.tag as? String
 
     @OptIn(UnstableApi::class)
     fun mediaSourceFor(
@@ -73,6 +97,12 @@ internal object LocalPlaybackPolicy {
     fun completedByPosition(positionMs: Long, durationMs: Long): Boolean {
         if (durationMs <= 0) return false
         return durationMs - positionMs.coerceAtMost(durationMs) <= NearEndCompletedThresholdMs
+    }
+
+    private fun mediaItemBuilderFor(path: String): MediaItem.Builder {
+        require(path.isNotBlank()) { "local path is required" }
+        require(!looksRemote(path)) { "remote playback URIs are forbidden" }
+        return MediaItem.Builder().setUri(Uri.fromFile(File(path)))
     }
 
     private fun looksRemote(value: String): Boolean {
