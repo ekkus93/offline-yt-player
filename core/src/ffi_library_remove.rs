@@ -1,4 +1,4 @@
-use crate::{delete_library_item_owned_assets, CoreError, LibraryStore};
+use crate::{CoreError, LibraryStore, delete_library_item_owned_assets};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -41,7 +41,9 @@ impl FfiLibraryRemoveService {
             return FfiLibraryRemoveResult {
                 removed: false,
                 item_id: None,
-                error_message: Some("Destructive library removal requires explicit confirmation".into()),
+                error_message: Some(
+                    "Destructive library removal requires explicit confirmation".into(),
+                ),
             };
         }
         match remove_item(&self.library, Path::new(&library_root), &item_id) {
