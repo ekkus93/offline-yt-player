@@ -38,6 +38,8 @@ import androidx.compose.ui.text.style.TextAlign
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
+import com.ekkus.offlineytplayer.settings.AppSettingsMutation
+import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -59,13 +61,15 @@ internal fun OfflineYTPlayerApp(
     downloadsState: DownloadsScreenState = DownloadsScreenState.Unavailable("Downloads repository is not connected yet; no empty-queue claim is being made."),
     downloadControlGateway: AppDownloadControlGateway? = null,
     sourceAnalysisGateway: AppSourceAnalysisGateway? = null,
+    settingsSnapshot: AppSettingsSnapshot = AppSettingsSnapshot(),
+    onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit = {},
 ) {
     OfflineYTPlayerTheme {
         var destination by rememberSaveable(initialSharedUrl) { mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add) }
         var playbackAsset by remember { mutableStateOf<LocalPlaybackAsset?>(null) }
         val activePlaybackAsset = playbackAsset
         if (activePlaybackAsset != null) PortraitPlayerScreen(activePlaybackAsset) { playbackAsset = null } else FixedRegionScaffold(destination.label, destination, { destination = it }) { padding ->
-            DestinationContent(destination, padding, initialSharedUrl, libraryState, downloadsState, downloadControlGateway, sourceAnalysisGateway, { destination = AppDestination.Add }, { playbackAsset = it })
+            DestinationContent(destination, padding, initialSharedUrl, libraryState, downloadsState, downloadControlGateway, sourceAnalysisGateway, settingsSnapshot, onUpdateSettings, { destination = AppDestination.Add }, { playbackAsset = it })
         }
     }
 }
@@ -77,23 +81,23 @@ internal fun FixedRegionScaffold(title: String, destination: AppDestination, onD
 }
 
 @Composable
-private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?, libraryState: LibraryScreenState, downloadsState: DownloadsScreenState, downloadControlGateway: AppDownloadControlGateway?, sourceAnalysisGateway: AppSourceAnalysisGateway?, onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Unit) {
+private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?, libraryState: LibraryScreenState, downloadsState: DownloadsScreenState, downloadControlGateway: AppDownloadControlGateway?, sourceAnalysisGateway: AppSourceAnalysisGateway?, settingsSnapshot: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit, onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Unit) {
     Box(Modifier.fillMaxSize().padding(padding)) { when (destination) {
         AppDestination.Library -> LibraryScreen(onAdd, onPlay, libraryState)
         AppDestination.Downloads -> DownloadsScreen(downloadsState, downloadControlGateway)
-        AppDestination.Add -> AddScreen(PaddingValues(), initialSharedUrl, sourceAnalysisGateway, downloadControlGateway)
-        AppDestination.Settings -> SettingsScreen(PaddingValues())
+        AppDestination.Add -> AddScreen(PaddingValues(), initialSharedUrl, sourceAnalysisGateway, downloadControlGateway, settingsSnapshot)
+        AppDestination.Settings -> SettingsScreen(PaddingValues(), settingsSnapshot, onUpdateSettings)
     } }
 }
 
-@Composable private fun SettingsScreen(padding: PaddingValues) { var section by rememberSaveable { mutableStateOf<SettingsSection?>(null) }; if (section == null) SettingsHub(padding) { section = it } else SettingsPage(padding, section!!) { section = null } }
+@Composable private fun SettingsScreen(padding: PaddingValues, settings: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit) { var section by rememberSaveable { mutableStateOf<SettingsSection?>(null) }; if (section == null) SettingsHub(padding) { section = it } else SettingsPage(padding, section!!, settings, onUpdateSettings) { section = null } }
 @Composable private fun SettingsHub(padding: PaddingValues, onOpen: (SettingsSection) -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Text("Choose a settings category. Primary settings stay on dedicated fixed-layout pages."); SettingsSection.entries.forEach { section -> OutlinedButton(onClick = { onOpen(section) }, modifier = Modifier.fillMaxWidth().weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(section.label) } } } }
-@Composable private fun SettingsPage(padding: PaddingValues, section: SettingsSection, onBack: () -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(section.label); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; when (section) { SettingsSection.Downloads -> { SettingValue("Default quality", "Best compatible"); SettingToggle("Wi-Fi only", true); SettingValue("Concurrent downloads", "2"); SettingValue("Subtitles", "Preferred language"); SettingValue("Retry", "Automatic") }; SettingsSection.Playback -> { SettingToggle("Remember position", true); SettingValue("Default speed", "1.0×"); SettingValue("Skip interval", "10 seconds"); SettingValue("Subtitles", "Remember selection"); SettingValue("Audio", "Default track") }; SettingsSection.Storage -> { SettingValue("Storage location", "App media directory"); SettingValue("Used / free", "Calculated on device"); SettingValue("Thumbnail cache", "Manage"); SettingValue("Incomplete files", "Clean up") }; SettingsSection.Appearance -> { SettingValue("Theme", "Dark · Light · System"); SettingValue("Default", "Dark"); SettingValue("Library layout", "List") }; SettingsSection.About -> { SettingValue("Version / build", "0.1.0"); SettingValue("Licenses", "Open-source notices"); SettingValue("Privacy", "Local-first"); SettingValue("Diagnostics", "Export when enabled"); SettingValue("Source-service notice", "Review before public release") } } } }
+@Composable private fun SettingsPage(padding: PaddingValues, section: SettingsSection, settings: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit, onBack: () -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(section.label); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; when (section) { SettingsSection.Downloads -> { OutlinedButton(onClick = { onUpdateSettings { defaultQuality = if (settings.defaultQuality == "Best compatible") "Audio only" else "Best compatible" } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Default quality: ${settings.defaultQuality}") }; SettingToggle("Wi-Fi only", settings.wifiOnlyDownloads) { checked -> onUpdateSettings { wifiOnlyDownloads = checked } }; OutlinedButton(onClick = { onUpdateSettings { maxConcurrentDownloads = if (settings.maxConcurrentDownloads >= 4) 1 else settings.maxConcurrentDownloads + 1 } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Concurrent downloads: ${settings.maxConcurrentDownloads}") }; OutlinedButton(onClick = { onUpdateSettings { subtitleDefault = if (settings.subtitleDefault == "Preferred language") "None" else "Preferred language" } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Subtitles: ${settings.subtitleDefault}") }; SettingValue("Retry", "Automatic runtime policy") }; SettingsSection.Playback -> { SettingToggle("Remember position", settings.rememberPlaybackPosition) { checked -> onUpdateSettings { rememberPlaybackPosition = checked } }; SettingValue("Default speed", "${settings.playbackSpeed}×"); SettingValue("Skip interval", "10 seconds"); SettingValue("Subtitles", "Remember selection"); SettingValue("Audio", "Default track") }; SettingsSection.Storage -> { SettingValue("Storage location", "App media directory"); SettingValue("Used / free", "Calculated on device"); SettingValue("Thumbnail cache", "Manage"); SettingValue("Incomplete files", "Clean up") }; SettingsSection.Appearance -> { SettingValue("Theme", settings.appearance.name); SettingValue("Default", "System"); SettingValue("Library layout", settings.libraryLayout.name) }; SettingsSection.About -> { SettingValue("Version / build", "0.1.0"); SettingValue("Licenses", "Open-source notices"); SettingValue("Privacy", "Local-first"); SettingValue("Diagnostics", "Export when enabled"); SettingValue("Source-service notice", "Review before public release") } } } }
 @Composable private fun SettingValue(label: String, value: String) { Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Text(value, textAlign = TextAlign.End) } }
-@Composable private fun SettingToggle(label: String, initial: Boolean) { var checked by rememberSaveable(label) { mutableStateOf(initial) }; Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Switch(checked = checked, onCheckedChange = { checked = it }) } }
+@Composable private fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit = {}) { Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Switch(checked = checked, onCheckedChange = onCheckedChange) } }
 
 @Composable
-private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceGateway: AppSourceAnalysisGateway?, downloadControlGateway: AppDownloadControlGateway?) {
+private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceGateway: AppSourceAnalysisGateway?, downloadControlGateway: AppDownloadControlGateway?, settings: AppSettingsSnapshot) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var url by rememberSaveable(initialSharedUrl) { mutableStateOf(initialSharedUrl.orEmpty()) }
@@ -120,6 +124,7 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceG
     }
     Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text("Download a supported video for offline playback.")
+        Text("Settings: ${downloadSettingsSummary(settings)}")
         OutlinedTextField(value = url, onValueChange = { url = it; cancelSupersededAnalysis(); setup = null; status = null }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = { val pasted = clipboard.getText()?.text?.takeIf { it.isNotBlank() }; if (pasted == null) status = "Clipboard does not contain a video URL." else { cancelSupersededAnalysis(); url = pasted.take(4096); setup = null; status = "Pasted clipboard text. Choose Analyze to validate it." } }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Paste") }
@@ -142,14 +147,14 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceG
                         sourceUrl = analysis.sourceUrl,
                         title = analysis.title,
                         durationLabel = analysis.durationMs?.let(::formatSetupDuration) ?: "Unknown duration",
-                        qualityLabel = analysis.qualityLabel,
+                        qualityLabel = preferredQualityLabel(qualityLabels, settings.defaultQuality, analysis.qualityLabel),
                         estimatedSizeLabel = analysis.estimatedBytes?.let(::formatSetupBytes) ?: "Size unavailable",
                         readyForDownload = true,
                         thumbnailUrl = analysis.thumbnailUrl,
                         qualityOptions = qualityLabels,
-                        subtitleOptions = emptyList(),
+                        subtitleOptions = listOf(settings.subtitleDefault),
                         audioOptions = listOf("Default track"),
-                        containerOptions = listOf("Best compatible"),
+                        containerOptions = listOf("Best compatible", downloadSettingsSummary(settings)),
                     )
                     status = null
                 }
@@ -165,13 +170,13 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceG
                     val gateway = downloadControlGateway
                     if (gateway == null) { status = "Download scheduler is unavailable."; return@DownloadSetupPreview }
                     scheduling = true
-                    status = "Scheduling download…"
+                    status = "Scheduling download with ${downloadSettingsSummary(settings)}…"
                     val jobId = setupState.sourceUrl
                     scope.launch {
                         val result = withContext(Dispatchers.IO) { gateway.enqueue(jobId) }
                         scheduling = false
                         result.error?.let { status = it.message; return@launch }
-                        status = if (result.value == true) "Download scheduled." else "Download was not queued."
+                        status = if (result.value == true) "Download scheduled with ${downloadSettingsSummary(settings)}." else "Download was not queued."
                     }
                 },
             )
@@ -182,6 +187,8 @@ private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceG
 private fun formatSetupDuration(durationMs: Long): String { val seconds = durationMs / 1000; return "%d:%02d".format(seconds / 60, seconds % 60) }
 private fun formatSetupBytes(bytes: Long): String = if (bytes >= 1024L * 1024L) "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0)) else "$bytes bytes"
 private fun optionSummary(options: List<String>, fallback: String): String = options.filter { it.isNotBlank() }.distinct().takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: fallback
+private fun preferredQualityLabel(options: List<String>, configured: String, fallback: String): String = options.firstOrNull { it.equals(configured, ignoreCase = true) } ?: configured.takeIf { it.isNotBlank() && options.isEmpty() } ?: fallback
+private fun downloadSettingsSummary(settings: AppSettingsSnapshot): String = "${if (settings.wifiOnlyDownloads) "Wi-Fi only" else "Any network"} · ${settings.maxConcurrentDownloads} concurrent"
 
 @Composable private fun DownloadSetupPreview(setup: DownloadSetupState, onOptions: () -> Unit, onDownload: () -> Unit) { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Text("Download setup"); Text(setup.title); Text("Source: ${setup.sourceUrl}"); setup.thumbnailUrl?.takeIf { it.isNotBlank() }?.let { Text("Thumbnail: $it") }; Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}"); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { OutlinedButton(onClick = onOptions, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }; Button(onClick = onDownload, enabled = setup.readyForDownload, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") } } } }
 @Composable private fun AdvancedDownloadOptions(padding: PaddingValues, setup: DownloadSetupState, onBack: () -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Download options"); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; SettingValue("Quality choices", optionSummary(setup.qualityOptions, setup.qualityLabel)); SettingValue("Audio choices", optionSummary(setup.audioOptions, "Default track only")); SettingValue("Subtitle tracks", optionSummary(setup.subtitleOptions, "None reported by source")); SettingValue("Container choices", optionSummary(setup.containerOptions, "Best compatible")); Box(Modifier.weight(1f)); Button(onClick = onBack, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Apply options") } } }
