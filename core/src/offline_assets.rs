@@ -1,5 +1,8 @@
-use crate::domain::{CoreError, ErrorKind, MediaKind, SubtitleTrack};
+use crate::domain::{
+    CoreError, ErrorKind, LibraryItem, MediaKind, SubtitleAssetIdentity, SubtitleTrack,
+};
 use crate::security::{sanitize_filename, validate_http_url, validate_relative_library_path};
+use crate::subtitle::{local_subtitle_asset_identity, local_subtitle_assets};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OfflineAssetRequest {
@@ -8,6 +11,13 @@ pub struct OfflineAssetRequest {
     pub url: String,
     pub relative_path: String,
     pub mime_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OfflineSubtitleAttachment {
+    pub relative_path: String,
+    pub mime_type: String,
+    pub identity: SubtitleAssetIdentity,
 }
 
 pub fn thumbnail_request(
@@ -62,6 +72,19 @@ pub fn subtitle_request(
     })
 }
 
+pub fn subtitle_playback_attachments(item: &LibraryItem) -> Vec<OfflineSubtitleAttachment> {
+    local_subtitle_assets(&item.assets)
+        .into_iter()
+        .filter_map(|asset| {
+            Some(OfflineSubtitleAttachment {
+                relative_path: asset.relative_path.clone(),
+                mime_type: asset.mime_type.clone()?,
+                identity: local_subtitle_asset_identity(asset)?,
+            })
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactMetadata {
     pub title: String,
@@ -91,7 +114,7 @@ pub fn compact_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::SubtitleFormat;
+    use crate::domain::{LibraryItem, LocalAsset, SourceIdentity, SubtitleFormat};
 
     #[test]
     fn thumbnail_is_stored_under_item_for_offline_use() {
@@ -116,6 +139,59 @@ mod tests {
         assert_eq!(request.kind, MediaKind::Subtitle);
         assert!(request.relative_path.ends_with("en-US.vtt"));
         assert_eq!(request.mime_type.as_deref(), Some("text/vtt"));
+    }
+
+    #[test]
+    fn playback_attachments_include_only_safe_supported_local_subtitles() {
+        let item = LibraryItem {
+            item_id: "item-1".into(),
+            source: SourceIdentity::new("fixture", "source-1"),
+            display_title: "Fixture".into(),
+            duration_ms: Some(60_000),
+            quality_label: "720p".into(),
+            assets: vec![
+                LocalAsset {
+                    asset_id: "combined".into(),
+                    kind: MediaKind::Video,
+                    relative_path: "items/item-1/video.mp4".into(),
+                    bytes: 10,
+                    sha256: None,
+                    mime_type: Some("video/mp4".into()),
+                },
+                LocalAsset {
+                    asset_id: "subtitle:en:human-en".into(),
+                    kind: MediaKind::Subtitle,
+                    relative_path: "items/item-1/subtitles/en.vtt".into(),
+                    bytes: 5,
+                    sha256: None,
+                    mime_type: Some("text/vtt".into()),
+                },
+                LocalAsset {
+                    asset_id: "subtitle:bad".into(),
+                    kind: MediaKind::Subtitle,
+                    relative_path: "../outside.vtt".into(),
+                    bytes: 5,
+                    sha256: None,
+                    mime_type: Some("text/vtt".into()),
+                },
+            ],
+            created_at_epoch_ms: 1,
+            playback_position_ms: 0,
+            completed: true,
+        };
+
+        assert_eq!(
+            subtitle_playback_attachments(&item),
+            vec![OfflineSubtitleAttachment {
+                relative_path: "items/item-1/subtitles/en.vtt".into(),
+                mime_type: "text/vtt".into(),
+                identity: SubtitleAssetIdentity {
+                    language: "en".into(),
+                    format: "vtt".into(),
+                    track_id: "human-en".into(),
+                },
+            }]
+        );
     }
 
     #[test]
