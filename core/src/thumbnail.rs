@@ -345,3 +345,29 @@ mod tests {
             kind: MediaKind::Thumbnail,
             relative_path: "items/item-1/thumbnails/thumbnail.jpg".into(),
             bytes: 42,
+            sha256: None,
+            mime_type: Some("image/jpeg".into()),
+        };
+        let video = LocalAsset {
+            asset_id: "video".into(),
+            kind: MediaKind::Video,
+            relative_path: "items/item-1/video.mp4".into(),
+            bytes: 100,
+            sha256: None,
+            mime_type: Some("video/mp4".into()),
+        };
+
+        assert_eq!(
+            ThumbnailCleanupDisposition::RemoveOrphan,
+            classify_thumbnail_cleanup(&thumbnail, false),
+        );
+        assert_eq!(
+            ThumbnailCleanupDisposition::Keep,
+            classify_thumbnail_cleanup(&thumbnail, true),
+        );
+        assert_eq!(
+            ThumbnailCleanupDisposition::Keep,
+            classify_thumbnail_cleanup(&video, false),
+        );
+    }
+}
