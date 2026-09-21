@@ -72,10 +72,10 @@ fn playback_asset(item: &LibraryItem) -> FfiLibraryPlaybackAsset {
         .assets
         .iter()
         .find(|asset| asset.kind == MediaKind::Audio);
-    if let Some(audio) = audio {
-        if validate_relative_library_path(&audio.relative_path).is_err() {
-            return unavailable(item, "Local audio asset path is invalid");
-        }
+    if let Some(audio) = audio
+        && validate_relative_library_path(&audio.relative_path).is_err()
+    {
+        return unavailable(item, "Local audio asset path is invalid");
     }
 
     FfiLibraryPlaybackAsset {
