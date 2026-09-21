@@ -31,4 +31,14 @@ class AppSettingsStoreContractTest {
         assertTrue(source.contains("putInt(Keys.SchemaVersion, APP_SETTINGS_SCHEMA_VERSION)"))
         assertTrue(source.contains("coerceIn(1, AppSettingsDefaults.MaxConcurrentDownloadsUpperBound)"))
     }
+
+    @Test
+    fun settingsPersistDownloadRuntimeDefaults() {
+        val source = File("src/main/java/com/ekkus/offlineytplayer/settings/AppSettingsStore.kt").readText()
+        assertTrue(source.contains("val defaultQuality: String"))
+        assertTrue(source.contains("val wifiOnlyDownloads: Boolean"))
+        assertTrue(source.contains("val maxConcurrentDownloads: Int"))
+        assertTrue(source.contains("val subtitleDefault: String"))
+        assertTrue(source.contains("putString(Keys.SubtitleDefault, next.subtitleDefault)"))
+    }
 }

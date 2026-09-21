@@ -24,6 +24,7 @@ data class AppSettingsSnapshot(
     val defaultQuality: String = AppSettingsDefaults.DefaultQuality,
     val wifiOnlyDownloads: Boolean = AppSettingsDefaults.WifiOnlyDownloads,
     val maxConcurrentDownloads: Int = AppSettingsDefaults.MaxConcurrentDownloads,
+    val subtitleDefault: String = AppSettingsDefaults.SubtitleDefault,
     val rememberPlaybackPosition: Boolean = AppSettingsDefaults.RememberPlaybackPosition,
     val playbackSpeed: Float = AppSettingsDefaults.PlaybackSpeed,
     val appearance: AppearanceSetting = AppSettingsDefaults.Appearance,
@@ -34,6 +35,7 @@ class AppSettingsMutation internal constructor(current: AppSettingsSnapshot) {
     var defaultQuality: String = current.defaultQuality
     var wifiOnlyDownloads: Boolean = current.wifiOnlyDownloads
     var maxConcurrentDownloads: Int = current.maxConcurrentDownloads
+    var subtitleDefault: String = current.subtitleDefault
     var rememberPlaybackPosition: Boolean = current.rememberPlaybackPosition
     var playbackSpeed: Float = current.playbackSpeed
     var appearance: AppearanceSetting = current.appearance
@@ -43,6 +45,7 @@ class AppSettingsMutation internal constructor(current: AppSettingsSnapshot) {
         defaultQuality = defaultQuality.trim().ifEmpty { AppSettingsDefaults.DefaultQuality },
         wifiOnlyDownloads = wifiOnlyDownloads,
         maxConcurrentDownloads = maxConcurrentDownloads.coerceIn(1, AppSettingsDefaults.MaxConcurrentDownloadsUpperBound),
+        subtitleDefault = subtitleDefault.trim().ifEmpty { AppSettingsDefaults.SubtitleDefault },
         rememberPlaybackPosition = rememberPlaybackPosition,
         playbackSpeed = playbackSpeed.takeIf { it.isFinite() }?.coerceIn(0.25f, 3.0f) ?: AppSettingsDefaults.PlaybackSpeed,
         appearance = appearance,
@@ -63,6 +66,7 @@ object AppSettingsDefaults {
     const val WifiOnlyDownloads = true
     const val MaxConcurrentDownloads = 2
     const val MaxConcurrentDownloadsUpperBound = 8
+    const val SubtitleDefault = "Preferred language"
     const val RememberPlaybackPosition = true
     const val PlaybackSpeed = 1.0f
     val Appearance = AppearanceSetting.System
@@ -92,6 +96,8 @@ class SharedPreferencesAppSettingsStore private constructor(
         maxConcurrentDownloads = preferences
             .getInt(Keys.MaxConcurrentDownloads, AppSettingsDefaults.MaxConcurrentDownloads)
             .coerceIn(1, AppSettingsDefaults.MaxConcurrentDownloadsUpperBound),
+        subtitleDefault = preferences.getString(Keys.SubtitleDefault, AppSettingsDefaults.SubtitleDefault)
+            ?: AppSettingsDefaults.SubtitleDefault,
         rememberPlaybackPosition = preferences.getBoolean(
             Keys.RememberPlaybackPosition,
             AppSettingsDefaults.RememberPlaybackPosition,
@@ -112,6 +118,7 @@ class SharedPreferencesAppSettingsStore private constructor(
             .putString(Keys.DefaultQuality, next.defaultQuality)
             .putBoolean(Keys.WifiOnlyDownloads, next.wifiOnlyDownloads)
             .putInt(Keys.MaxConcurrentDownloads, next.maxConcurrentDownloads)
+            .putString(Keys.SubtitleDefault, next.subtitleDefault)
             .putBoolean(Keys.RememberPlaybackPosition, next.rememberPlaybackPosition)
             .putFloat(Keys.PlaybackSpeed, next.playbackSpeed)
             .putString(Keys.Appearance, next.appearance.name)
@@ -156,6 +163,7 @@ private object Keys {
     const val DefaultQuality = "download.default_quality"
     const val WifiOnlyDownloads = "download.wifi_only"
     const val MaxConcurrentDownloads = "download.max_concurrent"
+    const val SubtitleDefault = "download.subtitle_default"
     const val RememberPlaybackPosition = "playback.remember_position"
     const val PlaybackSpeed = "playback.speed"
     const val Appearance = "appearance.theme"
