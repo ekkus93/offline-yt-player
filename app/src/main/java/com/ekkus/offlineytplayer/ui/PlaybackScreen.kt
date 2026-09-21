@@ -46,10 +46,12 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
     val context = LocalContext.current
     val subtitleLabels = remember(validated) { LocalPlaybackPolicy.availableSubtitleLabels(validated) }
+    val audioLabels = remember(validated) { LocalPlaybackPolicy.availableAudioLabels(validated) }
     var selectedSubtitleIndex by remember(validated) { mutableIntStateOf(if (subtitleLabels.isEmpty()) -1 else 0) }
+    var selectedAudioIndex by remember(validated) { mutableIntStateOf(if (audioLabels.isEmpty()) -1 else 0) }
     var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
 
-    DisposableEffect(context, validated.videoPath, validated.audioPath, validated.subtitleTracks, validated.startPositionMs) {
+    DisposableEffect(context, validated.videoPath, validated.audioPath, validated.subtitleTracks, validated.audioTracks, validated.startPositionMs) {
         val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         val mainHandler = Handler(Looper.getMainLooper())
@@ -137,7 +139,12 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
             ) {
                 selectedSubtitleIndex = (selectedSubtitleIndex + 1) % subtitleLabels.size
             }
-            SecondaryControl("Audio", enabled = false) { }
+            SecondaryControl(
+                label = audioControlLabel(audioLabels, selectedAudioIndex),
+                enabled = controller != null && LocalPlaybackPolicy.shouldEnableAudioSelection(validated),
+            ) {
+                selectedAudioIndex = (selectedAudioIndex + 1) % audioLabels.size
+            }
         }
     }
 }
@@ -159,6 +166,12 @@ private fun subtitleControlLabel(labels: List<String>, selectedIndex: Int): Stri
     labels.isEmpty() -> "Subtitles"
     selectedIndex in labels.indices -> "Subtitles: ${labels[selectedIndex]}"
     else -> "Subtitles"
+}
+
+private fun audioControlLabel(labels: List<String>, selectedIndex: Int): String = when {
+    labels.isEmpty() -> "Audio"
+    selectedIndex in labels.indices -> "Audio: ${labels[selectedIndex]}"
+    else -> "Audio"
 }
 
 private fun nextSpeed(current: Float): Float = when {

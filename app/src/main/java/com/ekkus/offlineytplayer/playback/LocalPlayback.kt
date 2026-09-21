@@ -18,12 +18,19 @@ internal data class LocalSubtitleTrack(
     val mimeType: String,
 )
 
+internal data class LocalAudioTrack(
+    val path: String,
+    val language: String? = null,
+    val label: String? = null,
+)
+
 internal data class LocalPlaybackAsset(
     val videoPath: String,
     val audioPath: String? = null,
     val title: String,
     val startPositionMs: Long = 0,
     val subtitleTracks: List<LocalSubtitleTrack> = emptyList(),
+    val audioTracks: List<LocalAudioTrack> = emptyList(),
 )
 
 internal data class LocalPlaybackSourcePlan(
@@ -31,9 +38,13 @@ internal data class LocalPlaybackSourcePlan(
     val audioPath: String? = null,
     val startPositionMs: Long = 0,
     val subtitleTracks: List<LocalSubtitleTrack> = emptyList(),
+    val audioTracks: List<LocalAudioTrack> = emptyList(),
 ) {
     val usesSeparateAudioVideoAssets: Boolean
         get() = audioPath != null
+
+    val hasMultipleAudioTracks: Boolean
+        get() = audioTracks.size > 1
 }
 
 internal data class LocalPlaybackRequest(
@@ -41,6 +52,7 @@ internal data class LocalPlaybackRequest(
     val audioPath: String? = null,
     val startPositionMs: Long = 0,
     val subtitleTracks: List<LocalSubtitleTrack> = emptyList(),
+    val audioTracks: List<LocalAudioTrack> = emptyList(),
 )
 
 internal object LocalPlaybackPolicy {
@@ -58,6 +70,7 @@ internal object LocalPlaybackPolicy {
             require(it != asset.videoPath) { "separate audio and video assets must use distinct paths" }
         }
         asset.subtitleTracks.forEach(::validateSubtitleTrack)
+        asset.audioTracks.forEach(::validateAudioTrack)
         require(asset.startPositionMs >= 0) { "start position must be non-negative" }
         return asset
     }
@@ -69,6 +82,7 @@ internal object LocalPlaybackPolicy {
             audioPath = validated.audioPath,
             startPositionMs = validated.startPositionMs,
             subtitleTracks = validated.subtitleTracks,
+            audioTracks = validated.audioTracks,
         )
     }
 
@@ -79,6 +93,7 @@ internal object LocalPlaybackPolicy {
             audioPath = validated.audioPath,
             startPositionMs = validated.startPositionMs,
             subtitleTracks = validated.subtitleTracks,
+            audioTracks = validated.audioTracks,
         )
     }
 
@@ -103,6 +118,14 @@ internal object LocalPlaybackPolicy {
         track.label?.takeIf(String::isNotBlank) ?: track.language
     }
 
+    fun availableAudioLabels(asset: LocalPlaybackAsset): List<String> = validate(asset).audioTracks.mapIndexed { index, track ->
+        track.label?.takeIf(String::isNotBlank)
+            ?: track.language?.takeIf(String::isNotBlank)
+            ?: "Track ${index + 1}"
+    }
+
+    fun shouldEnableAudioSelection(asset: LocalPlaybackAsset): Boolean = availableAudioLabels(asset).size > 1
+
     @OptIn(UnstableApi::class)
     fun mediaSourceFor(
         asset: LocalPlaybackAsset,
@@ -125,6 +148,11 @@ internal object LocalPlaybackPolicy {
         require(!looksRemote(track.path)) { "remote playback URIs are forbidden" }
         require(track.language.isNotBlank()) { "subtitle language is required" }
         require(track.mimeType in supportedSubtitleMimeTypes) { "unsupported subtitle mime type" }
+    }
+
+    private fun validateAudioTrack(track: LocalAudioTrack) {
+        require(track.path.isNotBlank()) { "audio track path is required" }
+        require(!looksRemote(track.path)) { "remote playback URIs are forbidden" }
     }
 
     private fun subtitleConfigurationFor(track: LocalSubtitleTrack): SubtitleConfiguration =

@@ -60,13 +60,61 @@ class LocalPlaybackPolicyTest {
 
         assertEquals(1, request.subtitleTracks.size)
         assertEquals("/library/subtitles/en.vtt", request.subtitleTracks.single().path)
-        assertEquals(listOf("English"), LocalPlaybackPolicy.availableSubtitleLabels(
+        assertEquals(
+            listOf("English"),
+            LocalPlaybackPolicy.availableSubtitleLabels(
+                LocalPlaybackAsset(
+                    videoPath = "/library/video-1080p.mp4",
+                    title = "Fixture title",
+                    subtitleTracks = request.subtitleTracks,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun playbackRequestCarriesMultipleLocalAudioTracks() {
+        val asset = LocalPlaybackAsset(
+            videoPath = "/library/video-1080p.mp4",
+            title = "Fixture title",
+            audioTracks = listOf(
+                LocalAudioTrack(path = "/library/audio-en.m4a", language = "en", label = "English"),
+                LocalAudioTrack(path = "/library/audio-es.m4a", language = "es", label = "Spanish"),
+            ),
+        )
+        val request = LocalPlaybackPolicy.playbackRequestFor(asset)
+
+        assertEquals(2, request.audioTracks.size)
+        assertEquals("/library/audio-en.m4a", request.audioTracks.first().path)
+        assertEquals(listOf("English", "Spanish"), LocalPlaybackPolicy.availableAudioLabels(asset))
+        assertTrue(LocalPlaybackPolicy.shouldEnableAudioSelection(asset))
+    }
+
+    @Test
+    fun audioSelectionIsDisabledWhenOneOrZeroTracksAreAvailable() {
+        assertFalse(LocalPlaybackPolicy.shouldEnableAudioSelection(
+            LocalPlaybackAsset(videoPath = "/library/video.mp4", title = "Fixture title"),
+        ))
+        assertFalse(LocalPlaybackPolicy.shouldEnableAudioSelection(
             LocalPlaybackAsset(
-                videoPath = "/library/video-1080p.mp4",
+                videoPath = "/library/video.mp4",
                 title = "Fixture title",
-                subtitleTracks = request.subtitleTracks,
+                audioTracks = listOf(LocalAudioTrack(path = "/library/audio-en.m4a", language = "en")),
             ),
         ))
+    }
+
+    @Test
+    fun localAudioTracksRejectRemotePaths() {
+        expectIllegalArgument("remote playback URIs are forbidden") {
+            LocalPlaybackPolicy.playbackRequestFor(
+                LocalPlaybackAsset(
+                    videoPath = "/library/video.mp4",
+                    title = "Fixture title",
+                    audioTracks = listOf(LocalAudioTrack(path = "https://example.invalid/audio.m4a")),
+                ),
+            )
+        }
     }
 
     @Test
