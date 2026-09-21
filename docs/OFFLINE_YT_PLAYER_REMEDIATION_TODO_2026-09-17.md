@@ -382,22 +382,26 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-801 — Thumbnail lifecycle
 
-- [ ] Discover thumbnail URL through source adapter.
-- [ ] Download through bounded safe transfer path.
-- [ ] Store as managed local asset.
-- [ ] Persist asset metadata.
-- [ ] Render from local file in Library/Setup/Details while offline.
-- [ ] Delete thumbnail with owning item.
-- [ ] Detect/recover missing/corrupt thumbnail.
+- [x] Discover thumbnail URL through source adapter.
+- [x] Download through bounded safe transfer path.
+- [x] Store as managed local asset.
+- [x] Persist asset metadata.
+- [x] Render from local file in Library/Setup/Details while offline.
+- [x] Delete thumbnail with owning item.
+- [x] Detect/recover missing/corrupt thumbnail.
+
+**Evidence (RMD-801):** source thumbnail discovery is represented on `MediaInfo.thumbnail_url` and provider-neutral thumbnail download assets are produced by `core/src/thumbnail.rs::thumbnail_download_asset`; bounded transfer/managed persistence is through `DownloadPlanAsset`, `DownloadWorker`, `LocalAsset`, and `LibraryStore` in `core/src/worker.rs` and `core/src/persistence.rs`; offline rendering uses persisted local thumbnail assets via `offline_thumbnail_asset`; owned deletion is covered by `core/src/deletion.rs`; missing/corrupt recovery is covered by `thumbnail_recovery_action` and deep validation in `core/src/asset_validation.rs`. Qualified/merged evidence: PR #260 (`fcbb4642f5bda0d1bdb8156f8e714536798f53b5`), PR #261 (`0bf076b426f4719024494d61d47ba314a7b5f803`), and PR #262 (`989db30e8ac48574d1b5d1a6d1115df0d72bdcb6`) with exact-head CI run `35558561926` and PR CI run `35559751692` passing.
 
 ### RMD-802 — Subtitle model and lifecycle
 
-- [ ] Persist language identity.
-- [ ] Persist subtitle format/MIME identity.
-- [ ] Download selected subtitle track as managed local asset.
-- [ ] Validate supported format.
-- [ ] Delete with owning item.
-- [ ] Attach to local playback.
+- [x] Persist language identity.
+- [x] Persist subtitle format/MIME identity.
+- [x] Download selected subtitle track as managed local asset.
+- [x] Validate supported format.
+- [x] Delete with owning item.
+- [x] Attach to local playback.
+
+**Evidence (RMD-802):** subtitle selection and managed download assets are implemented in `core/src/subtitle.rs` with supported VTT/SRT/TTML validation, safe relative paths, language/format/track identity, and local subtitle asset discovery; explicit persisted identity was added through `SubtitleAssetIdentity` and derived from persisted subtitle assets; owned subtitle deletion is exercised through `core/src/deletion.rs`; playback attachment descriptors for persisted local subtitles are in `core/src/offline_assets.rs`. Qualified/merged evidence: PR #263 (`829189e47fd9711a15be70eff05a3c0a0ec7cef1`), PR #264 (`18cf4027bacbf826f08a658d989abf8a3f58c8a0`) with push CI `35584389351` and PR CI `35584857816`, and PR #266 (`d605960b5ddc433366a6e29a300308ad2a62702f`) with push CI `35585593326` and PR CI `35587847797` passing on exact head `3efdf01208c60b8ad6940e93b52d58d8a3ca5c37`.
 
 ### RMD-803 — Metadata presentation
 
