@@ -1,5 +1,6 @@
 use crate::{
-    CoreError, DownloadPlanAsset, ErrorKind, LibraryItem, LocalAsset, MediaInfo, MediaKind,
+    AssetHealth, AssetValidationDepth, CoreError, DownloadPlanAsset, ErrorKind, LibraryItem, LocalAsset,
+    MediaInfo, MediaKind,
 };
 use std::path::{Component, Path};
 
@@ -17,6 +18,51 @@ pub struct ThumbnailAssetPlan {
 pub enum ThumbnailCleanupDisposition {
     Keep,
     RemoveOrphan,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ThumbnailRecoveryAction {
+    Healthy,
+    Redownload(DownloadPlanAsset),
+    RemoveStaleMetadata,
+    NotManaged,
+}
+
+/// Detects missing/corrupt managed thumbnails and turns the result into an executable recovery
+/// action. A refreshed source resolution is supplied by the caller so recovery never persists or
+/// trusts an expired provider URL.
+pub fn thumbnail_recovery_action(
+    library_root: &Path,
+    item: &LibraryItem,
+    refreshed_media: &MediaInfo,
+) -> Result<ThumbnailRecoveryAction, CoreError> {
+    let Some(thumbnail) = offline_thumbnail_asset(item) else {
+        return Ok(ThumbnailRecoveryAction::NotManaged);
+    };
+    let validation = crate::validate_library_item_assets(
+        library_root,
+        item,
+        AssetValidationDepth::Deep,
+    )?
+    .into_iter()
+    .find(|result| result.asset_id == thumbnail.asset_id)
+    .ok_or_else(|| {
+        CoreError::new(
+            ErrorKind::IntegrityFailure,
+            "managed thumbnail validation result is missing",
+            false,
+        )
+    })?;
+
+    match validation.health {
+        AssetHealth::Healthy => Ok(ThumbnailRecoveryAction::Healthy),
+        AssetHealth::Missing | AssetHealth::Corrupt { .. } => {
+            Ok(match thumbnail_download_asset(refreshed_media)? {
+                Some(asset) => ThumbnailRecoveryAction::Redownload(asset),
+                None => ThumbnailRecoveryAction::RemoveStaleMetadata,
+            })
+        }
+    }
 }
 
 pub fn thumbnail_asset_plan(
@@ -128,6 +174,8 @@ fn is_safe_relative_path(value: &str) -> bool {
 mod tests {
     use super::*;
     use crate::{LibraryItem, SourceIdentity};
+    use sha2::{Digest, Sha256};
+    use tempfile::tempdir;
 
     fn item_with(asset: LocalAsset) -> LibraryItem {
         LibraryItem {
@@ -203,6 +251,94 @@ mod tests {
 
         let item = item_with(thumbnail.clone());
         assert_eq!(Some(&thumbnail), offline_thumbnail_asset(&item));
+    }
+
+    #[test]
+    fn missing_thumbnail_produces_bounded_redownload_recovery() {
+        let root = tempdir().unwrap();
+        let thumbnail = LocalAsset {
+            asset_id: THUMBNAIL_ASSET_ID.into(),
+            kind: MediaKind::Thumbnail,
+            relative_path: "items/item-1/thumbnails/thumbnail.jpg".into(),
+            bytes: 4,
+            sha256: None,
+            mime_type: Some("image/jpeg".into()),
+        };
+        let item = item_with(thumbnail);
+        let media = MediaInfo {
+            source: SourceIdentity::new("fixture", "item-1"),
+            title: "Fixture".into(),
+            duration_ms: None,
+            thumbnail_url: Some("https://media.example/recovered.jpg".into()),
+            formats: Vec::new(),
+            subtitles: Vec::new(),
+        };
+
+        let action = thumbnail_recovery_action(root.path(), &item, &media).unwrap();
+        let ThumbnailRecoveryAction::Redownload(asset) = action else {
+            panic!("missing thumbnail should request redownload");
+        };
+        assert_eq!(asset.kind, MediaKind::Thumbnail);
+        assert_eq!(asset.url, "https://media.example/recovered.jpg");
+        assert_eq!(asset.relative_path, "items/item-1/thumbnails/thumbnail.jpg");
+    }
+
+    #[test]
+    fn corrupt_thumbnail_is_detected_by_hash_and_recovered_from_refreshed_source() {
+        let root = tempdir().unwrap();
+        let expected = format!("{:x}", Sha256::digest(b"good"));
+        let thumbnail = LocalAsset {
+            asset_id: THUMBNAIL_ASSET_ID.into(),
+            kind: MediaKind::Thumbnail,
+            relative_path: "items/item-1/thumbnails/thumbnail.jpg".into(),
+            bytes: 4,
+            sha256: Some(expected),
+            mime_type: Some("image/jpeg".into()),
+        };
+        let item = item_with(thumbnail);
+        let path = root.path().join("items/item-1/thumbnails/thumbnail.jpg");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, b"evil").unwrap();
+        let media = MediaInfo {
+            source: SourceIdentity::new("fixture", "item-1"),
+            title: "Fixture".into(),
+            duration_ms: None,
+            thumbnail_url: Some("https://media.example/fresh.jpg".into()),
+            formats: Vec::new(),
+            subtitles: Vec::new(),
+        };
+
+        assert!(matches!(
+            thumbnail_recovery_action(root.path(), &item, &media).unwrap(),
+            ThumbnailRecoveryAction::Redownload(_)
+        ));
+    }
+
+    #[test]
+    fn unhealthy_thumbnail_without_refreshed_remote_thumbnail_removes_stale_metadata() {
+        let root = tempdir().unwrap();
+        let thumbnail = LocalAsset {
+            asset_id: THUMBNAIL_ASSET_ID.into(),
+            kind: MediaKind::Thumbnail,
+            relative_path: "items/item-1/thumbnails/thumbnail.jpg".into(),
+            bytes: 4,
+            sha256: None,
+            mime_type: Some("image/jpeg".into()),
+        };
+        let item = item_with(thumbnail);
+        let media = MediaInfo {
+            source: SourceIdentity::new("fixture", "item-1"),
+            title: "Fixture".into(),
+            duration_ms: None,
+            thumbnail_url: None,
+            formats: Vec::new(),
+            subtitles: Vec::new(),
+        };
+
+        assert_eq!(
+            thumbnail_recovery_action(root.path(), &item, &media).unwrap(),
+            ThumbnailRecoveryAction::RemoveStaleMetadata
+        );
     }
 
     #[test]
