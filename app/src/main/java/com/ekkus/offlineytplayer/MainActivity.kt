@@ -24,6 +24,9 @@ import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceAnalysisGatewa
 import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionStateStore
+import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
+import com.ekkus.offlineytplayer.settings.SettingsSubscription
+import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
 import com.ekkus.offlineytplayer.ui.DownloadRowModel
 import com.ekkus.offlineytplayer.ui.DownloadUiState
 import com.ekkus.offlineytplayer.ui.DownloadsScreenState
@@ -42,10 +45,13 @@ class MainActivity : ComponentActivity() {
     private var downloadControlGateway: GeneratedUniffiDownloadControlGateway? = null
     private var libraryPlaybackGateway: GeneratedUniffiLibraryPlaybackGateway? = null
     private var sourceAnalysisGateway: GeneratedUniffiSourceAnalysisGateway? = null
+    private var settingsStore: SharedPreferencesAppSettingsStore? = null
+    private var settingsSubscription: SettingsSubscription? = null
     private var stateRefresher: AppStateRefresher? = null
     private var activityStarted = false
     private var libraryState by mutableStateOf<LibraryScreenState>(LibraryScreenState.Loading)
     private var downloadsState by mutableStateOf<DownloadsScreenState>(DownloadsScreenState.Loading)
+    private var settingsSnapshot by mutableStateOf(AppSettingsSnapshot())
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -53,6 +59,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val settings = SharedPreferencesAppSettingsStore.open(this)
+        settingsStore = settings
+        settingsSnapshot = settings.snapshot()
+        settingsSubscription = settings.observe { snapshot -> settingsSnapshot = snapshot }
         requestNotificationPermissionIfNeeded()
         val sharedUrl = ShareInput.parse(intent?.action, intent?.type, intent?.getStringExtra(Intent.EXTRA_TEXT))
         setContent {
@@ -62,6 +72,8 @@ class MainActivity : ComponentActivity() {
                 downloadsState = downloadsState,
                 downloadControlGateway = downloadControlGateway,
                 sourceAnalysisGateway = sourceAnalysisGateway,
+                settingsSnapshot = settingsSnapshot,
+                onUpdateSettings = { mutation -> settingsStore?.update(mutation) },
             )
         }
         bootstrapProductionUi()
@@ -85,6 +97,8 @@ class MainActivity : ComponentActivity() {
         downloadControlGateway?.close()
         libraryPlaybackGateway?.close()
         sourceAnalysisGateway?.close()
+        settingsSubscription?.close()
+        settingsStore?.close()
         bootstrapExecutor.shutdownNow()
         super.onDestroy()
     }
