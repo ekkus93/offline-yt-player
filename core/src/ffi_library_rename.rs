@@ -86,7 +86,10 @@ fn bounded_display_title(value: &str) -> Result<String, CoreError> {
             false,
         ));
     }
-    let bounded = normalized.chars().take(MAX_LIBRARY_TITLE_CHARS).collect::<String>();
+    let bounded = normalized
+        .chars()
+        .take(MAX_LIBRARY_TITLE_CHARS)
+        .collect::<String>();
     Ok(bounded)
 }
 
@@ -128,9 +131,16 @@ mod tests {
         assert!(result.renamed);
         assert_eq!(result.display_title.as_deref(), Some("Renamed fixture"));
 
-        let reopened = LibraryStore::open(&database).unwrap().get("item-1").unwrap().unwrap();
+        let reopened = LibraryStore::open(&database)
+            .unwrap()
+            .get("item-1")
+            .unwrap()
+            .unwrap();
         assert_eq!(reopened.display_title, "Renamed fixture");
-        assert_eq!(reopened.assets.single().relative_path, "items/item-1/video.mp4");
+        assert_eq!(
+            reopened.assets.single().relative_path,
+            "items/item-1/video.mp4"
+        );
     }
 
     #[test]
@@ -149,6 +159,9 @@ mod tests {
         let service = FfiLibraryRenameService { library: store };
         let result = service.rename_display_title("missing".into(), "New".into());
         assert!(!result.renamed);
-        assert_eq!(result.error_message.as_deref(), Some("Library item was not found"));
+        assert_eq!(
+            result.error_message.as_deref(),
+            Some("Library item was not found")
+        );
     }
 }
