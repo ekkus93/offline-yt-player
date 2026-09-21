@@ -46,7 +46,7 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
     val context = LocalContext.current
     var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
 
-    DisposableEffect(context, validated.videoPath, validated.startPositionMs) {
+    DisposableEffect(context, validated.videoPath, validated.audioPath, validated.startPositionMs) {
         val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         val mainHandler = Handler(Looper.getMainLooper())
@@ -58,7 +58,7 @@ internal fun PortraitPlayerScreen(asset: LocalPlaybackAsset, onBack: () -> Unit)
                     runCatching { future.get() }.getOrNull()?.let { connected ->
                         acquiredController = connected
                         connected.setMediaItem(
-                            LocalPlaybackPolicy.mediaItemFor(validated.videoPath),
+                            LocalPlaybackPolicy.mediaItemFor(validated),
                             validated.startPositionMs,
                         )
                         connected.prepare()

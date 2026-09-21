@@ -25,6 +25,20 @@ class LocalPlaybackPolicyTest {
     }
 
     @Test
+    fun mediaItemCarriesSplitAudioAssetForSessionPlayback() {
+        val item = LocalPlaybackPolicy.mediaItemFor(
+            LocalPlaybackAsset(
+                videoPath = "/library/video-1080p.mp4",
+                audioPath = "/library/audio-128k.m4a",
+                title = "Fixture title",
+            ),
+        )
+
+        assertEquals("/library/audio-128k.m4a", LocalPlaybackPolicy.splitAudioPathFrom(item))
+        assertEquals("file:///library/video-1080p.mp4", item.localConfiguration?.uri.toString())
+    }
+
+    @Test
     fun singleFilePlanDoesNotClaimSeparateAdaptiveAssets() {
         val plan = LocalPlaybackPolicy.mediaSourcePlanFor(
             LocalPlaybackAsset(
