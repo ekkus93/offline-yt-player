@@ -30,6 +30,7 @@ import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 
 internal enum class LibraryLayout { List, Grid }
 internal enum class DownloadUiState { Active, Paused, Failed, Completed }
+internal enum class DownloadRowAction { Pause, Resume, Retry, Cancel, Details }
 
 internal data class LibraryRowModel(
     val id: String,
@@ -48,6 +49,9 @@ internal data class DownloadRowModel(
     val percent: Int,
     val size: String,
     val error: String? = null,
+    val stateLabel: String = state.name,
+    val speedLabel: String = "Speed unavailable",
+    val etaLabel: String = "ETA unavailable",
 )
 
 internal sealed class LibraryScreenState {
@@ -61,7 +65,8 @@ internal sealed class DownloadsScreenState {
     object Loading : DownloadsScreenState()
     data class Ready(val rows: List<DownloadRowModel>) : DownloadsScreenState()
     data class Unavailable(val reason: String) : DownloadsScreenState()
-    data class Failed(val message: String) : DownloadsScreenState()
+    data class Failed(val message: String)
+        : DownloadsScreenState()
 }
 
 internal object CollectionLayoutPolicy {
@@ -85,6 +90,28 @@ internal object LibraryPlaybackRoute {
             ),
         )
     }
+}
+
+internal object DownloadScreenPolicy {
+    val Filters = listOf("All", "Active", "Paused", "Failed", "Completed")
+
+    fun matchesFilter(row: DownloadRowModel, filter: String): Boolean =
+        filter == "All" || row.state.name == filter
+
+    fun legalActions(row: DownloadRowModel): List<DownloadRowAction> = when (row.state) {
+        DownloadUiState.Active -> listOf(DownloadRowAction.Pause, DownloadRowAction.Cancel)
+        DownloadUiState.Paused -> listOf(DownloadRowAction.Resume, DownloadRowAction.Cancel)
+        DownloadUiState.Failed -> listOf(DownloadRowAction.Retry, DownloadRowAction.Cancel)
+        DownloadUiState.Completed -> listOf(DownloadRowAction.Details)
+    }
+
+    fun detail(row: DownloadRowModel): String = listOf(
+        row.stateLabel,
+        "${row.percent.coerceIn(0, 100)}%",
+        row.size,
+        row.speedLabel,
+        row.etaLabel,
+    ).joinToString(" · ")
 }
 
 @Composable
@@ -251,15 +278,13 @@ internal fun DownloadsScreen(
     var filter by rememberSaveable { mutableStateOf("All") }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
     val rows = (state as? DownloadsScreenState.Ready)?.rows.orEmpty()
-    val visibleRows = rows.filter { row ->
-        filter == "All" || row.state.name == filter
-    }
+    val visibleRows = rows.filter { row -> DownloadScreenPolicy.matchesFilter(row, filter) }
     Column(
         Modifier.fillMaxSize().padding(MidnightTransit.ScreenSpacing),
         verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-            listOf("All", "Active", "Failed").forEach { value ->
+            DownloadScreenPolicy.Filters.forEach { value ->
                 OutlinedButton(
                     onClick = { filter = value },
                     enabled = state is DownloadsScreenState.Ready,
@@ -283,6 +308,10 @@ internal fun DownloadsScreen(
                             DownloadRow(
                                 row = row,
                                 onAction = { action ->
+                                    if (action == DownloadRowAction.Details) {
+                                        message = "${row.title}: ${DownloadScreenPolicy.detail(row)}"
+                                        return@DownloadRow
+                                    }
                                     val gateway = controlGateway
                                     message = if (gateway == null) {
                                         "Download control gateway is not connected for ${row.title}."
@@ -292,7 +321,6 @@ internal fun DownloadsScreen(
                                         "${action.name} failed for ${row.title}."
                                     }
                                 },
-                                onDetails = { selected -> message = "${selected.title}: ${selected.state.name} · ${selected.percent.coerceIn(0, 100)}% · ${selected.size}" },
                             )
                         }
                     }
@@ -306,20 +334,18 @@ internal fun DownloadsScreen(
 private fun DownloadRow(
     row: DownloadRowModel,
     onAction: (DownloadRowAction) -> Unit,
-    onDetails: (DownloadRowModel) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text(row.title)
-        Text("${row.state.name} · ${row.percent.coerceIn(0, 100)}% · ${row.size}")
+        Text(DownloadScreenPolicy.detail(row))
         row.error?.let { Text("Error: $it") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-            when (row.state) {
-                DownloadUiState.Active -> OutlinedButton(onClick = { onAction(DownloadRowAction.Pause) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Pause") }
-                DownloadUiState.Paused -> OutlinedButton(onClick = { onAction(DownloadRowAction.Resume) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Resume") }
-                DownloadUiState.Failed -> OutlinedButton(onClick = { onAction(DownloadRowAction.Retry) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Retry") }
-                DownloadUiState.Completed -> OutlinedButton(onClick = { onDetails(row) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Details") }
+            DownloadScreenPolicy.legalActions(row).forEach { action ->
+                OutlinedButton(
+                    onClick = { onAction(action) },
+                    modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+                ) { Text(action.name) }
             }
-            OutlinedButton(onClick = { onAction(DownloadRowAction.Cancel) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Cancel") }
         }
     }
 }
