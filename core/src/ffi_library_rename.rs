@@ -1,6 +1,4 @@
-use crate::{
-    CoreError, ErrorKind, LibraryItem, LibraryStore, LocalAsset, MediaKind, SourceIdentity,
-};
+use crate::{CoreError, ErrorKind, LibraryStore};
 use std::sync::Arc;
 
 pub const MAX_LIBRARY_TITLE_CHARS: usize = 120;
@@ -98,6 +96,7 @@ fn bounded_display_title(value: &str) -> Result<String, CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{LibraryItem, LocalAsset, MediaKind, SourceIdentity};
 
     fn item() -> LibraryItem {
         LibraryItem {
@@ -140,10 +139,8 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(reopened.display_title, "Renamed fixture");
-        assert_eq!(
-            reopened.assets.single().relative_path,
-            "items/item-1/video.mp4"
-        );
+        assert_eq!(reopened.assets.len(), 1);
+        assert_eq!(reopened.assets[0].relative_path, "items/item-1/video.mp4");
     }
 
     #[test]
