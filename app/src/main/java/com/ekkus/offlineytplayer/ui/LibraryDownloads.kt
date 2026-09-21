@@ -78,6 +78,7 @@ internal object LibraryPlaybackRoute {
                 audioPath = row.audioPath,
                 title = row.title,
                 startPositionMs = row.resumePositionMs,
+                itemId = row.id,
             ),
         )
     }
