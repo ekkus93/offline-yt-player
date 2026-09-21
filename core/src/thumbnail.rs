@@ -1,4 +1,6 @@
-use crate::{CoreError, ErrorKind, LibraryItem, LocalAsset, MediaKind};
+use crate::{
+    CoreError, DownloadPlanAsset, ErrorKind, LibraryItem, LocalAsset, MediaInfo, MediaKind,
+};
 use std::path::{Component, Path};
 
 pub const THUMBNAIL_ASSET_ID: &str = "thumbnail";
@@ -38,6 +40,25 @@ pub fn thumbnail_asset_plan(
         ),
         mime_type: mime_type.into(),
     })
+}
+
+/// Converts source-discovered thumbnail metadata into the same provider-neutral asset model used
+/// by the bounded download worker. `None` means the source did not advertise a thumbnail.
+pub fn thumbnail_download_asset(media: &MediaInfo) -> Result<Option<DownloadPlanAsset>, CoreError> {
+    let Some(url) = media.thumbnail_url.as_deref() else {
+        return Ok(None);
+    };
+    crate::validate_http_url(url)?;
+    let plan = thumbnail_asset_plan(&media.source.media_id, "jpg", "image/jpeg")?;
+    Ok(Some(DownloadPlanAsset {
+        asset_id: plan.asset_id,
+        kind: MediaKind::Thumbnail,
+        url: url.to_owned(),
+        relative_path: plan.relative_path,
+        expected_bytes: None,
+        expected_sha256: None,
+        mime_type: Some(plan.mime_type),
+    }))
 }
 
 pub fn offline_thumbnail_asset(item: &LibraryItem) -> Option<&LocalAsset> {
@@ -129,6 +150,37 @@ mod tests {
         assert_eq!(THUMBNAIL_ASSET_ID, plan.asset_id);
         assert_eq!("items/item-1/thumbnails/thumbnail.jpg", plan.relative_path);
         assert_eq!("image/jpeg", plan.mime_type);
+    }
+
+    #[test]
+    fn source_thumbnail_becomes_provider_neutral_managed_download_asset() {
+        let media = MediaInfo {
+            source: SourceIdentity::new("fixture", "item-1"),
+            title: "Fixture".into(),
+            duration_ms: Some(1_000),
+            thumbnail_url: Some("https://media.example/thumb.jpg".into()),
+            formats: Vec::new(),
+            subtitles: Vec::new(),
+        };
+        let asset = thumbnail_download_asset(&media).unwrap().unwrap();
+        assert_eq!(asset.asset_id, THUMBNAIL_ASSET_ID);
+        assert_eq!(asset.kind, MediaKind::Thumbnail);
+        assert_eq!(asset.relative_path, "items/item-1/thumbnails/thumbnail.jpg");
+        assert_eq!(asset.mime_type.as_deref(), Some("image/jpeg"));
+        assert_eq!(asset.url, "https://media.example/thumb.jpg");
+    }
+
+    #[test]
+    fn thumbnail_download_asset_rejects_unsafe_remote_url() {
+        let media = MediaInfo {
+            source: SourceIdentity::new("fixture", "item-1"),
+            title: "Fixture".into(),
+            duration_ms: None,
+            thumbnail_url: Some("file:///tmp/thumb.jpg".into()),
+            formats: Vec::new(),
+            subtitles: Vec::new(),
+        };
+        assert!(thumbnail_download_asset(&media).is_err());
     }
 
     #[test]
