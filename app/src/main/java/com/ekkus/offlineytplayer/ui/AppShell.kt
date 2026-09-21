@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -40,6 +41,8 @@ import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.settings.AppSettingsMutation
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
+import com.ekkus.offlineytplayer.settings.ManagedCleanup
+import com.ekkus.offlineytplayer.settings.StorageSettingsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -92,7 +95,39 @@ private fun DestinationContent(destination: AppDestination, padding: PaddingValu
 
 @Composable private fun SettingsScreen(padding: PaddingValues, settings: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit) { var section by rememberSaveable { mutableStateOf<SettingsSection?>(null) }; if (section == null) SettingsHub(padding) { section = it } else SettingsPage(padding, section!!, settings, onUpdateSettings) { section = null } }
 @Composable private fun SettingsHub(padding: PaddingValues, onOpen: (SettingsSection) -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Text("Choose a settings category. Primary settings stay on dedicated fixed-layout pages."); SettingsSection.entries.forEach { section -> OutlinedButton(onClick = { onOpen(section) }, modifier = Modifier.fillMaxWidth().weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(section.label) } } } }
-@Composable private fun SettingsPage(padding: PaddingValues, section: SettingsSection, settings: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit, onBack: () -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(section.label); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; when (section) { SettingsSection.Downloads -> { OutlinedButton(onClick = { onUpdateSettings { defaultQuality = if (settings.defaultQuality == "Best compatible") "Audio only" else "Best compatible" } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Default quality: ${settings.defaultQuality}") }; SettingToggle("Wi-Fi only", settings.wifiOnlyDownloads) { checked -> onUpdateSettings { wifiOnlyDownloads = checked } }; OutlinedButton(onClick = { onUpdateSettings { maxConcurrentDownloads = if (settings.maxConcurrentDownloads >= 4) 1 else settings.maxConcurrentDownloads + 1 } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Concurrent downloads: ${settings.maxConcurrentDownloads}") }; OutlinedButton(onClick = { onUpdateSettings { subtitleDefault = if (settings.subtitleDefault == "Preferred language") "None" else "Preferred language" } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Subtitles: ${settings.subtitleDefault}") }; SettingValue("Retry", "Automatic runtime policy") }; SettingsSection.Playback -> { SettingToggle("Remember position", settings.rememberPlaybackPosition) { checked -> onUpdateSettings { rememberPlaybackPosition = checked } }; OutlinedButton(onClick = { onUpdateSettings { playbackSpeed = nextPlaybackSettingSpeed(settings.playbackSpeed) } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Default speed: ${settings.playbackSpeed}×") } }; SettingsSection.Storage -> { SettingValue("Storage location", "App media directory"); SettingValue("Used / free", "Calculated on device"); SettingValue("Thumbnail cache", "Manage"); SettingValue("Incomplete files", "Clean up") }; SettingsSection.Appearance -> { SettingValue("Theme", settings.appearance.name); SettingValue("Default", "System"); SettingValue("Library layout", settings.libraryLayout.name) }; SettingsSection.About -> { SettingValue("Version / build", "0.1.0"); SettingValue("Licenses", "Open-source notices"); SettingValue("Privacy", "Local-first"); SettingValue("Diagnostics", "Export when enabled"); SettingValue("Source-service notice", "Review before public release") } } } }
+@Composable private fun SettingsPage(padding: PaddingValues, section: SettingsSection, settings: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit, onBack: () -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(section.label); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; when (section) { SettingsSection.Downloads -> { OutlinedButton(onClick = { onUpdateSettings { defaultQuality = if (settings.defaultQuality == "Best compatible") "Audio only" else "Best compatible" } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Default quality: ${settings.defaultQuality}") }; SettingToggle("Wi-Fi only", settings.wifiOnlyDownloads) { checked -> onUpdateSettings { wifiOnlyDownloads = checked } }; OutlinedButton(onClick = { onUpdateSettings { maxConcurrentDownloads = if (settings.maxConcurrentDownloads >= 4) 1 else settings.maxConcurrentDownloads + 1 } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Concurrent downloads: ${settings.maxConcurrentDownloads}") }; OutlinedButton(onClick = { onUpdateSettings { subtitleDefault = if (settings.subtitleDefault == "Preferred language") "None" else "Preferred language" } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Subtitles: ${settings.subtitleDefault}") }; SettingValue("Retry", "Automatic runtime policy") }; SettingsSection.Playback -> { SettingToggle("Remember position", settings.rememberPlaybackPosition) { checked -> onUpdateSettings { rememberPlaybackPosition = checked } }; OutlinedButton(onClick = { onUpdateSettings { playbackSpeed = nextPlaybackSettingSpeed(settings.playbackSpeed) } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Default speed: ${settings.playbackSpeed}×") } }; SettingsSection.Storage -> StorageSettingsPage(); SettingsSection.Appearance -> { SettingValue("Theme", settings.appearance.name); SettingValue("Default", "System"); SettingValue("Library layout", settings.libraryLayout.name) }; SettingsSection.About -> { SettingValue("Version / build", "0.1.0"); SettingValue("Licenses", "Open-source notices"); SettingValue("Privacy", "Local-first"); SettingValue("Diagnostics", "Export when enabled"); SettingValue("Source-service notice", "Review before public release") } } } }
+@Composable private fun StorageSettingsPage() {
+    val context = LocalContext.current
+    val manager = remember(context) { StorageSettingsManager.open(context) }
+    var summary by remember { mutableStateOf(manager.summarize()) }
+    var pendingCleanup by remember { mutableStateOf<ManagedCleanup?>(null) }
+    fun refresh() { summary = manager.summarize() }
+    SettingValue("Managed media", formatStorageBytes(summary.mediaBytes))
+    SettingValue("Database", formatStorageBytes(summary.databaseBytes))
+    SettingValue("Incomplete", formatStorageBytes(summary.partialBytes))
+    SettingValue("Cache", formatStorageBytes(summary.cacheBytes))
+    SettingValue("Free", formatStorageBytes(summary.freeBytes))
+    val pending = pendingCleanup
+    if (pending == null) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+            OutlinedButton(onClick = { pendingCleanup = ManagedCleanup.Cache }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Clear cache") }
+            OutlinedButton(onClick = { pendingCleanup = ManagedCleanup.Incomplete }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Clean incomplete") }
+        }
+    } else {
+        Text("Confirm destructive cleanup of " + if (pending == ManagedCleanup.Cache) "cache files?" else "incomplete transfer files?")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+            OutlinedButton(onClick = { pendingCleanup = null }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Cancel") }
+            Button(onClick = { manager.cleanup(pending); pendingCleanup = null; refresh() }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Confirm") }
+        }
+    }
+}
+private fun formatStorageBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L * 1024L -> "%.1f GB".format(bytes.toDouble() / (1024.0 * 1024.0 * 1024.0))
+    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KB".format(bytes.toDouble() / 1024.0)
+    else -> "$bytes B"
+}
+
 @Composable private fun SettingValue(label: String, value: String) { Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Text(value, textAlign = TextAlign.End) } }
 @Composable private fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit = {}) { Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Switch(checked = checked, onCheckedChange = onCheckedChange) } }
 private fun nextPlaybackSettingSpeed(current: Float): Float = when { current < 1f -> 1f; current < 1.25f -> 1.25f; current < 1.5f -> 1.5f; current < 2f -> 2f; else -> 0.75f }
