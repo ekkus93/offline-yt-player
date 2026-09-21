@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -96,7 +99,7 @@ internal fun LibraryScreen(
     var layout by rememberSaveable { mutableStateOf(LibraryLayout.List) }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
     val readyRows = (state as? LibraryScreenState.Ready)?.rows.orEmpty()
-    val visibleItems = readyRows.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) }
+    val visibleItems = readyRows.filter { row -> row.matchesLibraryQuery(query) }
     Column(
         Modifier.fillMaxSize().padding(MidnightTransit.ScreenSpacing),
         verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
@@ -136,16 +139,13 @@ internal fun LibraryScreen(
                         modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
                     ) { Text("Add video") }
                 } else {
-                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-                        items(visibleItems, key = { it.id }) { item ->
-                            LibraryItemRow(
-                                item = item,
-                                onPlay = onPlay,
-                                onDetails = { selected -> message = "${selected.title}: ${selected.detail}" },
-                                onRemove = { selected -> message = "Remove requires repository-backed deletion for ${selected.title}." },
-                            )
-                        }
-                    }
+                    LibraryItems(
+                        layout = layout,
+                        rows = visibleItems,
+                        onPlay = onPlay,
+                        onDetails = { selected -> message = "${selected.title}: ${selected.detail}" },
+                        onRemove = { selected -> message = "Remove requires repository-backed deletion for ${selected.title}." },
+                    )
                 }
             }
         }
@@ -156,6 +156,55 @@ internal fun LibraryScreen(
             ) { Text("Add video") }
         }
     }
+}
+
+@Composable
+private fun LibraryItems(
+    layout: LibraryLayout,
+    rows: List<LibraryRowModel>,
+    onPlay: (LocalPlaybackAsset) -> Unit,
+    onDetails: (LibraryRowModel) -> Unit,
+    onRemove: (LibraryRowModel) -> Unit,
+) {
+    when (layout) {
+        LibraryLayout.List -> LazyColumn(
+            Modifier.weightedCollectionRegion(),
+            verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+        ) {
+            items(rows, key = { it.id }) { item ->
+                LibraryItemRow(
+                    item = item,
+                    onPlay = onPlay,
+                    onDetails = onDetails,
+                    onRemove = onRemove,
+                )
+            }
+        }
+        LibraryLayout.Grid -> LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.weightedCollectionRegion(),
+            verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+            horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+        ) {
+            gridItems(rows, key = { it.id }) { item ->
+                LibraryItemRow(
+                    item = item,
+                    onPlay = onPlay,
+                    onDetails = onDetails,
+                    onRemove = onRemove,
+                )
+            }
+        }
+    }
+}
+
+private fun Modifier.weightedCollectionRegion(): Modifier = this.fillMaxWidth()
+
+private fun LibraryRowModel.matchesLibraryQuery(query: String): Boolean {
+    val normalized = query.trim()
+    return normalized.isBlank() ||
+        title.contains(normalized, ignoreCase = true) ||
+        detail.contains(normalized, ignoreCase = true)
 }
 
 @Composable
