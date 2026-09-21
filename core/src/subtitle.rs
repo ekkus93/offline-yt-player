@@ -1,5 +1,6 @@
 use crate::{
-    CoreError, DownloadPlanAsset, ErrorKind, LocalAsset, MediaInfo, MediaKind, SubtitleTrack,
+    CoreError, DownloadPlanAsset, ErrorKind, LocalAsset, MediaInfo, MediaKind,
+    SubtitleAssetIdentity, SubtitleTrack,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,12 +94,45 @@ pub fn local_subtitle_assets(assets: &[LocalAsset]) -> Vec<&LocalAsset> {
             asset.kind == MediaKind::Subtitle
                 && !asset.relative_path.is_empty()
                 && crate::validate_relative_library_path(&asset.relative_path).is_ok()
-                && matches!(
-                    asset.mime_type.as_deref(),
-                    Some("text/vtt" | "application/x-subrip" | "application/ttml+xml")
-                )
+                && asset
+                    .mime_type
+                    .as_deref()
+                    .and_then(subtitle_format_from_mime)
+                    .is_some()
         })
         .collect()
+}
+
+pub fn local_subtitle_asset_identity(asset: &LocalAsset) -> Option<SubtitleAssetIdentity> {
+    if asset.kind != MediaKind::Subtitle
+        || asset.relative_path.is_empty()
+        || crate::validate_relative_library_path(&asset.relative_path).is_err()
+    {
+        return None;
+    }
+    let format = asset
+        .mime_type
+        .as_deref()
+        .and_then(subtitle_format_from_mime)?;
+    let remainder = asset.asset_id.strip_prefix("subtitle:")?;
+    let (language, track_id) = remainder.split_once(':')?;
+    if language.is_empty() || track_id.is_empty() {
+        return None;
+    }
+    Some(SubtitleAssetIdentity {
+        language: language.into(),
+        format: format.into(),
+        track_id: track_id.into(),
+    })
+}
+
+fn subtitle_format_from_mime(mime_type: &str) -> Option<&'static str> {
+    match mime_type {
+        "text/vtt" => Some("vtt"),
+        "application/x-subrip" => Some("srt"),
+        "application/ttml+xml" => Some("ttml"),
+        _ => None,
+    }
 }
 
 fn safe_segment(value: &str, label: &str) -> Result<String, CoreError> {
@@ -231,6 +265,27 @@ mod tests {
         assert!(subtitle_asset_plan("../item", &track("en", "en", "vtt", false)).is_err());
         assert!(subtitle_asset_plan("item", &track("../en", "en", "vtt", false)).is_err());
         assert!(subtitle_asset_plan("item", &track("en", "en", "ass", false)).is_err());
+    }
+
+    #[test]
+    fn derives_persisted_subtitle_identity_from_asset_id_and_mime() {
+        let subtitle = LocalAsset {
+            asset_id: "subtitle:en:human-en".into(),
+            kind: MediaKind::Subtitle,
+            relative_path: "items/item/subtitles/en.vtt".into(),
+            bytes: 42,
+            sha256: None,
+            mime_type: Some("text/vtt".into()),
+        };
+        let identity = local_subtitle_asset_identity(&subtitle).unwrap();
+        assert_eq!(
+            identity,
+            SubtitleAssetIdentity {
+                language: "en".into(),
+                format: "vtt".into(),
+                track_id: "human-en".into(),
+            }
+        );
     }
 
     #[test]

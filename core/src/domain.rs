@@ -126,8 +126,6 @@ pub struct LocalAsset {
     pub bytes: u64,
     pub sha256: Option<String>,
     pub mime_type: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subtitle: Option<SubtitleAssetIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,8 +150,6 @@ pub struct DownloadPlanAsset {
     pub expected_bytes: Option<u64>,
     pub expected_sha256: Option<String>,
     pub mime_type: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subtitle: Option<SubtitleAssetIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -234,7 +230,6 @@ mod tests {
             bytes: 1,
             sha256: None,
             mime_type: Some("video/mp4".into()),
-            subtitle: None,
         };
         assert!(!asset.relative_path.contains("://"));
         assert!(!asset.relative_path.starts_with('/'));
