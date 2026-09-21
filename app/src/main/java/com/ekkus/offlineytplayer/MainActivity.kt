@@ -14,9 +14,12 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadSnapshot
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
+import com.ekkus.offlineytplayer.coregateway.CoreLibraryPlaybackAsset
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionPolicy
@@ -37,6 +40,7 @@ class MainActivity : ComponentActivity() {
     }
     private var coreGateway: GeneratedUniffiCoreGateway? = null
     private var downloadControlGateway: GeneratedUniffiDownloadControlGateway? = null
+    private var libraryPlaybackGateway: GeneratedUniffiLibraryPlaybackGateway? = null
     private var sourceAnalysisGateway: GeneratedUniffiSourceAnalysisGateway? = null
     private var stateRefresher: AppStateRefresher? = null
     private var activityStarted = false
@@ -79,6 +83,7 @@ class MainActivity : ComponentActivity() {
         stateRefresher?.close()
         coreGateway?.close()
         downloadControlGateway?.close()
+        libraryPlaybackGateway?.close()
         sourceAnalysisGateway?.close()
         bootstrapExecutor.shutdownNow()
         super.onDestroy()
@@ -86,12 +91,15 @@ class MainActivity : ComponentActivity() {
 
     private fun bootstrapProductionUi() {
         val databasePath = File(filesDir, "offline-yt-player.sqlite3").absolutePath
+        val libraryRoot = filesDir
         bootstrapExecutor.execute {
             val core = runCatching { GeneratedUniffiCoreGateway.open(databasePath) }
             val controls = runCatching { GeneratedUniffiDownloadControlGateway.open(databasePath) }
+            val playback = runCatching { GeneratedUniffiLibraryPlaybackGateway.open(databasePath) }
             val sources = runCatching { GeneratedUniffiSourceAnalysisGateway.open() }
+            val initialPlaybackAssets = playback.getOrNull()?.listPlaybackAssets()
             val initialLibrary = core.fold(
-                onSuccess = { it.listLibrary().toLibraryScreenState() },
+                onSuccess = { it.listLibrary().toLibraryScreenState(libraryRoot, initialPlaybackAssets) },
                 onFailure = { LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(it.safeUiMessage())) },
             )
             val initialDownloads = core.fold(
@@ -99,23 +107,29 @@ class MainActivity : ComponentActivity() {
                 onFailure = { DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.safeUiMessage())) },
             )
             if (isFinishing || isDestroyed) {
-                core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
+                core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); sources.getOrNull()?.close()
                 return@execute
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) {
-                    core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
+                    core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); sources.getOrNull()?.close()
                     return@runOnUiThread
                 }
                 libraryState = initialLibrary
                 downloadsState = initialDownloads
                 coreGateway = core.getOrNull()
                 downloadControlGateway = controls.getOrNull()
+                libraryPlaybackGateway = playback.getOrNull()
                 sourceAnalysisGateway = sources.getOrNull()
                 coreGateway?.let { gateway ->
                     stateRefresher = AppStateRefresher(
                         gateway = gateway,
-                        onLibrary = { result -> runOnUiThread { if (!isDestroyed) libraryState = result.toLibraryScreenState() } },
+                        onLibrary = { result ->
+                            val playbackResult = libraryPlaybackGateway?.listPlaybackAssets()
+                            runOnUiThread {
+                                if (!isDestroyed) libraryState = result.toLibraryScreenState(libraryRoot, playbackResult)
+                            }
+                        },
                         onDownloads = { result -> runOnUiThread { if (!isDestroyed) downloadsState = result.toDownloadsScreenState() } },
                     ).also { if (activityStarted) it.start() }
                 }
@@ -135,23 +149,33 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(): LibraryScreenState {
+private fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
+    libraryRoot: File,
+    playbackAssets: CoreGatewayResult<List<CoreLibraryPlaybackAsset>>? = null,
+): LibraryScreenState {
     error?.let { return LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
+    val playbackByItemId = playbackAssets?.value.orEmpty().associateBy { it.itemId }
     return LibraryScreenState.Ready(value.orEmpty().map { item ->
+        val playback = playbackByItemId[item.itemId]
         LibraryRowModel(
             id = item.itemId,
             title = SourceMetadataPolicy.title(item.displayTitle),
-            detail = listOfNotNull(
-                item.qualityLabel?.let(SourceMetadataPolicy::qualityLabel),
-                item.durationMs?.let(::formatDuration),
-            ).joinToString(" · "),
-            completed = item.completed,
+            detail = item.libraryDetail(playback),
+            completed = item.completed && playback?.playable == true,
+            videoPath = playback?.takeIf { it.playable }?.videoRelativePath?.let { libraryRoot.resolve(it).absolutePath },
+            audioPath = playback?.takeIf { it.playable }?.audioRelativePath?.let { libraryRoot.resolve(it).absolutePath },
             resumePositionMs = item.playbackPositionMs,
         )
     })
 }
 
-private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenState(): DownloadsScreenState {
+private fun CoreLibraryItem.libraryDetail(playback: CoreLibraryPlaybackAsset?): String = listOfNotNull(
+    qualityLabel.let(SourceMetadataPolicy::qualityLabel),
+    durationMs?.let(::formatDuration),
+    playback?.takeUnless { it.playable }?.unavailableReason?.let(SourceMetadataPolicy::diagnostic),
+).joinToString(" · ")
+
+private fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenState(): DownloadsScreenState {
     error?.let { return DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
     return DownloadsScreenState.Ready(value.orEmpty().map { snapshot ->
         val total = snapshot.totalBytes
