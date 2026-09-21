@@ -72,8 +72,7 @@ mod tests {
         drop(store);
 
         let path = database.to_string_lossy().into_owned();
-        let saved =
-            ffi_save_playback_position(path.clone(), "item-1".into(), 25_000, Some(60_000));
+        let saved = ffi_save_playback_position(path.clone(), "item-1".into(), 25_000, Some(60_000));
         assert!(saved.saved);
         assert!(saved.error.is_none());
         assert_eq!(
