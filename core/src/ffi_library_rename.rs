@@ -1,4 +1,6 @@
-use crate::{CoreError, ErrorKind, LibraryItem, LibraryStore, LocalAsset, MediaKind, SourceIdentity};
+use crate::{
+    CoreError, ErrorKind, LibraryItem, LibraryStore, LocalAsset, MediaKind, SourceIdentity,
+};
 use std::sync::Arc;
 
 pub const MAX_LIBRARY_TITLE_CHARS: usize = 120;
@@ -126,7 +128,8 @@ mod tests {
         store.promote_completed("job-1", &item()).unwrap();
         drop(store);
 
-        let service = FfiLibraryRenameService::open(database.to_string_lossy().into_owned()).unwrap();
+        let service =
+            FfiLibraryRenameService::open(database.to_string_lossy().into_owned()).unwrap();
         let result = service.rename_display_title("item-1".into(), "  Renamed fixture  ".into());
         assert!(result.renamed);
         assert_eq!(result.display_title.as_deref(), Some("Renamed fixture"));
