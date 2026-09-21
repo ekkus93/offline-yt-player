@@ -17,13 +17,14 @@ internal enum class ManagedCleanup { Cache, Incomplete }
 internal class StorageSettingsManager private constructor(
     private val filesRoot: File,
     private val cacheRoot: File,
+    private val freeBytesProvider: (File) -> Long,
 ) {
     fun summarize(): ManagedStorageSummary {
         val files = filesRoot.walkTopDown().filter { it.isFile }.toList()
         val database = files.filter(::isDatabaseFile).sumOf(File::length)
         val partial = files.filter(::isIncompleteFile).sumOf(File::length)
         val media = files.filterNot { isDatabaseFile(it) || isIncompleteFile(it) }.sumOf(File::length)
-        return ManagedStorageSummary(media, database, partial, cacheRoot.safeSize(), StatFs(filesRoot.absolutePath).availableBytes)
+        return ManagedStorageSummary(media, database, partial, cacheRoot.safeSize(), freeBytesProvider(filesRoot))
     }
 
     fun cleanup(action: ManagedCleanup): Long {
@@ -47,8 +48,11 @@ internal class StorageSettingsManager private constructor(
         file.name.endsWith(".partial") || file.name.endsWith(".resume.json")
 
     companion object {
-        fun open(context: Context) = StorageSettingsManager(context.filesDir, context.cacheDir)
-        internal fun forTest(filesRoot: File, cacheRoot: File) = StorageSettingsManager(filesRoot, cacheRoot)
+        fun open(context: Context) = StorageSettingsManager(context.filesDir, context.cacheDir) { root ->
+            StatFs(root.absolutePath).availableBytes
+        }
+        internal fun forTest(filesRoot: File, cacheRoot: File, freeBytes: Long = 0L) =
+            StorageSettingsManager(filesRoot, cacheRoot) { freeBytes }
     }
 }
 
