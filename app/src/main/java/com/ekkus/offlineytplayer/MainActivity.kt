@@ -18,6 +18,7 @@ import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceAnalysisGateway
+import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionStateStore
 import com.ekkus.offlineytplayer.ui.DownloadRowModel
@@ -91,11 +92,11 @@ class MainActivity : ComponentActivity() {
             val sources = runCatching { GeneratedUniffiSourceAnalysisGateway.open() }
             val initialLibrary = core.fold(
                 onSuccess = { it.listLibrary().toLibraryScreenState() },
-                onFailure = { LibraryScreenState.Failed(it.safeUiMessage()) },
+                onFailure = { LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(it.safeUiMessage())) },
             )
             val initialDownloads = core.fold(
                 onSuccess = { it.listDownloadQueue().toDownloadsScreenState() },
-                onFailure = { DownloadsScreenState.Failed(it.safeUiMessage()) },
+                onFailure = { DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.safeUiMessage())) },
             )
             if (isFinishing || isDestroyed) {
                 core.getOrNull()?.close(); controls.getOrNull()?.close(); sources.getOrNull()?.close()
@@ -135,12 +136,15 @@ class MainActivity : ComponentActivity() {
 }
 
 private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(): LibraryScreenState {
-    error?.let { return LibraryScreenState.Failed(it.message) }
+    error?.let { return LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
     return LibraryScreenState.Ready(value.orEmpty().map { item ->
         LibraryRowModel(
             id = item.itemId,
-            title = item.displayTitle,
-            detail = listOfNotNull(item.qualityLabel, item.durationMs?.let(::formatDuration)).joinToString(" · "),
+            title = SourceMetadataPolicy.title(item.displayTitle),
+            detail = listOfNotNull(
+                item.qualityLabel?.let(SourceMetadataPolicy::qualityLabel),
+                item.durationMs?.let(::formatDuration),
+            ).joinToString(" · "),
             completed = item.completed,
             resumePositionMs = item.playbackPositionMs,
         )
@@ -148,17 +152,17 @@ private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreLib
 }
 
 private fun com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenState(): DownloadsScreenState {
-    error?.let { return DownloadsScreenState.Failed(it.message) }
+    error?.let { return DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
     return DownloadsScreenState.Ready(value.orEmpty().map { snapshot ->
         val total = snapshot.totalBytes
         val percent = if (total != null && total > 0) ((snapshot.bytesDownloaded.coerceAtMost(total) * 100L) / total).toInt() else 0
         DownloadRowModel(
             id = snapshot.jobId,
-            title = snapshot.jobId,
+            title = SourceMetadataPolicy.title(snapshot.jobId),
             state = snapshot.state.toUiState(),
             percent = percent,
             size = if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes",
-            error = snapshot.lastError?.message,
+            error = snapshot.lastError?.message?.let(SourceMetadataPolicy::diagnostic),
         )
     })
 }
