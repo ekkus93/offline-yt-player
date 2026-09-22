@@ -28,7 +28,7 @@ internal object SupportedUrlPolicy {
         val scheme = uri.scheme?.lowercase() ?: return null
         if (scheme != "http" && scheme != "https") return null
         if (uri.userInfo != null) return null
-        val host = uri.host?.lowercase()?.trimEnd('.') ?: return null
+        val host = uri.host?.lowercase() ?: return null
         val videoId = when {
             host == "youtu.be" -> shortVideoId(uri)
             host in YouTubeWatchHosts -> watchVideoId(uri)
