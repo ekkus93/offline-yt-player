@@ -144,9 +144,7 @@ impl DownloadEngine {
 
         let final_path = self.root.join(&request.relative_path);
         let partial_path = partial_path(&final_path);
-        if let Some(parent) = final_path.parent() {
-            fs::create_dir_all(parent).map_err(io_error)?;
-        }
+        ensure_safe_library_write_path(&self.root, &final_path, &partial_path)?;
 
         let existing = fs::metadata(&partial_path).map_or(0, |metadata| metadata.len());
         let mut response = self.request(&request.url, existing)?;
@@ -266,6 +264,7 @@ impl DownloadEngine {
                 false,
             ));
         }
+        ensure_path_not_symlink(&final_path)?;
         fs::rename(&partial_path, &final_path).map_err(io_error)?;
         clear_resume_representation(&partial_path)?;
         Ok(TransferResult {
@@ -277,8 +276,9 @@ impl DownloadEngine {
     }
 
     pub fn cleanup_orphan_partials(&self) -> Result<usize, CoreError> {
+        let canonical_root = canonical_library_root(&self.root)?;
         let mut removed = 0;
-        visit_partials(&self.root, &mut |path| {
+        visit_partials(&canonical_root, &canonical_root, &mut |path| {
             fs::remove_file(path).map_err(io_error)?;
             clear_resume_representation(path)?;
             removed += 1;
@@ -327,6 +327,79 @@ fn partial_path(final_path: &Path) -> PathBuf {
     final_path.with_file_name(format!(".{name}.partial"))
 }
 
+fn ensure_safe_library_write_path(
+    root: &Path,
+    final_path: &Path,
+    partial_path: &Path,
+) -> Result<(), CoreError> {
+    let canonical_root = canonical_library_root(root)?;
+    let Some(parent) = final_path.parent() else {
+        return Err(CoreError::new(
+            ErrorKind::InvalidInput,
+            "asset path has no parent",
+            false,
+        ));
+    };
+    reject_existing_symlink_components(root, parent)?;
+    fs::create_dir_all(parent).map_err(io_error)?;
+    let canonical_parent = fs::canonicalize(parent).map_err(io_error)?;
+    if !canonical_parent.starts_with(&canonical_root) {
+        return Err(CoreError::new(
+            ErrorKind::InvalidInput,
+            "asset path escapes the selected library root",
+            false,
+        ));
+    }
+    ensure_path_not_symlink(final_path)?;
+    ensure_path_not_symlink(partial_path)?;
+    Ok(())
+}
+
+fn canonical_library_root(root: &Path) -> Result<PathBuf, CoreError> {
+    fs::create_dir_all(root).map_err(io_error)?;
+    fs::canonicalize(root).map_err(io_error)
+}
+
+fn reject_existing_symlink_components(root: &Path, target: &Path) -> Result<(), CoreError> {
+    let relative = target.strip_prefix(root).map_err(|_| {
+        CoreError::new(
+            ErrorKind::InvalidInput,
+            "asset path escapes the selected library root",
+            false,
+        )
+    })?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component.as_os_str());
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "library asset path must not contain symlink components",
+                    false,
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == IoErrorKind::NotFound => break,
+            Err(error) => return Err(io_error(error)),
+        }
+    }
+    Ok(())
+}
+
+fn ensure_path_not_symlink(path: &Path) -> Result<(), CoreError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(CoreError::new(
+            ErrorKind::InvalidInput,
+            "library asset path must not be a symlink",
+            false,
+        )),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == IoErrorKind::NotFound => Ok(()),
+        Err(error) => Err(io_error(error)),
+    }
+}
+
 fn content_range_starts_at(response: &Response, expected: u64) -> bool {
     response
         .headers()
@@ -353,6 +426,7 @@ fn sha256_file(path: &Path) -> Result<String, CoreError> {
 }
 
 fn visit_partials(
+    canonical_root: &Path,
     directory: &Path,
     visitor: &mut dyn FnMut(&Path) -> Result<(), CoreError>,
 ) -> Result<(), CoreError> {
@@ -361,8 +435,24 @@ fn visit_partials(
     }
     for entry in fs::read_dir(directory).map_err(io_error)? {
         let path = entry.map_err(io_error)?.path();
-        if path.is_dir() {
-            visit_partials(&path, visitor)?;
+        let metadata = fs::symlink_metadata(&path).map_err(io_error)?;
+        if metadata.file_type().is_symlink() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "library cleanup refused to follow symlink",
+                false,
+            ));
+        }
+        if metadata.is_dir() {
+            let canonical_directory = fs::canonicalize(&path).map_err(io_error)?;
+            if !canonical_directory.starts_with(canonical_root) {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "library cleanup path escapes the selected root",
+                    false,
+                ));
+            }
+            visit_partials(canonical_root, &path, visitor)?;
         } else if path
             .file_name()
             .and_then(|name| name.to_str())
@@ -846,5 +936,53 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.kind, ErrorKind::Canceled);
         assert!(!temp.path().join("items/one/video.mp4").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transfer_rejects_symlink_parent_escape_without_touching_outside_file() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("items")).unwrap();
+        symlink(outside.path(), root.path().join("items/one")).unwrap();
+        let outside_file = outside.path().join(".video.mp4.partial");
+        fs::write(&outside_file, b"outside bytes").unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let request = TransferRequest {
+            url: "http://127.0.0.1:1/unreachable".into(),
+            relative_path: "items/one/video.mp4".into(),
+            expected_bytes: None,
+            expected_sha256: None,
+        };
+
+        let error = engine
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&outside_file).unwrap(), b"outside bytes");
+        assert!(!outside.path().join("video.mp4").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_orphan_partials_rejects_symlinked_directories_without_touching_outside() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join(".stolen.partial"), b"outside bytes").unwrap();
+        symlink(outside.path(), root.path().join("items")).unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+
+        let error = engine.cleanup_orphan_partials().unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(
+            fs::read(outside.path().join(".stolen.partial")).unwrap(),
+            b"outside bytes"
+        );
     }
 }
