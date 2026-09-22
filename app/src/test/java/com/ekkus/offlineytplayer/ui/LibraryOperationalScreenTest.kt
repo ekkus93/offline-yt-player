@@ -11,21 +11,21 @@ class LibraryOperationalScreenTest {
         assertTrue(source.contains("LazyColumn("))
         assertTrue(source.contains("LazyVerticalGrid("))
         assertTrue(source.contains("GridCells.Fixed(2)"))
-        assertTrue(source.contains("LibraryLayout.Grid -> LazyVerticalGrid"))
+        assertTrue(source.contains("LibraryLayout.Grid->LazyVerticalGrid"))
     }
 
     @Test
     fun libraryScreenSearchesRepositoryBackedMetadata() {
         val source = File("src/main/java/com/ekkus/offlineytplayer/ui/LibraryDownloads.kt").readText()
-        assertTrue(source.contains("row.matchesLibraryQuery(query)"))
-        assertTrue(source.contains("title.contains(normalized, ignoreCase = true)"))
-        assertTrue(source.contains("detail.contains(normalized, ignoreCase = true)"))
+        assertTrue(source.contains("readyRows.filter{it.matchesLibraryQuery(query)}"))
+        assertTrue(source.contains("title.contains(n,true)"))
+        assertTrue(source.contains("detail.contains(n,true)"))
     }
 
     @Test
-    fun layoutSelectionRemainsSaveableAcrossRecomposition() {
+    fun layoutSelectionUsesDurableAppearanceSetting() {
         val source = File("src/main/java/com/ekkus/offlineytplayer/ui/LibraryDownloads.kt").readText()
-        assertTrue(source.contains("var layout by rememberSaveable"))
-        assertTrue(source.contains("layout = if (layout == LibraryLayout.List) LibraryLayout.Grid else LibraryLayout.List"))
+        assertTrue(source.contains("settings.libraryLayout==LibraryLayoutSetting.Grid"))
+        assertTrue(source.contains("onUpdateSettings{libraryLayout="))
     }
 }
