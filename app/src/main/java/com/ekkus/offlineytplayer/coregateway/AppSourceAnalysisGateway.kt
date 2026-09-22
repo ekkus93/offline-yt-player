@@ -105,7 +105,7 @@ private fun readSourceError(result: Any): CoreGatewayError? {
     val error = readSourceNullable(result, "error") ?: return null
     return CoreGatewayError(
         kind = readSourceRequired(error, "kind").toString(),
-        message = readSourceString(error, "message"),
+        message = DiagnosticRedaction.sanitize(readSourceString(error, "message")),
         retryable = readSourceRequired(error, "retryable") as Boolean,
     )
 }
