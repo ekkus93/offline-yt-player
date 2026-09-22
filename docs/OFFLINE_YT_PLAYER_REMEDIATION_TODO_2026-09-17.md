@@ -498,6 +498,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Update list only after durable outcome.
 - [ ] Surface partial failure/recovery state.
 
+
 ### RMD-1006 — Operational Downloads screen
 
 - [ ] Render durable queue.
@@ -590,12 +591,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1204 — Corrupt-state recovery UI
 
-- [ ] Convert corruption policy into real application state/actions.
-- [ ] Handle missing media.
-- [ ] Handle size/hash mismatch.
-- [ ] Handle unsupported/newer DB schema.
-- [ ] Handle damaged DB according to documented strategy.
-- [ ] Provide safe diagnostic/export/reset choices as applicable.
+- [x] Convert corruption policy into real application state/actions.
+- [x] Handle missing media.
+- [x] Handle size/hash mismatch.
+- [x] Handle unsupported/newer DB schema.
+- [x] Handle damaged DB according to documented strategy.
+- [x] Provide safe diagnostic/export/reset choices as applicable.
+
+**Evidence (RMD-1204):** `CorruptionRecoveryPolicy` classifies real startup/core failure shapes into actionable recovery states for missing media, integrity size/hash failures, unsupported/newer schemas, damaged databases, interrupted migrations, and interrupted transfers. Production `LibraryScreen` renders those states through `RecoveryStatus` with concrete retry, diagnostics export, support, upgrade, and explicitly confirmed local-database reset actions; reset is offered only for damaged-database recovery and is never automatic. Behavioral policy coverage is in `CorruptionRecoveryPolicyTest`. Qualified implementation evidence: exact head `d4f75d09752a24d6af2007cb8f55b009b18d82c0` passed push CI `35746328575` and PR CI `35747141330`; PR #301 merged as `81e334925390997c3dd5da9fbc7a62353f29c8a8`.
 
 ---
 
