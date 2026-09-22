@@ -54,7 +54,8 @@ pub fn reconcile_startup_with_library_root(
     let mut result = reconcile_startup_downloads(store)?;
     result.orphaned_staged_jobs_recovered = reconcile_orphaned_staged_jobs(store)?;
     result.asset_mismatches_reported = reconcile_metadata_file_mismatches(store, library_root)?;
-    result.orphaned_partial_files_removed = remove_orphaned_partial_files_when_safe(store, library_root)?;
+    result.orphaned_partial_files_removed =
+        remove_orphaned_partial_files_when_safe(store, library_root)?;
     Ok(result)
 }
 
@@ -111,7 +112,10 @@ fn reconcile_metadata_file_mismatches(
             continue;
         }
         if let Err(error) = store.validate_item_assets(library_root, &item.item_id) {
-            if matches!(error.kind, ErrorKind::MissingAsset | ErrorKind::CorruptAsset) {
+            if matches!(
+                error.kind,
+                ErrorKind::MissingAsset | ErrorKind::CorruptAsset
+            ) {
                 store.save_download_snapshot(&DurableDownloadSnapshot {
                     job_id: format!("repair:{}", item.item_id),
                     state: DownloadState::Failed,
@@ -121,7 +125,10 @@ fn reconcile_metadata_file_mismatches(
                     retry_at_epoch_ms: None,
                     last_error: Some(CoreError::new(
                         error.kind,
-                        format!("completed library item {} requires asset recovery", item.item_id),
+                        format!(
+                            "completed library item {} requires asset recovery",
+                            item.item_id
+                        ),
                         true,
                     )),
                 })?;
@@ -139,7 +146,10 @@ fn remove_orphaned_partial_files_when_safe(
     library_root: &Path,
 ) -> Result<usize, CoreError> {
     let snapshots = store.load_download_snapshots()?;
-    if snapshots.iter().any(|snapshot| !is_terminal(snapshot.state)) || !store.staged_job_ids()?.is_empty()
+    if snapshots
+        .iter()
+        .any(|snapshot| !is_terminal(snapshot.state))
+        || !store.staged_job_ids()?.is_empty()
     {
         return Ok(0);
     }
@@ -150,7 +160,10 @@ fn remove_orphaned_partial_files_when_safe(
         std::fs::remove_file(&path).map_err(|error| {
             CoreError::new(
                 ErrorKind::Persistence,
-                format!("failed to remove orphaned partial file {}: {error}", path.display()),
+                format!(
+                    "failed to remove orphaned partial file {}: {error}",
+                    path.display()
+                ),
                 true,
             )
         })?;
@@ -166,7 +179,10 @@ fn collect_partial_files(root: &Path, partials: &mut Vec<PathBuf>) -> Result<(),
     for entry in std::fs::read_dir(root).map_err(|error| {
         CoreError::new(
             ErrorKind::Persistence,
-            format!("failed to inspect managed media root {}: {error}", root.display()),
+            format!(
+                "failed to inspect managed media root {}: {error}",
+                root.display()
+            ),
             true,
         )
     })? {
@@ -181,7 +197,10 @@ fn collect_partial_files(root: &Path, partials: &mut Vec<PathBuf>) -> Result<(),
         let metadata = entry.metadata().map_err(|error| {
             CoreError::new(
                 ErrorKind::Persistence,
-                format!("failed to inspect managed media path {}: {error}", path.display()),
+                format!(
+                    "failed to inspect managed media path {}: {error}",
+                    path.display()
+                ),
                 true,
             )
         })?;
@@ -304,7 +323,12 @@ mod tests {
             .find(|snapshot| snapshot.job_id == "staged-only")
             .unwrap();
         assert_eq!(recovered.state, DownloadState::Failed);
-        assert!(recovered.last_error.as_ref().is_some_and(|error| error.retryable));
+        assert!(
+            recovered
+                .last_error
+                .as_ref()
+                .is_some_and(|error| error.retryable)
+        );
     }
 
     #[test]
