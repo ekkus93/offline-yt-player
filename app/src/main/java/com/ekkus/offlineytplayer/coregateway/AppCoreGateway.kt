@@ -95,6 +95,10 @@ data class CoreDownloadSnapshot(
     val lastError: CoreGatewayError?,
 )
 
+data class CoreStartupReconciliation(
+    val jobsRequeued: Int,
+)
+
 data class CoreGatewayError(
     val kind: String,
     val message: String,
@@ -109,6 +113,7 @@ data class CoreGatewayResult<T>(
 }
 
 interface AppCoreGateway : Closeable {
+    fun reconcileStartup(): CoreGatewayResult<CoreStartupReconciliation>
     fun listLibrary(query: String? = null): CoreGatewayResult<List<CoreLibraryItem>>
     fun getLibraryItem(itemId: String): CoreGatewayResult<CoreLibraryItem?>
     fun deleteLibraryItem(itemId: String): CoreGatewayResult<Boolean>
@@ -124,8 +129,12 @@ interface AppCoreGateway : Closeable {
  */
 class GeneratedUniffiCoreGateway private constructor(
     private val ffiService: Any,
+    private val ffiStartupReconciliationService: Any,
     private val dispatcher: CoreCallDispatcher,
 ) : AppCoreGateway {
+    fun reconcileStartupAsync(): Future<CoreGatewayResult<CoreStartupReconciliation>> =
+        dispatcher.submit { reconcileStartup() }
+
     fun listLibraryAsync(query: String? = null): Future<CoreGatewayResult<List<CoreLibraryItem>>> =
         dispatcher.submit { listLibrary(query) }
 
@@ -138,9 +147,20 @@ class GeneratedUniffiCoreGateway private constructor(
     fun listDownloadQueueAsync(): Future<CoreGatewayResult<List<CoreDownloadSnapshot>>> =
         dispatcher.submit { listDownloadQueue() }
 
+    override fun reconcileStartup(): CoreGatewayResult<CoreStartupReconciliation> {
+        checkNotMainThread()
+        val result = callFfi(ffiStartupReconciliationService, "startupReconcile")
+        return CoreGatewayResult(
+            value = CoreStartupReconciliation(
+                jobsRequeued = readNumber(result, "jobsRequeued", "jobs_requeued").toInt(),
+            ),
+            error = readError(result),
+        )
+    }
+
     override fun listLibrary(query: String?): CoreGatewayResult<List<CoreLibraryItem>> {
         checkNotMainThread()
-        val result = callFfi("libraryList", query)
+        val result = callFfi(ffiService, "libraryList", query)
         return CoreGatewayResult(
             value = readList(result, "items").map(::mapLibraryItem),
             error = readError(result),
@@ -149,7 +169,7 @@ class GeneratedUniffiCoreGateway private constructor(
 
     override fun getLibraryItem(itemId: String): CoreGatewayResult<CoreLibraryItem?> {
         checkNotMainThread()
-        val result = callFfi("libraryGet", itemId)
+        val result = callFfi(ffiService, "libraryGet", itemId)
         return CoreGatewayResult(
             value = readNullable(result, "item")?.let(::mapLibraryItem),
             error = readError(result),
@@ -158,7 +178,7 @@ class GeneratedUniffiCoreGateway private constructor(
 
     override fun deleteLibraryItem(itemId: String): CoreGatewayResult<Boolean> {
         checkNotMainThread()
-        val result = callFfi("libraryDelete", itemId)
+        val result = callFfi(ffiService, "libraryDelete", itemId)
         return CoreGatewayResult(
             value = readBoolean(result, "deleted"),
             error = readError(result),
@@ -167,7 +187,7 @@ class GeneratedUniffiCoreGateway private constructor(
 
     override fun listDownloadQueue(): CoreGatewayResult<List<CoreDownloadSnapshot>> {
         checkNotMainThread()
-        val result = callFfi("downloadQueue")
+        val result = callFfi(ffiService, "downloadQueue")
         return CoreGatewayResult(
             value = readList(result, "jobs").map(::mapDownloadSnapshot),
             error = readError(result),
@@ -178,11 +198,11 @@ class GeneratedUniffiCoreGateway private constructor(
         dispatcher.close()
     }
 
-    private fun callFfi(methodName: String, vararg arguments: Any?): Any {
-        val method = ffiService.javaClass.methods.firstOrNull { method ->
+    private fun callFfi(target: Any, methodName: String, vararg arguments: Any?): Any {
+        val method = target.javaClass.methods.firstOrNull { method ->
             method.name == methodName && method.parameterTypes.size == arguments.size
         } ?: error("Generated FFI service does not expose $methodName/${arguments.size}")
-        return method.invoke(ffiService, *arguments) ?: error("Generated FFI service returned null for $methodName")
+        return method.invoke(target, *arguments) ?: error("Generated FFI service returned null for $methodName")
     }
 
     companion object {
@@ -191,23 +211,36 @@ class GeneratedUniffiCoreGateway private constructor(
             dispatcher: CoreCallDispatcher = CoreCallDispatcher.singleThreaded(),
         ): GeneratedUniffiCoreGateway {
             val service = openGeneratedService(databasePath)
-            return GeneratedUniffiCoreGateway(service, dispatcher)
+            val startupReconciliationService = openGeneratedStartupReconciliationService(databasePath)
+            return GeneratedUniffiCoreGateway(service, startupReconciliationService, dispatcher)
         }
 
-        private fun openGeneratedService(databasePath: String): Any {
-            val serviceClass = Class.forName("com.ekkus.offlineytplayer.core.FfiCoreService")
+        private fun openGeneratedService(databasePath: String): Any =
+            openGeneratedService(
+                className = "com.ekkus.offlineytplayer.core.FfiCoreService",
+                databasePath = databasePath,
+            )
+
+        private fun openGeneratedStartupReconciliationService(databasePath: String): Any =
+            openGeneratedService(
+                className = "com.ekkus.offlineytplayer.core.FfiStartupReconciliationService",
+                databasePath = databasePath,
+            )
+
+        private fun openGeneratedService(className: String, databasePath: String): Any {
+            val serviceClass = Class.forName(className)
             serviceClass.methods.firstOrNull { method ->
                 method.name == "open" && method.parameterTypes.contentEquals(arrayOf(String::class.java))
             }?.let { method -> return method.invoke(null, databasePath) }
 
             val companion = serviceClass.declaredClasses.firstOrNull { it.simpleName == "Companion" }
-                ?: error("Generated FfiCoreService has no static or companion open(databasePath)")
+                ?: error("Generated $className has no static or companion open(databasePath)")
             val companionInstance = serviceClass.getDeclaredField("Companion").get(null)
             val open: Method = companion.methods.firstOrNull { method ->
                 method.name == "open" && method.parameterTypes.contentEquals(arrayOf(String::class.java))
-            } ?: error("Generated FfiCoreService.Companion has no open(databasePath)")
+            } ?: error("Generated $className.Companion has no open(databasePath)")
             return open.invoke(companionInstance, databasePath)
-                ?: error("Generated FfiCoreService.open returned null")
+                ?: error("Generated $className.open returned null")
         }
     }
 }
@@ -215,9 +248,15 @@ class GeneratedUniffiCoreGateway private constructor(
 class FakeCoreGateway(
     initialItems: List<CoreLibraryItem> = emptyList(),
     initialDownloads: List<CoreDownloadSnapshot> = emptyList(),
+    private val startupReconciliation: CoreGatewayResult<CoreStartupReconciliation> = CoreGatewayResult(
+        value = CoreStartupReconciliation(jobsRequeued = 0),
+        error = null,
+    ),
 ) : AppCoreGateway {
     private val items = initialItems.associateBy { it.itemId }.toMutableMap()
     private val downloads = initialDownloads.associateBy { it.jobId }.toMutableMap()
+
+    override fun reconcileStartup(): CoreGatewayResult<CoreStartupReconciliation> = startupReconciliation
 
     override fun listLibrary(query: String?): CoreGatewayResult<List<CoreLibraryItem>> {
         val normalized = query?.trim()?.lowercase().orEmpty()
