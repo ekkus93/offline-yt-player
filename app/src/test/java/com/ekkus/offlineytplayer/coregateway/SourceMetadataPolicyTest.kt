@@ -30,4 +30,18 @@ class SourceMetadataPolicyTest {
         assertEquals("Unknown quality", SourceMetadataPolicy.qualityLabel("\n\r\t"))
         assertEquals("Unknown error", SourceMetadataPolicy.diagnostic("\u0000"))
     }
+
+    @Test fun diagnosticRedactsSyntheticSignedUrls() {
+        val marker = "RMD1302_MARKER"
+        val input = "GET https://user:$marker@cdn.example/video?sig=$marker#frag-$marker"
+        val output = SourceMetadataPolicy.diagnostic(input)
+        assertFalse(output.contains(marker))
+        assertFalse(output.contains("sig="))
+        assertFalse(output.contains("frag-"))
+        assertTrue(output.contains("cdn.example/video"))
+    }
+
+    @Test fun ordinaryDiagnosticTextIsPreserved() {
+        assertEquals("download failed: connection reset", SourceMetadataPolicy.diagnostic("download failed: connection reset"))
+    }
 }
