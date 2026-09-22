@@ -1,6 +1,6 @@
 use crate::{
     Compatibility, DownloadPlan, DownloadPlanAsset, DownloadPolicy, DownloadState,
-    DownloadWorkItem, DownloadWorker, DurableDownloadSnapshot, LibraryStore, LocalAsset, MediaKind,
+    DownloadWorkItem, DownloadWorker, DurableDownloadSnapshot, LibraryStore, MediaKind,
     QualityChoice, SourceIdentity, reconcile_startup_with_library_root,
 };
 use std::sync::Arc;
@@ -100,27 +100,13 @@ fn process_death_relaunch_reconstructs_queue_and_completes_one_fixture_item() {
     let database = temp.path().join("library.sqlite3");
     let media_root = temp.path().join("media");
     std::fs::create_dir_all(media_root.join("items/death-job")).unwrap();
-    let partial_relative = "items/death-job/video.mp4.partial";
-    let partial_path = media_root.join(partial_relative);
+    let partial_path = media_root.join("items/death-job/.video.mp4.partial");
     std::fs::write(&partial_path, b"part").unwrap();
 
     {
         let store = LibraryStore::open(&database).unwrap();
         store
             .save_download_snapshot(&interrupted_snapshot("death-job", data.len() as u64))
-            .unwrap();
-        store
-            .stage_asset(
-                "death-job",
-                &LocalAsset {
-                    asset_id: "combined".into(),
-                    kind: MediaKind::Video,
-                    relative_path: partial_relative.into(),
-                    bytes: 4,
-                    sha256: None,
-                    mime_type: Some("video/mp4".into()),
-                },
-            )
             .unwrap();
     }
 
