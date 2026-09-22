@@ -1,6 +1,7 @@
 package com.ekkus.offlineytplayer.coregateway
 
 import android.os.Looper
+import com.ekkus.offlineytplayer.SupportedUrlPolicy
 import java.io.Closeable
 import java.lang.reflect.Method
 
@@ -31,10 +32,15 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Source analysis is blocking and must run off the Android main thread"
         }
-        val normalized = sourceUrl.trim()
-        if (normalized.isEmpty()) {
-            return CoreGatewayResult(null, CoreGatewayError("INVALID_INPUT", "Video URL is required", false))
-        }
+        val normalized = SupportedUrlPolicy.normalizeSupportedUrl(sourceUrl)
+            ?: return CoreGatewayResult(
+                null,
+                CoreGatewayError(
+                    "UNSUPPORTED_SOURCE",
+                    "Enter a supported YouTube video URL",
+                    false,
+                ),
+            )
         val token = newGeneratedObject("com.ekkus.offlineytplayer.core.FfiCancellationToken", "new")
         val resolved = callTwoArg(sourceService, "resolve", normalized, token)
         readSourceError(resolved)?.let { return CoreGatewayResult(null, it) }
@@ -51,7 +57,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         val preferred = qualityOptions.firstOrNull()
         return CoreGatewayResult(
             CoreSourceAnalysis(
-                sourceUrl = normalized,
+                sourceUrl = canonicalSourceUrl(media) ?: normalized,
                 title = SourceMetadataPolicy.title(readSourceString(media, "title")),
                 durationMs = (readSourceNullable(media, "durationMs", "duration_ms") as Number?)?.toLong(),
                 thumbnailUrl = readSourceNullable(media, "thumbnailUrl", "thumbnail_url") as String?,
@@ -70,6 +76,11 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
             newGeneratedObject("com.ekkus.offlineytplayer.core.FfiYouTubeSourceService", "new"),
         )
     }
+}
+
+private fun canonicalSourceUrl(media: Any): String? {
+    val source = readSourceNullable(media, "source") ?: return null
+    return readSourceNullable(source, "canonicalUrl", "canonical_url") as String?
 }
 
 private fun newGeneratedObject(className: String, factoryName: String): Any {
