@@ -90,11 +90,13 @@ pub fn validate_relative_library_path(path: &str) -> Result<(), CoreError> {
     Ok(())
 }
 
-/// Removes sensitive header values and URL query material before diagnostic output.
+/// Removes sensitive header values and URL credential/query/fragment material before diagnostic
+/// output. The result is intentionally lossy but retains the failing URL host/path.
 #[must_use]
 pub fn redact_sensitive(input: &str) -> String {
     let sensitive_names = [
         format!("{}{}:", "author", "ization"),
+        format!("{}{}:", "proxy-author", "ization"),
         format!("{}{}:", "coo", "kie"),
         format!("{}{}:", "set-coo", "kie"),
         format!("{}{}:", "x-api-", "key"),
@@ -102,15 +104,13 @@ pub fn redact_sensitive(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     for line in input.lines() {
         let lower = line.to_ascii_lowercase();
-        let redacted = if sensitive_names.iter().any(|name| lower.contains(name)) {
+        let redacted = if sensitive_names.iter().any(|name| lower.starts_with(name)) {
             line.split_once(':').map_or_else(
                 || "[REDACTED]".to_string(),
                 |(name, _)| format!("{name}: [REDACTED]"),
             )
-        } else if line.contains("http://") || line.contains("https://") {
-            redact_url_queries(line)
         } else {
-            line.to_string()
+            redact_urls(line)
         };
         if !output.is_empty() {
             output.push('\n');
@@ -120,22 +120,31 @@ pub fn redact_sensitive(input: &str) -> String {
     output
 }
 
-fn redact_url_queries(line: &str) -> String {
+fn redact_urls(line: &str) -> String {
     line.split_whitespace()
-        .map(|token| {
-            let trimmed = token.trim_matches(|c: char| matches!(c, '(' | ')' | '[' | ']' | ','));
-            Url::parse(trimmed).map_or_else(
-                |_| token.to_string(),
-                |mut url| {
-                    if url.query().is_some() {
-                        url.set_query(Some("REDACTED"));
-                    }
-                    token.replace(trimmed, url.as_str())
-                },
-            )
-        })
+        .map(redact_url_token)
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn redact_url_token(token: &str) -> String {
+    let trimmed = token.trim_matches(|c: char| matches!(c, '(' | ')' | '[' | ']' | ','));
+    Url::parse(trimmed).map_or_else(
+        |_| token.to_string(),
+        |mut url| {
+            if !url.username().is_empty() || url.password().is_some() {
+                let _ = url.set_username("REDACTED");
+                let _ = url.set_password(None);
+            }
+            if url.query().is_some() {
+                url.set_query(Some("REDACTED"));
+            }
+            if url.fragment().is_some() {
+                url.set_fragment(Some("REDACTED"));
+            }
+            token.replace(trimmed, url.as_str())
+        },
+    )
 }
 
 #[cfg(test)]
@@ -176,17 +185,21 @@ mod tests {
 
     #[test]
     fn sensitive_values_are_redacted() {
-        let header = format!("{}{}: {}", "Author", "ization", "test-value");
-        let cookie = format!("{}{}: {}", "Coo", "kie", "test-cookie-value");
-        let url = format!(
-            "GET https://cdn.example/video?{}={}",
-            "signature", "test-query-value"
-        );
+        let marker = "RMD1302_MARKER";
+        let header = format!("{}{}: {}", "Author", "ization", marker);
+        let cookie = format!("{}{}: {}", "Coo", "kie", marker);
+        let url = format!("GET https://user:{marker}@cdn.example/video?sig={marker}#frag-{marker}");
         let input = format!("{header}\n{cookie}\n{url}");
         let output = redact_sensitive(&input);
-        assert!(!output.contains("test-value"));
-        assert!(!output.contains("test-cookie-value"));
-        assert!(!output.contains("test-query-value"));
+        assert!(!output.contains(marker));
+        assert!(!output.contains("sig="));
+        assert!(!output.contains("frag-"));
         assert!(output.contains("REDACTED"));
+    }
+
+    #[test]
+    fn ordinary_diagnostic_text_is_preserved() {
+        let input = "download failed: connection reset by peer";
+        assert_eq!(redact_sensitive(input), input);
     }
 }
