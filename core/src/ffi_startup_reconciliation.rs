@@ -26,7 +26,12 @@ impl FfiStartupReconciliationService {
     pub fn open(database_path: String) -> Result<Arc<Self>, FfiCoreServiceOpenError> {
         let library_root = PathBuf::from(&database_path).parent().map(PathBuf::from);
         LibraryStore::open(&database_path)
-            .map(|library| Arc::new(Self { library, library_root }))
+            .map(|library| {
+                Arc::new(Self {
+                    library,
+                    library_root,
+                })
+            })
             .map_err(|error| FfiCoreServiceOpenError::Persistence {
                 message: error.message,
             })
