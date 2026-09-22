@@ -1,6 +1,8 @@
 use crate::domain::{CoreError, ErrorKind};
 use url::Url;
 
+const MAX_SUPPORTED_URL_BYTES: usize = 4_096;
+
 const YOUTUBE_HOSTS: &[&str] = &[
     "youtube.com",
     "www.youtube.com",
@@ -15,8 +17,15 @@ pub struct YouTubeVideoUrl {
 }
 
 pub fn recognize_youtube_video_url(input: &str) -> Result<YouTubeVideoUrl, CoreError> {
+    let input = input.trim();
+    if input.is_empty() || input.len() > MAX_SUPPORTED_URL_BYTES {
+        return Err(unsupported());
+    }
     let parsed = Url::parse(input).map_err(|_| unsupported())?;
     if parsed.scheme() != "https" && parsed.scheme() != "http" {
+        return Err(unsupported());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
         return Err(unsupported());
     }
     let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
@@ -125,6 +134,8 @@ mod tests {
             "https://evil.example/?next=https://youtu.be/dQw4w9WgXcQ",
             "https://www.youtube.com/watch?v=too-short",
             "ftp://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://user:pass@www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://www.youtube.com./watch?v=dQw4w9WgXcQ",
         ] {
             assert_eq!(
                 recognize_youtube_video_url(url).unwrap_err().kind,
