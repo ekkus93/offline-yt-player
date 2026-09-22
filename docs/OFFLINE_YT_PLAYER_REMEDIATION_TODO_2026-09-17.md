@@ -606,10 +606,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1301 — Unify Android/core URL validation
 
-- [ ] Define one supported URL contract.
-- [ ] Align Share/Add validation with core source recognition.
-- [ ] Reject unsupported schemes/hosts/oversized inputs consistently.
-- [ ] Add adversarial tests.
+- [x] Define one supported URL contract.
+- [x] Align Share/Add validation with core source recognition.
+- [x] Reject unsupported schemes/hosts/oversized inputs consistently.
+- [x] Add adversarial tests.
+
+**Evidence (RMD-1301):** production core recognition is defined by `recognize_youtube_video_url` / `SourceRegistry::production`; Android `SupportedUrlPolicy` is the fail-closed Share/Add mirror and `ShareInput` routes shared text through it. Both sides accept the same supported YouTube watch/short-link host forms and reject unsupported schemes/pages, spoofed or trailing-dot hosts, credential-bearing URLs, invalid video IDs, and oversized inputs before source resolution. Adversarial coverage is in Rust `youtube::tests` and Android `SupportedUrlPolicyTest`. Qualified implementation evidence: exact head `60b868a372d02b5847128a421256424d32437309` passed push CI `35759715267` and PR CI `35759961662`; PR #305 merged as `aa23e675f90ffda31131d9105ee2de37f1031b45`.
 
 ### RMD-1302 — Secret/log hygiene end to end
 
