@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadSnapshot
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayError
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryPlaybackAsset
@@ -111,15 +112,20 @@ class MainActivity : ComponentActivity() {
             val controls = runCatching { GeneratedUniffiDownloadControlGateway.open(databasePath) }
             val playback = runCatching { GeneratedUniffiLibraryPlaybackGateway.open(databasePath) }
             val sources = runCatching { GeneratedUniffiSourceAnalysisGateway.open() }
-            val initialPlaybackAssets = playback.getOrNull()?.listPlaybackAssets()
-            val initialLibrary = core.fold(
-                onSuccess = { it.listLibrary().toLibraryScreenState(libraryRoot, initialPlaybackAssets) },
-                onFailure = { LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(it.safeUiMessage())) },
-            )
-            val initialDownloads = core.fold(
-                onSuccess = { it.listDownloadQueue().toDownloadsScreenState() },
-                onFailure = { DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.safeUiMessage())) },
-            )
+            val openedCore = core.getOrNull()
+            val startupReconciliation = openedCore?.reconcileStartup()
+            val startupFailure = startupReconciliation?.error
+            val initialPlaybackAssets = if (startupFailure == null) playback.getOrNull()?.listPlaybackAssets() else null
+            val initialLibrary = when {
+                core.isFailure -> LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
+                startupFailure != null -> LibraryScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
+                else -> openedCore!!.listLibrary().toLibraryScreenState(libraryRoot, initialPlaybackAssets)
+            }
+            val initialDownloads = when {
+                core.isFailure -> DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
+                startupFailure != null -> DownloadsScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
+                else -> openedCore!!.listDownloadQueue().toDownloadsScreenState()
+            }
             if (isFinishing || isDestroyed) {
                 core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); sources.getOrNull()?.close()
                 return@execute
@@ -135,7 +141,7 @@ class MainActivity : ComponentActivity() {
                 downloadControlGateway = controls.getOrNull()
                 libraryPlaybackGateway = playback.getOrNull()
                 sourceAnalysisGateway = sources.getOrNull()
-                coreGateway?.let { gateway ->
+                coreGateway?.takeIf { startupFailure == null }?.let { gateway ->
                     stateRefresher = AppStateRefresher(
                         gateway = gateway,
                         onLibrary = { result ->
@@ -212,9 +218,12 @@ private fun CoreDownloadState.toUiState(): DownloadUiState = when (this) {
     else -> DownloadUiState.Active
 }
 
+private fun CoreGatewayError.startupReconciliationDiagnostic(): String =
+    SourceMetadataPolicy.diagnostic("Startup reconciliation failed: $message")
+
 private fun formatDuration(durationMs: Long): String {
     val totalSeconds = durationMs.coerceAtLeast(0) / 1000
     return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
 }
 
-private fun Throwable.safeUiMessage(): String = message?.take(256) ?: javaClass.simpleName
+private fun Throwable?.safeUiMessage(): String = this?.message?.take(256) ?: this?.javaClass?.simpleName ?: "Unknown core startup failure"

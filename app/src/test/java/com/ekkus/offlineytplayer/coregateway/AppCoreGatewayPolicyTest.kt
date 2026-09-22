@@ -28,8 +28,14 @@ class AppCoreGatewayPolicyTest {
             retryAtEpochMs = null,
             lastError = null,
         )
-        val gateway = FakeCoreGateway(initialItems = listOf(item), initialDownloads = listOf(queued))
+        val reconciliation = CoreGatewayResult(value = CoreStartupReconciliation(2), error = null)
+        val gateway = FakeCoreGateway(
+            initialItems = listOf(item),
+            initialDownloads = listOf(queued),
+            startupReconciliation = reconciliation,
+        )
 
+        assertEquals(reconciliation, gateway.reconcileStartup())
         assertEquals(listOf(item), gateway.listLibrary("fixture").value)
         assertEquals(item, gateway.getLibraryItem("item-1").value)
         assertEquals(true, gateway.deleteLibraryItem("item-1").value)
@@ -48,7 +54,11 @@ class AppCoreGatewayPolicyTest {
         val source = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppCoreGateway.kt").readText()
         val controls = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppDownloadControlGateway.kt").readText()
 
-        assertTrue(source.contains("Class.forName(\"com.ekkus.offlineytplayer.core.FfiCoreService\")"))
+        assertTrue(source.contains("Class.forName(className)"))
+        assertTrue(source.contains("FfiCoreService"))
+        assertTrue(source.contains("FfiStartupReconciliationService"))
+        assertTrue(source.contains("startupReconcile"))
+        assertTrue(source.contains("reconcileStartupAsync"))
         assertTrue(source.contains("CoreCallDispatcher"))
         assertTrue(source.contains("checkNotMainThread()"))
         assertTrue(source.contains("FakeCoreGateway"))
