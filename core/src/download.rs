@@ -957,7 +957,9 @@ mod tests {
             expected_sha256: None,
         };
 
-        let error = engine.transfer(&request, &AtomicBool::new(false)).unwrap_err();
+        let error = engine
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap_err();
 
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert_eq!(fs::read(&outside_file).unwrap(), b"outside bytes");
