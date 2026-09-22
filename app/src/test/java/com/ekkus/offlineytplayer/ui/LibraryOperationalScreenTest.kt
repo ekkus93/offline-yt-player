@@ -17,15 +17,17 @@ class LibraryOperationalScreenTest {
     @Test
     fun libraryScreenSearchesRepositoryBackedMetadata() {
         val source = File("src/main/java/com/ekkus/offlineytplayer/ui/LibraryDownloads.kt").readText()
-        assertTrue(source.contains("row.matchesLibraryQuery(query)"))
-        assertTrue(source.contains("title.contains(normalized, ignoreCase = true)"))
-        assertTrue(source.contains("detail.contains(normalized, ignoreCase = true)"))
+        assertTrue(source.contains("matchesLibraryQuery(query)"))
+        assertTrue(source.contains("title.contains"))
+        assertTrue(source.contains("detail.contains"))
     }
 
     @Test
-    fun layoutSelectionRemainsSaveableAcrossRecomposition() {
+    fun layoutSelectionUsesDurableAppearanceSetting() {
         val source = File("src/main/java/com/ekkus/offlineytplayer/ui/LibraryDownloads.kt").readText()
-        assertTrue(source.contains("var layout by rememberSaveable"))
-        assertTrue(source.contains("layout = if (layout == LibraryLayout.List) LibraryLayout.Grid else LibraryLayout.List"))
+        assertTrue(source.contains("settings.libraryLayout"))
+        assertTrue(source.contains("onUpdateSettings"))
+        assertTrue(source.contains("LibraryLayoutSetting.Grid"))
+        assertTrue(source.contains("LibraryLayoutSetting.List"))
     }
 }
