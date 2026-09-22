@@ -1,7 +1,7 @@
 use crate::{
     Compatibility, DownloadPlan, DownloadPlanAsset, DownloadPolicy, DownloadState,
-    DownloadWorkItem, DownloadWorker, DurableDownloadSnapshot, LibraryStore, LocalAsset,
-    MediaKind, QualityChoice, SourceIdentity, reconcile_startup_with_library_root,
+    DownloadWorkItem, DownloadWorker, DurableDownloadSnapshot, LibraryStore, LocalAsset, MediaKind,
+    QualityChoice, SourceIdentity, reconcile_startup_with_library_root,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,7 +26,9 @@ impl FixtureServer {
                 else {
                     continue;
                 };
-                request.respond(TinyResponse::from_data(body.clone())).unwrap();
+                request
+                    .respond(TinyResponse::from_data(body.clone()))
+                    .unwrap();
             }
         });
         Self {
@@ -129,7 +131,9 @@ fn process_death_relaunch_reconstructs_queue_and_completes_one_fixture_item() {
     let reconstructed = relaunched.load_download_snapshots().unwrap().remove(0);
     assert_eq!(reconstructed.job_id, "death-job");
     assert_eq!(reconstructed.state, DownloadState::Queued);
+    assert_eq!(reconstructed.bytes_downloaded, 4);
     assert!(reconstructed.last_error.unwrap().retryable);
+    assert!(partial_path.is_file());
 
     let worker = DownloadWorker::new(
         relaunched.clone(),
@@ -156,12 +160,16 @@ fn process_death_relaunch_reconstructs_queue_and_completes_one_fixture_item() {
     assert!(item.completed);
     assert_eq!(item.assets.len(), 1);
     assert_eq!(item.assets[0].bytes, data.len() as u64);
-    reopened.validate_item_assets(&media_root, "death-job").unwrap();
+    reopened
+        .validate_item_assets(&media_root, "death-job")
+        .unwrap();
     let final_snapshot = reopened.load_download_snapshots().unwrap().remove(0);
     assert_eq!(final_snapshot.state, DownloadState::Completed);
     assert_eq!(final_snapshot.bytes_downloaded, data.len() as u64);
+    assert!(final_snapshot.last_error.is_none());
+    assert_eq!(reopened.list(None).unwrap().len(), 1);
+    assert!(!partial_path.exists());
 
     let cleanup = reconcile_startup_with_library_root(&reopened, &media_root).unwrap();
-    assert_eq!(cleanup.orphaned_partial_files_removed, 1);
-    assert!(!partial_path.exists());
+    assert_eq!(cleanup.orphaned_partial_files_removed, 0);
 }
