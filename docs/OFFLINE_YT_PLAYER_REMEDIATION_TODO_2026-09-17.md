@@ -580,11 +580,13 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1203 — Boot-recovery test
 
-- [ ] Prepare durable interrupted work.
-- [ ] Simulate/reboot emulator where CI infrastructure supports it.
-- [ ] Verify receiver/reconciliation path.
-- [ ] Verify no forbidden `dataSync` FGS boot launch.
-- [ ] Verify work remains recoverable and is scheduled only when legal.
+- [x] Prepare durable interrupted work.
+- [x] Simulate/reboot emulator where CI infrastructure supports it.
+- [x] Verify receiver/reconciliation path.
+- [x] Verify no forbidden `dataSync` FGS boot launch.
+- [x] Verify work remains recoverable and is scheduled only when legal.
+
+**Evidence (RMD-1203):** `DownloadBootRecovery` now models `BOOT_COMPLETED` as a legal deferred-startup reconciliation decision: it does not start `DownloadForegroundService`, does not open credential-protected state, preserves durable work for the same `GeneratedUniffiCoreGateway.reconcileStartup` path used by normal startup, and reports that work may only be scheduled when a legal scheduler path is available. `DownloadBootRecoveryPolicyTest` and `DownloadRebootRecoveryPolicyTest` verify the receiver policy, manifest shape, ignored non-boot broadcasts, no `LOCKED_BOOT_COMPLETED`, no direct `dataSync` foreground-service launch, no direct scheduler launch from boot, and the deferred recovery path. Deterministic process-death durable-work preparation and completion is covered by RMD-1202's file-backed recovery test; current CI does not include emulator reboot instrumentation, so RMD-1203's reboot simulation is the JVM receiver-policy path until RMD-1401 adds emulator infrastructure. Qualified implementation evidence: exact head `2852f47bf45e2f9627c104b9ef5b55093a8a1a47` passed push CI `35738352843`.
 
 ### RMD-1204 — Corrupt-state recovery UI
 

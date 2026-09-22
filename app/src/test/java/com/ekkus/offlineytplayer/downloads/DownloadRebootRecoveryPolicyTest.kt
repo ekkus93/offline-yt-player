@@ -21,9 +21,12 @@ class DownloadRebootRecoveryPolicyTest {
         val receiver = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadRebootReceiver.kt").readText()
         assertFalse(receiver.contains("ContextCompat.startForegroundService"))
         assertFalse(receiver.contains("DownloadForegroundService::class.java"))
-        assertTrue(receiver.contains("DownloadBootRecovery.onBootCompleted()"))
+        assertTrue(receiver.contains("DownloadBootRecovery.onReceive(intent?.action)"))
+        assertFalse(receiver.contains("AndroidDownloadExecutionScheduler"))
+        assertFalse(receiver.contains("startService("))
         assertFalse(DownloadBootRecovery.StartsForegroundServiceFromBoot)
         assertFalse(DownloadBootRecovery.UsesLockedBootCompleted)
+        assertFalse(DownloadBootRecovery.OpensCredentialProtectedStorageOnBoot)
     }
 
     @Test
