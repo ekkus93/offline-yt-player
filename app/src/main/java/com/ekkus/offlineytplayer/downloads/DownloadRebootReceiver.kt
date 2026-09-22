@@ -3,34 +3,54 @@ package com.ekkus.offlineytplayer.downloads
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
+import java.io.File
+import java.util.concurrent.Executors
 
 /**
- * Boot is only a durable-state signal. It must never directly start a dataSync
- * foreground service: target SDK 35+ forbids that launch from BOOT_COMPLETED.
+ * Boot is only a durable-state recovery signal. It never directly starts a
+ * dataSync foreground service: target SDK 35+ forbids that launch from
+ * BOOT_COMPLETED.
  *
- * The production scheduler/repository introduced by RMD-103/RMD-500 owns
- * reconciliation and future eligible execution. Until that durable scheduler
- * exists, boot deliberately performs no process-local or credential-protected
- * work.
+ * BOOT_COMPLETED is delivered after credential-encrypted storage is available,
+ * so the receiver may reconcile the app-private durable queue. It deliberately
+ * does not schedule user-initiated work from the boot broadcast; recovered work
+ * remains durable and is scheduled later from a legal user/runtime entry point.
  */
 class DownloadRebootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent?.action != Intent.ACTION_BOOT_COMPLETED) return
-        DownloadBootRecovery.onBootCompleted()
+        if (!DownloadBootRecovery.shouldReconcile(intent?.action)) return
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
+        DownloadBootRecovery.execute {
+            try {
+                DownloadBootRecovery.reconcile(appContext)
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 }
 
 internal object DownloadBootRecovery {
-    /**
-     * True documents the platform invariant enforced by this receiver.
-     * Scheduling is wired to durable queue state by RMD-103/RMD-500 rather than
-     * starting DownloadForegroundService from a boot broadcast.
-     */
     const val StartsForegroundServiceFromBoot = false
+    const val SchedulesUserInitiatedJobFromBoot = false
     const val UsesLockedBootCompleted = false
 
-    fun onBootCompleted() {
-        // Intentionally no credential-encrypted DB/media access here.
-        // Durable reconciliation/scheduling is attached by RMD-103/RMD-500.
+    private val executor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "offline-yt-boot-recovery").apply { isDaemon = true }
+    }
+
+    fun shouldReconcile(action: String?): Boolean = action == Intent.ACTION_BOOT_COMPLETED
+
+    fun execute(block: () -> Unit) {
+        executor.execute(block)
+    }
+
+    fun reconcile(context: Context) {
+        val databasePath = File(context.filesDir, "offline-yt-player.sqlite3").absolutePath
+        GeneratedUniffiCoreGateway.open(databasePath).use { gateway ->
+            gateway.reconcileStartup()
+        }
     }
 }
