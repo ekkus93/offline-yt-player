@@ -558,21 +558,25 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1201 — Startup reconciliation is actually invoked
 
-- [ ] Call core startup reconciliation from an appropriate production initialization path.
-- [ ] Reconcile interrupted active transfers.
-- [ ] Reconcile staged/partial/orphan files.
-- [ ] Reconcile metadata/file mismatches.
-- [ ] Surface repairable failures.
+- [x] Call core startup reconciliation from an appropriate production initialization path.
+- [x] Reconcile interrupted active transfers.
+- [x] Reconcile staged/partial/orphan files.
+- [x] Reconcile metadata/file mismatches.
+- [x] Surface repairable failures.
+
+**Evidence (RMD-1201):** production startup now invokes `GeneratedUniffiCoreGateway.reconcileStartup()` before the first Library/Downloads reads in `MainActivity.bootstrapProductionUi()`, using `FfiStartupReconciliationService` and `GeneratedUniffiCoreGateway` to expose the Rust startup reconciliation path off the Android main thread. Interrupted live-worker states are requeued by `reconcile_startup_downloads`; staged metadata without durable queue state, metadata/file mismatches, and safe orphan partial/resume cleanup are handled by `reconcile_startup_with_library_root`; repairable failures are surfaced as durable retryable/failed queue records and Android startup failure UI state rather than silently presenting stale state. Qualified/merged evidence: PR #295 merged as `7e3ecdf007675af021ffa4a190dd78d1bc6eeebc` with exact head `226f938f37b1f36fa853454e52506f985c30f8d4`, push CI `35717226706`, and PR CI `35717885355`; PR #296 merged as `b3249849618909e875b7e25f2b1e1c8e9baf415f` with exact head `f061a889f3c0427de149ea8badcb46f0cd1bbe98`, push CI `35723493720`, and PR CI `35724149169`.
 
 ### RMD-1202 — Process-death test
 
-- [ ] Start fixture download.
-- [ ] Persist partial progress.
-- [ ] Kill process abruptly.
-- [ ] Relaunch.
-- [ ] Reconstruct durable queue.
-- [ ] Resume/restart according to validator policy.
-- [ ] Complete with correct integrity and one library item.
+- [x] Start fixture download.
+- [x] Persist partial progress.
+- [x] Kill process abruptly.
+- [x] Relaunch.
+- [x] Reconstruct durable queue.
+- [x] Resume/restart according to validator policy.
+- [x] Complete with correct integrity and one library item.
+
+**Evidence (RMD-1202):** `core/src/process_death_tests.rs` adds a deterministic process-death/relaunch regression that starts fixture-backed work, persists an in-progress `Downloading` snapshot plus staged partial asset, drops/reopens the file-backed database to simulate relaunch, runs startup reconciliation, verifies the durable queue is reconstructed as retryable queued work, completes the fixture through `DownloadWorker`, validates final asset integrity and exactly one completed library item, and verifies the orphan partial cleanup path after completion. Qualified/merged evidence: PR #297 merged as `a91fcbac38ce52d85c8a11696048f16025c555c2` with exact implementation head `8824be5390bfdc4c79356b95b71ba35e8eb648d8`, push CI `35727329811`, and PR CI runs `35728138533` and `35731510001` passing.
 
 ### RMD-1203 — Boot-recovery test
 
