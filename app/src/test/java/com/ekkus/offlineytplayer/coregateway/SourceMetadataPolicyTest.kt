@@ -30,4 +30,16 @@ class SourceMetadataPolicyTest {
         assertEquals("Unknown quality", SourceMetadataPolicy.qualityLabel("\n\r\t"))
         assertEquals("Unknown error", SourceMetadataPolicy.diagnostic("\u0000"))
     }
+
+    @Test fun diagnosticsRedactUrlsSignedParametersAndSyntheticTokens() {
+        val secret = "SYNTHETIC_SECRET_MARKER_9f4c"
+        val diagnostic = SourceMetadataPolicy.diagnostic(
+            "request failed https://media.example/video?signature=$secret&token=$secret token=$secret api_key=$secret",
+        )
+        assertFalse(diagnostic.contains(secret))
+        assertFalse(diagnostic.contains("media.example"))
+        assertTrue(diagnostic.contains("[redacted-url]"))
+        assertTrue(diagnostic.contains("token=[redacted]"))
+        assertTrue(diagnostic.contains("api_key=[redacted]"))
+    }
 }
