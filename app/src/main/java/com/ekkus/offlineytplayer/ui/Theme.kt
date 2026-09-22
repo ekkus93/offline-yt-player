@@ -75,6 +75,9 @@ private val MidnightTransitTypography = Typography(
     labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
 )
 
+@Deprecated("Use durable AppearanceSetting from AppSettingsSnapshot.")
+enum class ThemePreference { Dark, Light, System }
+
 internal object ThemeContrastPolicy {
     const val NormalTextMinimum = 4.5
     const val LargeTextAndUiMinimum = 3.0
