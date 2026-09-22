@@ -6,20 +6,25 @@ import org.junit.Test
 
 class SupportedUrlPolicyTest {
     @Test
-    fun acceptsCoreSupportedYoutubeVideoForms() {
+    fun acceptsCoreSupportedYoutubeVideoFormsAsCanonicalUrls() {
+        val canonical = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         assertEquals(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share",
+            canonical,
             SupportedUrlPolicy.normalizeSupportedUrl(
                 "https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share",
             ),
         )
         assertEquals(
-            "https://youtu.be/dQw4w9WgXcQ?t=43",
+            canonical,
             SupportedUrlPolicy.normalizeSupportedUrl("https://youtu.be/dQw4w9WgXcQ?t=43"),
         )
         assertEquals(
-            "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
-            SupportedUrlPolicy.normalizeSupportedUrl("https://m.youtube.com/watch?v=dQw4w9WgXcQ"),
+            canonical,
+            SupportedUrlPolicy.normalizeSupportedUrl("http://m.youtube.com/watch?v=dQw4w9WgXcQ"),
+        )
+        assertEquals(
+            canonical,
+            SupportedUrlPolicy.normalizeSupportedUrl("https://music.youtube.com/watch?v=dQw4w9WgXcQ"),
         )
     }
 
@@ -30,6 +35,7 @@ class SupportedUrlPolicyTest {
             "ftp://www.youtube.com/watch?v=dQw4w9WgXcQ",
             "https://example.com/watch?v=dQw4w9WgXcQ",
             "https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ",
+            "https://www.youtube.com./watch?v=dQw4w9WgXcQ",
             "https://www.youtube.com/playlist?list=PL123",
             "https://www.youtube.com/@example",
             "https://www.youtube.com/shorts/dQw4w9WgXcQ",
@@ -47,9 +53,10 @@ class SupportedUrlPolicyTest {
     }
 
     @Test
-    fun shareInputRequiresExactlyOneSupportedUrl() {
+    fun shareInputRequiresExactlyOneSupportedUrlAndReturnsCanonicalUrl() {
+        val canonical = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         assertEquals(
-            "https://youtu.be/dQw4w9WgXcQ",
+            canonical,
             ShareInput.parse(
                 "android.intent.action.SEND",
                 "text/plain",
@@ -68,6 +75,16 @@ class SupportedUrlPolicyTest {
                 "android.intent.action.SEND",
                 "text/plain",
                 "choose https://youtu.be/dQw4w9WgXcQ or https://youtu.be/abcdefghijk",
+            ),
+        )
+    }
+
+    @Test
+    fun textExtractionDeduplicatesEquivalentCoreCanonicalForms() {
+        assertEquals(
+            listOf("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+            SupportedUrlPolicy.supportedUrlsFromText(
+                "<https://youtu.be/dQw4w9WgXcQ>, https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share",
             ),
         )
     }

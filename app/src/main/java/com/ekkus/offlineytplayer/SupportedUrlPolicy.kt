@@ -3,16 +3,19 @@ package com.ekkus.offlineytplayer
 import java.net.URI
 
 /**
- * Android-side mirror of the production core source-recognition contract.
+ * Android-side entry point for the same production source-recognition contract
+ * enforced by the Rust core's YouTube recognizer.
  *
- * Keep this fail-closed: Share/Add inputs may only enter the pipeline when the
- * portable core production registry can recognize the same URL form. The core
- * remains authoritative for network resolution and canonical source identity;
- * this policy prevents unsupported schemes, hosts, oversized inputs, and
- * non-video YouTube pages from reaching preview/setup UI as if they were valid.
+ * The canonical form returned here intentionally matches the core recognizer:
+ * `https://www.youtube.com/watch?v=<11-character-id>`. Share/Add inputs may
+ * only enter the production analysis pipeline after this fail-closed check, so
+ * unsupported schemes, hosts, oversized inputs, credentials, and non-video
+ * YouTube pages are rejected before they can be presented as resolvable media.
  */
 internal object SupportedUrlPolicy {
     const val MaxUrlLength = 4_096
+
+    private const val CanonicalYouTubePrefix = "https://www.youtube.com/watch?v="
 
     private val YouTubeWatchHosts = setOf(
         "youtube.com",
@@ -34,7 +37,7 @@ internal object SupportedUrlPolicy {
             host in YouTubeWatchHosts -> watchVideoId(uri)
             else -> null
         } ?: return null
-        return if (isValidVideoId(videoId)) uri.toASCIIString() else null
+        return if (isValidVideoId(videoId)) "$CanonicalYouTubePrefix$videoId" else null
     }
 
     fun supportedUrlsFromText(text: String): List<String> =
@@ -57,7 +60,7 @@ internal object SupportedUrlPolicy {
 
     private fun watchVideoId(uri: URI): String? {
         if (uri.path != "/watch") return null
-        return uri.rawQuery
+        return uri.query
             ?.split('&')
             ?.firstNotNullOfOrNull { pair ->
                 val key = pair.substringBefore('=', missingDelimiterValue = pair)

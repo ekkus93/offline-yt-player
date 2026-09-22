@@ -2,6 +2,7 @@ package com.ekkus.offlineytplayer.ui
 
 import java.nio.file.Files
 import java.nio.file.Paths
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,9 +11,19 @@ class AddScreenPolicyTest {
     @Test fun primaryAddUiIsCompleteAndNonScrolling() { val policy = AddScreenPolicy(); assertTrue(policy.urlFieldVisible); assertTrue(policy.pasteActionVisible); assertTrue(policy.analyzeActionVisible); assertTrue(policy.supportedSourceHintVisible); assertFalse(policy.primaryScreenScrollable); assertTrue(policy.primaryControlsFit()) }
     @Test fun analyzeRequiresSupportedVideoUrl() { val policy = AddScreenPolicy(); assertTrue(policy.canAnalyze("https://www.youtube.com/watch?v=dQw4w9WgXcQ")); assertTrue(policy.canAnalyze(" https://youtu.be/dQw4w9WgXcQ ")); assertFalse(policy.canAnalyze("http://example.test/video")); assertFalse(policy.canAnalyze("not a url")); assertFalse(policy.canAnalyze("file:///tmp/video.mp4")) }
 
+    @Test fun analyzeNormalizesToTheCoreCanonicalUrlContract() {
+        val policy = AddScreenPolicy()
+        assertEquals(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            policy.normalizedAnalyzeUrl(" https://youtu.be/dQw4w9WgXcQ?t=43 "),
+        )
+    }
+
     @Test fun productionAddAnalysisUsesInjectedSourceGatewayNotPreviewRoute() {
         val source = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt"))
+        val gateway = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/coregateway/AppSourceAnalysisGateway.kt"))
         assertTrue(source.contains("sourceGateway.analyze") || source.contains("gateway.analyze"))
+        assertTrue(gateway.contains("SupportedUrlPolicy.normalizeSupportedUrl(sourceUrl)"))
         assertFalse(source.contains("DownloadSetupRoute.previewFor(url)"))
         assertTrue(source.contains("withContext(Dispatchers.IO)"))
     }
