@@ -11,7 +11,7 @@ class ShareInputTest {
     @Test
     fun acceptsHttpUrlFromPlainTextSend() {
         assertEquals(
-            "https://youtu.be/dQw4w9WgXcQ",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             ShareInput.parse(
                 "android.intent.action.SEND",
                 "text/plain",
@@ -44,7 +44,7 @@ class ShareInputTest {
         assertNotNull(sharedUrl)
         val setup = DownloadSetupRoute.previewFor(sharedUrl!!)
         requireNotNull(setup)
-        assertEquals("https://youtu.be/dQw4w9WgXcQ", setup.sourceUrl)
+        assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", setup.sourceUrl)
         assertEquals("Best compatible", setup.qualityLabel)
         assertTrue(setup.readyForDownload)
     }
