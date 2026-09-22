@@ -67,8 +67,8 @@ mod tests {
             .unwrap();
         drop(store);
 
-        let service = FfiStartupReconciliationService::open(database.to_string_lossy().into_owned())
-            .unwrap();
+        let service =
+            FfiStartupReconciliationService::open(database.to_string_lossy().into_owned()).unwrap();
         let result = service.startup_reconcile();
         assert!(result.error.is_none());
         assert_eq!(result.jobs_requeued, 1);
@@ -82,7 +82,12 @@ mod tests {
             .unwrap();
         assert_eq!(active.state, DownloadState::Queued);
         assert!(active.retry_at_epoch_ms.is_none());
-        assert!(active.last_error.as_ref().is_some_and(|error| error.retryable));
+        assert!(
+            active
+                .last_error
+                .as_ref()
+                .is_some_and(|error| error.retryable)
+        );
     }
 
     #[test]
