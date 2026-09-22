@@ -16,6 +16,14 @@ class AboutMetadataProviderTest {
     fun localRevisionIsExplicitWhenUnavailable() {
         val metadata = AboutMetadata("dev", 1, null, "licenses", "privacy", "diagnostics", "support")
         assertEquals("local build", AboutMetadataProvider.revisionLabel(metadata))
+    }
+
+    @Test
+    fun currentMetadataAdvertisesConcreteSupportAndLegalInformation() {
+        val metadata = AboutMetadataProvider.current()
+        assertTrue(metadata.licenses.isNotBlank())
+        assertTrue(metadata.privacy.isNotBlank())
+        assertTrue(metadata.diagnostics.isNotBlank())
         assertTrue(metadata.support.contains("offline-yt-player"))
     }
 }
