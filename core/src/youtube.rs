@@ -128,6 +128,18 @@ mod tests {
     }
 
     #[test]
+    fn rejects_oversized_urls_before_parsing() {
+        let oversized = format!(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&pad={}",
+            "x".repeat(4_096)
+        );
+        assert_eq!(
+            recognize_youtube_video_url(&oversized).unwrap_err().kind,
+            ErrorKind::UnsupportedSource
+        );
+    }
+
+    #[test]
     fn rejects_spoofed_hosts_and_invalid_ids() {
         for url in [
             "https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ",
