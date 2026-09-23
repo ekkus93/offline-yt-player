@@ -13,6 +13,16 @@ RMD-104 already had a retained-service inventory, a production `Service.onTimeou
 - `app/src/androidTest/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundTimeoutAdbInstrumentedTest.kt` configures the Android 15+ test hook with `device_config put activity_manager data_sync_fgs_timeout_duration 1000`, starts the production `DownloadForegroundService`, sends the app to the background, and polls the production timeout persistence store until `Service.onTimeout(...)` records timeout state.
 - The test restores the `device_config` key and stops the service after execution.
 
+## Qualification evidence
+
+- PR #331 exact head `eb00501cb0d657da3ed26678f589cd492818d7c9` passed PR CI run `35839348685`, PR Android-smoke run `35839348689`, and PR Android FGS-timeout run `35839348784`.
+- PR #331 merged as `241ecfc65db2a58e375aee00a9fa9712e6fd3ee9`.
+- Post-merge master verification on exact SHA `241ecfc65db2a58e375aee00a9fa9712e6fd3ee9` passed CI run `35846090097`, Android-smoke run `35846090151`, and Android FGS-timeout run `35846090095`.
+
+## Reconciliation result
+
+The remaining RMD-104 shortened-timeout qualification requirement is satisfied by the API 35 FGS-timeout lane and its post-merge master verification. The canonical remediation TODO may reconcile the remaining RMD-104 checkbox after this evidence update is itself qualified and merged.
+
 ## Boundaries
 
 This is a focused RMD-104 platform-compliance lane. It does not close RMD-500 durable worker execution, RMD-1500 end-to-end transfer behavior, or final RMD-1800 exact-head full qualification.
