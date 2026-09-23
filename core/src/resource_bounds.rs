@@ -124,7 +124,10 @@ mod tests {
         let policy = DownloadPolicy::default();
         assert_eq!(policy.max_attempts, 4);
         assert_eq!(policy.max_asset_bytes, 64 * 1024 * 1024 * 1024);
-        assert_eq!(bounded_download_concurrency(usize::MAX), MAX_CONCURRENT_DOWNLOADS);
+        assert_eq!(
+            bounded_download_concurrency(usize::MAX),
+            MAX_CONCURRENT_DOWNLOADS
+        );
         assert_eq!(bounded_download_concurrency(0), 1);
     }
 }

@@ -505,7 +505,10 @@ mod tests {
             "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": caption_tracks}}
         });
         let parsed = parse_player(&player).unwrap();
-        assert_eq!(parsed.title.chars().count(), crate::MAX_PROVIDER_TITLE_CHARS);
+        assert_eq!(
+            parsed.title.chars().count(),
+            crate::MAX_PROVIDER_TITLE_CHARS
+        );
         assert_eq!(parsed.streams.len(), crate::MAX_PROVIDER_STREAMS);
         assert_eq!(parsed.subtitles.len(), crate::MAX_PROVIDER_SUBTITLES);
         assert_eq!(
