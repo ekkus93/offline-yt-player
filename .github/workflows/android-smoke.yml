@@ -33,18 +33,20 @@ jobs:
         with:
           packages: ""
           log-accepted-android-sdk-licenses: "false"
-      - name: Build x86_64 Rust core for emulator
+      - name: Build Rust core for packaged ABIs
         run: |
           rustup toolchain install 1.98.1 --profile minimal
           rustup override set 1.98.1
-          rustup target add x86_64-linux-android
+          rustup target add aarch64-linux-android x86_64-linux-android
           sdkmanager "ndk;30.0.16248370" "platforms;android-37.0" "build-tools;37.0.0"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export CC_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export AR_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
           export CC_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
           export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          cargo build -p offline-yt-core --target aarch64-linux-android
           cargo build -p offline-yt-core --target x86_64-linux-android
-          mkdir -p target/aarch64-linux-android/debug
-          cp target/x86_64-linux-android/debug/liboffline_yt_core.so target/aarch64-linux-android/debug/liboffline_yt_core.so
       - name: Run device-side smoke
         uses: reactivecircus/android-emulator-runner@v2
         with:
