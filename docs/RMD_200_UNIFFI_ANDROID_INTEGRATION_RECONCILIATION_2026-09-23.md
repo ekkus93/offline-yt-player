@@ -24,12 +24,10 @@ This note is evidence-only. The canonical remediation TODO must still be reconci
 
 ## RMD-203 app-owned core gateway audit
 
-The gateway surface was re-audited on exact master `41cec8e44aa6c56272aaa76e675e886043b94d04` rather than inferred from prior checklist state.
-
 - `app/src/main/java/com/ekkus/offlineytplayer/coregateway/AppCoreGateway.kt` defines the stable generated-binding-agnostic `AppCoreGateway` interface and app-owned `CoreLibraryItem`, `CoreDownloadSnapshot`, `CoreGatewayResult`, and `CoreGatewayError` models. Generated UniFFI reflection and model/error conversion are centralized in `GeneratedUniffiCoreGateway`.
-- `CoreCallDispatcher` owns a lifecycle-scoped executor. Production synchronous gateway methods reject main-thread execution through `checkNotMainThread()`, async entry points return cancellable `Future` handles, and `close()` calls `shutdownNow()` so lifecycle teardown interrupts queued/running dispatcher work. Rust long-running operations separately expose cooperative `FfiCancellationToken`; this preserves explicit application-level cancellation rather than relying on foreign-future cancellation semantics.
+- `CoreCallDispatcher` owns a lifecycle-scoped executor. Production synchronous gateway methods reject main-thread execution through `checkNotMainThread()`, async entry points return cancellable `Future` handles, and `close()` calls `shutdownNow()` so lifecycle teardown interrupts queued/running dispatcher work. Rust long-running operations separately expose cooperative `FfiCancellationToken`.
 - `AppDownloadControlGateway.kt` applies the same app-owned boundary to enqueue/pause/resume/cancel/retry, with off-main-thread checks and async futures. `SchedulingDownloadControlGateway` keeps durable queue control and Android scheduling behind that boundary.
-- `AppSourceAnalysisGateway.kt` keeps generated YouTube source objects behind an app-owned analysis interface and uses a generated cooperative cancellation token for the blocking source calls. Superseded-analysis orchestration remains an RMD-603 concern rather than a missing RMD-203 gateway primitive.
+- `AppSourceAnalysisGateway.kt` keeps generated YouTube source objects behind an app-owned analysis interface and uses a generated cooperative cancellation token for blocking source calls. Superseded-analysis orchestration remains an RMD-603 concern rather than a missing RMD-203 gateway primitive.
 - The gateway exposes library list/get/delete, durable download queue state, startup reconciliation, and durable download controls suitable for repository/ViewModel consumption without leaking generated record types.
 - `FakeCoreGateway` and `FakeDownloadControlGateway` provide deterministic fake implementations. `AppCoreGatewayPolicyTest` exercises fake repository state, generated-state conversion, generated-service isolation, async/off-main-thread policy surface, and the absence of empty production callbacks.
 - `MainActivity.bootstrapProductionUi` opens the file-backed app-private database and app-owned gateways off the main thread, invokes startup reconciliation, and consumes library/download state through the gateway models.
@@ -39,22 +37,23 @@ This audit satisfies all six RMD-203 subtasks. It does not claim RMD-603 superse
 ## RMD-204 Android runtime FFI evidence
 
 - `app/src/androidTest/java/com/ekkus/offlineytplayer/coregateway/GeneratedUniffiCoreGatewayInstrumentedTest.kt` is an installed-app instrumentation smoke against the app-owned UniFFI core gateway.
-- It creates an isolated app-private temporary database and media root, opens `GeneratedUniffiCoreGateway`, runs startup reconciliation, library listing, and durable queue listing through generated services, verifies representative returned records, closes the gateway, and verifies the private storage boundary.
+- Its success-path test creates an isolated app-private temporary database and media root, opens `GeneratedUniffiCoreGateway`, runs startup reconciliation, library listing, and durable queue listing through generated services, verifies representative returned records, closes the gateway, and verifies the private storage boundary.
+- Its deterministic error-path test opens the same packaged generated gateway against an isolated app-private database, deliberately removes the temporary `library_items` table, invokes `listLibrary()`, and verifies the generated persistence error round-trips through `CoreGatewayError` with a non-empty message and non-retryable classification.
 - `.github/workflows/android-smoke.yml` executes the packaged gateway smoke in the bounded API-29 runtime lane introduced by the Android qualification acceleration plan.
-- PR #334 added the installed-app gateway smoke and merged as `a7508362a781ca664f9000795319c87b948bc1bb`. Post-merge master CI `35859587774` and Android smoke `35859587715` passed on that exact merge SHA.
+- PR #334 added the installed-app gateway success smoke and merged as `a7508362a781ca664f9000795319c87b948bc1bb`; post-merge master CI `35859587774` and Android smoke `35859587715` passed on that exact merge SHA.
+- PR #337 added the installed-app generated-error round trip at exact head `e6f5e265d571a2aba1e9885754e260e13d0e8f8f`. That exact head passed PR CI `35877487952`, PR Android smoke `35877487924`, PR API-35 FGS timeout `35877488006`, push CI `35877460401`, push Android smoke `35877460207`, and push API-35 FGS timeout `35877460350`; PR #337 merged as `6ee86b081ab10131c03c6cd894d69fc83a6dc642`.
 
-The current smoke proves packaged native loading and representative success-record round trips. The canonical RMD-204 error-round-trip subtask must remain unchecked until a deterministic installed-app error result is exercised through the same generated gateway boundary.
+All four RMD-204 runtime-smoke subtasks now have production-path installed-app evidence: packaged native loading, a real representative FFI call, representative success records plus generated error conversion, and isolated app-private DB/media storage.
 
 ## Qualification evidence
 
-- Exact master `41cec8e44aa6c56272aaa76e675e886043b94d04` passed CI `35861440508`, Android smoke `35861440339`, and API-35 Android FGS-timeout qualification `35861440404`.
-- Audit head `af514ca8525e32800476f1b5093257b8ed117f15` passed PR CI `35864123630`, PR Android smoke `35864123399`, PR API-35 FGS-timeout `35864123641`, push CI `35864106413`, and push Android smoke `35864106335`. Its duplicate push API-35 lane `35864106231` reported an instrumentation failure while the same-head PR API-35 lane passed; the audit remains subject to fresh exact-head qualification after this evidence update.
-- The CI fast gate includes Rust fmt/clippy/tests, Android lint/JVM/build, reproducible UniFFI Kotlin generation, both Android Rust ABI builds, and APK native-library verification.
-- The Android smoke lane supplies the acceleration-plan runtime tier without conflating it with later full Compose/golden/E2E qualification.
+- RMD-201/RMD-202 packaging and generated-binding checks are enforced by the regular exact-head CI fast gate: Rust fmt/clippy/tests, Android lint/JVM/build, reproducible UniFFI Kotlin generation, both Android Rust ABI builds, and APK native-library verification.
+- RMD-203 audit PR #336 exact head `66156b6727b8768070a41277bfa98a55009128b9` passed PR CI `35872154642`, PR Android smoke `35872154651`, PR API-35 FGS timeout `35872154649`, push CI `35872148716`, push Android smoke `35872148720`, and push API-35 FGS timeout `35872148693`; PR #336 merged as `e2ea622d6b6470a4417370f8d7a6a4142424af61`, whose post-merge CI `35874527897`, Android smoke `35874527873`, and API-35 FGS timeout `35874527911` passed.
+- RMD-204 error-smoke PR #337 exact head and qualification are recorded above. The Android smoke lane supplies the acceleration-plan runtime tier without conflating it with later full Compose/golden/E2E qualification.
 
 ## Current reconciliation assessment
 
-RMD-201, RMD-202, and RMD-203 now have audited implementation and deterministic qualification evidence. RMD-204 has three satisfied runtime-smoke requirements but its representative error round-trip remains open. Canonical TODO reconciliation must preserve that distinction.
+RMD-201, RMD-202, RMD-203, and RMD-204 now have audited implementation and deterministic qualification evidence sufficient for canonical TODO reconciliation. This does not close later application behavior or full qualification milestones.
 
 ## Boundaries
 
