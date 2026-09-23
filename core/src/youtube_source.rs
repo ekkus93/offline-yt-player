@@ -516,12 +516,18 @@ mod tests {
 
     #[test]
     fn rejects_oversized_provider_urls() {
-        let oversized = format!("https://media.example/{}", "x".repeat(crate::MAX_PROVIDER_URL_BYTES));
+        let oversized = format!(
+            "https://media.example/{}",
+            "x".repeat(crate::MAX_PROVIDER_URL_BYTES)
+        );
         let stream = serde_json::json!({
             "url": oversized,
             "mimeType": "video/mp4; codecs=\"avc1.42E01E, mp4a.40.2\""
         });
-        assert_eq!(parse_stream(&stream).unwrap_err().kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            parse_stream(&stream).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
 
         let caption = serde_json::json!({
             "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [{
