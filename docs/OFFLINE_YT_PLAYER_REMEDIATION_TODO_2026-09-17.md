@@ -615,25 +615,31 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1302 — Secret/log hygiene end to end
 
-- [ ] Audit Android logs.
-- [ ] Audit Rust logs/errors.
-- [ ] Audit notifications/user-visible diagnostics.
-- [ ] Inject synthetic tokens/signed query parameters in tests.
-- [ ] Assert they never appear in CI-visible outputs.
+- [x] Audit Android logs.
+- [x] Audit Rust logs/errors.
+- [x] Audit notifications/user-visible diagnostics.
+- [x] Inject synthetic tokens/signed query parameters in tests.
+- [x] Assert they never appear in CI-visible outputs.
+
+**Evidence (RMD-1302):** `docs/RMD_1302_SECRET_LOG_HYGIENE_RECONCILIATION_2026-09-22.md` records the completed audit and qualification evidence. The merged implementation in PR #310 (`726beb739c9c01f5f8cedfb6bd58877dc7d9a12f`) from exact head `cefb16438c0b97f00e6c5445cb83771c70541db2` hardened `core/src/security.rs` redaction, added synthetic-marker coverage in `core/tests/network_diagnostic_redaction.rs`, and sanitized Android gateway/UI diagnostics through `SourceMetadataPolicy` and related user-visible diagnostic paths. Exact implementation head `cefb16438c0b97f00e6c5445cb83771c70541db2` passed push CI `35784983375`. The acceleration-plan documentation PR #311 was merged as `c6766239ddd549b05283946bb2bddbd94db7683b` from exact head `7a835f4f4aa5fb0738cc9adedd8005d16aa34e62`, with push CI `35787557579` and PR CI `35788158549` passing. Broader Android qualification remains under RMD-1400/RMD-1500.
 
 ### RMD-1303 — File/path safety for all mutations
 
-- [ ] Apply safe-root/path validation to download, delete, rename, thumbnail, subtitle, cleanup, and recovery operations.
-- [ ] Add traversal/symlink/adversarial path tests appropriate to platform/filesystem semantics.
+- [x] Apply safe-root/path validation to download, delete, rename, thumbnail, subtitle, cleanup, and recovery operations.
+- [x] Add traversal/symlink/adversarial path tests appropriate to platform/filesystem semantics.
+
+**Evidence (RMD-1303):** `docs/RMD_1303_PATH_SAFETY_RECONCILIATION_2026-09-22.md` records the completed path-safety audit and implementation evidence. PR #313 merged the audit as `6024f8933e3040e50d9d1baeebdb6df16ef0b6ea` from exact head `2411bb1e8ffbb8e807778cb9d9491994074ebaf7`, with push CI `35791357376` and PR CI `35792116432` passing. PR #314 hardened `core/src/download.rs` transfer writes and orphan-partial cleanup against traversal and symlink escape, added Unix adversarial regression tests, and merged as `05d53e92cef91a34056abea3ccbc100ab86c561b` from exact head `74f1e814ac893cc4a01642c245bb211bf11273ed`; push CI `35793406251`, PR CI `35794146016`, and post-merge master CI `35794658300` passed. The evidence-doc PR #315 merged as `5d1420b20c2a066297b4101383c8d7213940db0f` from exact head `dfb6c3b8057f7d8b1cdb2980599d97119e22caf7`, with push CI `35796468646`, PR CI `35797012107`, and post-merge master CI `35797508833` passing.
 
 ### RMD-1304 — Provider/resource bounds
 
-- [ ] Bound provider response size.
-- [ ] Bound URL/metadata lengths.
-- [ ] Bound redirects/timeouts/asset sizes.
-- [ ] Bound concurrent downloads.
-- [ ] Bound retry attempts.
-- [ ] Add tests for each enforced limit.
+- [x] Bound provider response size.
+- [x] Bound URL/metadata lengths.
+- [x] Bound redirects/timeouts/asset sizes.
+- [x] Bound concurrent downloads.
+- [x] Bound retry attempts.
+- [x] Add tests for each enforced limit.
+
+**Evidence (RMD-1304):** `docs/RMD_1304_RESOURCE_BOUNDS_RECONCILIATION_2026-09-22.md` records the completed implementation and qualification evidence. PR #316 centralized provider response, URL, metadata, redirect, and timeout bounds in `core/src/resource_bounds.rs`; wired production YouTube fetch/parsing in `core/src/youtube_source.rs` through declared/observed response-size checks, media/caption/thumbnail URL bounds, title/subtitle metadata bounds, stream/subtitle collection bounds, redirect limits, and provider HTTP timeouts; retained download asset-size enforcement in `core/src/download.rs`; retained the core concurrency ceiling in `core/src/concurrency.rs`; and retained bounded retry attempts in `core/src/worker.rs`. Deterministic Rust tests cover response-size rejection, provider URL rejection, metadata truncation/bounds, redirect/timeout policy, asset size, concurrency clamping, retry policy, and YouTube stream/subtitle/thumbnail bounds. PR #316 merged as `da8ea3050809a975cada87f8ad785e236783c94d` from exact head `a21040f9745e3cc943178f7723b7d193e1f04ae7`; push CI `35800979863`, PR CI `35801483348`, and post-merge master CI `35801968234` passed. Evidence-doc PR #317 merged as `a9edb7b09628cf8c709f0213581ff99aef6d5958` from exact head `7a5b6bc2688a6f8bc881da1abf6ad3ff66ba85bc`; push CI `35802597624`, PR CI `35803152776`, and post-merge master CI `35803519332` passed.
 
 ---
 
