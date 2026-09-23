@@ -50,11 +50,7 @@ impl YouTubeSource {
                 response.status().is_server_error(),
             ));
         }
-        ensure_provider_response_size(
-            "YouTube watch",
-            response.content_length(),
-            0,
-        )?;
+        ensure_provider_response_size("YouTube watch", response.content_length(), 0)?;
         let bytes = response.bytes().map_err(network_error)?;
         ensure_provider_response_size("YouTube watch", None, bytes.len())?;
         let html = std::str::from_utf8(&bytes)
@@ -533,7 +529,10 @@ mod tests {
                 "languageCode": "en"
             }]}}
         });
-        assert_eq!(parse_subtitles(&caption).unwrap_err().kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            parse_subtitles(&caption).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
     }
 
     #[test]
@@ -544,7 +543,10 @@ mod tests {
                 {"baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=en", "languageCode": long_language}
             ]}}
         });
-        assert_eq!(parse_subtitles(&player).unwrap_err().kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            parse_subtitles(&player).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
     }
 
     #[test]
