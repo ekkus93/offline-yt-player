@@ -1,6 +1,4 @@
-use crate::{
-    CoreError, DownloadPolicy, ErrorKind, MAX_CONCURRENT_DOWNLOADS, bounded_download_concurrency,
-};
+use crate::{CoreError, ErrorKind};
 use std::time::Duration;
 
 /// Upper bound for a provider metadata response parsed in memory.
@@ -69,10 +67,13 @@ pub fn truncate_provider_title(title: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{DownloadPolicy, MAX_CONCURRENT_DOWNLOADS, bounded_download_concurrency};
 
     #[test]
     fn provider_response_bound_rejects_declared_and_observed_oversize() {
-        assert!(ensure_provider_response_size("provider", None, MAX_PROVIDER_RESPONSE_BYTES).is_ok());
+        assert!(
+            ensure_provider_response_size("provider", None, MAX_PROVIDER_RESPONSE_BYTES).is_ok()
+        );
         assert_eq!(
             ensure_provider_response_size(
                 "provider",
@@ -93,9 +94,15 @@ mod tests {
 
     #[test]
     fn provider_url_bound_rejects_oversized_signed_urls() {
-        let bounded = format!("https://media.example/{}", "a".repeat(MAX_PROVIDER_URL_BYTES - 22));
+        let bounded = format!(
+            "https://media.example/{}",
+            "a".repeat(MAX_PROVIDER_URL_BYTES - 22)
+        );
         assert!(ensure_provider_url_bound("media URL", &bounded).is_ok());
-        let oversized = format!("https://media.example/{}", "a".repeat(MAX_PROVIDER_URL_BYTES));
+        let oversized = format!(
+            "https://media.example/{}",
+            "a".repeat(MAX_PROVIDER_URL_BYTES)
+        );
         assert_eq!(
             ensure_provider_url_bound("media URL", &oversized)
                 .unwrap_err()
