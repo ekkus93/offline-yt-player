@@ -27,24 +27,27 @@ This note is intentionally evidence-only. The canonical remediation TODO must st
 ## RMD-203 app-owned core gateway evidence
 
 - `MainActivity.kt` imports and opens app-owned gateway classes including `GeneratedUniffiCoreGateway`, `GeneratedUniffiDownloadControlGateway`, `GeneratedUniffiLibraryPlaybackGateway`, and `GeneratedUniffiSourceAnalysisGateway` from `com.ekkus.offlineytplayer.coregateway`.
+- `AppCoreGateway.kt` defines the stable `AppCoreGateway` interface, generated-binding-agnostic app models, `CoreCallDispatcher`, `GeneratedUniffiCoreGateway`, and `FakeCoreGateway` for deterministic Android UI tests.
 - Production bootstrap opens the file-backed app database under app-private storage, opens the generated gateways, invokes `GeneratedUniffiCoreGateway.reconcileStartup()`, lists library records and durable download queue state, and maps gateway records/errors into UI state through app-owned Kotlin model conversion.
-- Blocking gateway open/list/reconcile work runs on `bootstrapExecutor`, not on the Android main thread.
+- Blocking gateway open/list/reconcile work runs on `bootstrapExecutor` or `CoreCallDispatcher`, not on the Android main thread.
 - `SchedulingDownloadControlGateway` wraps the generated download-control gateway and the Android scheduler so durable enqueue/control remains centralized before platform execution scheduling.
 
-## RMD-204 Android runtime FFI boundary evidence
+## RMD-204 Android runtime FFI evidence
 
+- `app/src/androidTest/java/com/ekkus/offlineytplayer/coregateway/GeneratedUniffiCoreGatewayInstrumentedTest.kt` is an installed-app instrumentation smoke test for the app-owned UniFFI core gateway.
+- The test creates an isolated app-private temporary database and media root, opens `GeneratedUniffiCoreGateway`, runs `reconcileStartup()`, `listLibrary()`, and `listDownloadQueue()`, verifies successful representative record round trips, closes the gateway, and verifies the temporary database/media boundary exists.
 - The Android smoke infrastructure proves that app and test APKs install and that instrumentation can run against the packaged APK.
 - The normal CI Android job builds `assembleDebug` and `assembleDebugAndroidTest` after building the native Rust libraries for the supported ABIs.
 - The exact-head CI `UniFFI Kotlin and Android ABI` job verifies generated Kotlin binding consistency and APK native-library packaging on every push/PR.
-- Current runtime smoke coverage primarily proves installed APK/test infrastructure and packaged native-library availability. A fuller representative installed-device FFI call, including a round-trip record/error and temporary app-private DB/media root, should still be treated as the remaining RMD-204 completion boundary unless a later merged test demonstrates it explicitly.
 
 ## Current reconciliation assessment
 
-Current `master` has sufficient evidence to reconcile RMD-201 and RMD-202 after this evidence PR itself is qualified and merged. RMD-203 has substantial production-path evidence through app-owned gateway wrappers and off-main-thread bootstrap, but should be reconciled only if the referenced gateway implementation/tests are also reviewed in the canonical TODO reconciliation PR. RMD-204 should remain open until installed-device instrumentation performs a representative real FFI call and verifies records/errors against a temporary app-private DB/media root.
+Current `master` plus the runtime FFI smoke test provide implementation evidence for RMD-201, RMD-202, and RMD-204 after this evidence PR itself is qualified and merged. RMD-203 has substantial production-path evidence through app-owned gateway wrappers, off-main-thread dispatch, and fake gateway support, but the canonical TODO reconciliation PR should still review the referenced gateway tests before marking all RMD-203 subtasks complete.
 
 ## Qualification evidence
 
 - Exact master `19fd085526f12e6b8a67797850ed238eedaea269` passed CI run `35850735745`, Android smoke run `35850735709`, and Android FGS-timeout run `35850735752`.
+- PR #333 exact head `a908dddb9e5e9a2a3438983f9f456985ea9144ba` passed PR CI `35854220875`, PR Android smoke `35854220703`, PR Android FGS-timeout `35854220877`, push CI `35854132133`, push Android smoke `35854132132`, and push Android FGS-timeout `35854132172`; PR #333 merged as `1386c97531e4c863bc64b0069123b72e02370904`.
 
 ## Boundaries
 
