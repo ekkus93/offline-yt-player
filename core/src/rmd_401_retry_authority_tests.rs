@@ -27,7 +27,10 @@ impl StatusFixtureServer {
                     continue;
                 };
                 request
-                    .respond(TinyResponse::from_string("status fixture").with_status_code(StatusCode(status)))
+                    .respond(
+                        TinyResponse::from_string("status fixture")
+                            .with_status_code(StatusCode(status)),
+                    )
                     .unwrap();
             }
         });
@@ -96,13 +99,18 @@ fn work_item(job_id: &str, url: String) -> DownloadWorkItem {
 fn worker_treats_http_404_as_terminal_nonretryable_failure() {
     let server = StatusFixtureServer::start(404);
     let store = LibraryStore::open_in_memory().unwrap();
-    store.save_download_snapshot(&queued_snapshot("not-found")).unwrap();
+    store
+        .save_download_snapshot(&queued_snapshot("not-found"))
+        .unwrap();
     let root = tempfile::tempdir().unwrap();
     let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
 
     let report = worker
         .execute_ready_at(
-            &[work_item("not-found", format!("{}/missing.mp4", server.address))],
+            &[work_item(
+                "not-found",
+                format!("{}/missing.mp4", server.address),
+            )],
             &AtomicBool::new(false),
             10_000,
         )
@@ -123,7 +131,9 @@ fn worker_treats_http_404_as_terminal_nonretryable_failure() {
 fn worker_treats_http_503_as_retryable_transient_failure() {
     let server = StatusFixtureServer::start(503);
     let store = LibraryStore::open_in_memory().unwrap();
-    store.save_download_snapshot(&queued_snapshot("server-error")).unwrap();
+    store
+        .save_download_snapshot(&queued_snapshot("server-error"))
+        .unwrap();
     let root = tempfile::tempdir().unwrap();
     let policy = DownloadPolicy {
         max_attempts: 4,
@@ -133,7 +143,10 @@ fn worker_treats_http_503_as_retryable_transient_failure() {
 
     let report = worker
         .execute_ready_at(
-            &[work_item("server-error", format!("{}/retry.mp4", server.address))],
+            &[work_item(
+                "server-error",
+                format!("{}/retry.mp4", server.address),
+            )],
             &AtomicBool::new(false),
             10_000,
         )
