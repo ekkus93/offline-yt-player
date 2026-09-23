@@ -1,0 +1,71 @@
+name: Android FGS timeout
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-fgs-timeout-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api35-fgs-timeout:
+    name: API 35 dataSync timeout qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Android SDK command-line tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: "false"
+      - name: Build Rust core for packaged ABIs
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup target add aarch64-linux-android x86_64-linux-android
+          sdkmanager "ndk;30.0.16248370" "platforms;android-37.0" "build-tools;37.0.0"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export CC_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export AR_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export CC_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          cargo build -p offline-yt-core --target aarch64-linux-android
+          cargo build -p offline-yt-core --target x86_64-linux-android
+      - name: Run API 35 dataSync timeout qualification
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
+          script: >-
+            ./gradlew --no-daemon connectedDebugAndroidTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutAdbInstrumentedTest
+      - name: Upload timeout qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-fgs-timeout-evidence-${{ github.run_id }}
+          path: |
+            app/build/reports/androidTests
+            app/build/outputs/androidTest-results
+            app/build/outputs/managed_device_android_test_additional_output
+          if-no-files-found: ignore
+          retention-days: 7
