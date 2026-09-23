@@ -18,13 +18,16 @@ import com.ekkus.offlineytplayer.coregateway.CoreGatewayError
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryPlaybackAsset
+import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
+import com.ekkus.offlineytplayer.downloads.AndroidDownloadExecutionScheduler
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionStateStore
+import com.ekkus.offlineytplayer.downloads.SchedulingDownloadControlGateway
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.settings.SettingsSubscription
 import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
@@ -43,7 +46,7 @@ class MainActivity : ComponentActivity() {
         Thread(runnable, "offline-yt-production-bootstrap").apply { isDaemon = true }
     }
     private var coreGateway: GeneratedUniffiCoreGateway? = null
-    private var downloadControlGateway: GeneratedUniffiDownloadControlGateway? = null
+    private var downloadControlGateway: AppDownloadControlGateway? = null
     private var libraryPlaybackGateway: GeneratedUniffiLibraryPlaybackGateway? = null
     private var sourceAnalysisGateway: GeneratedUniffiSourceAnalysisGateway? = null
     private var settingsStore: SharedPreferencesAppSettingsStore? = null
@@ -138,7 +141,13 @@ class MainActivity : ComponentActivity() {
                 libraryState = initialLibrary
                 downloadsState = initialDownloads
                 coreGateway = core.getOrNull()
-                downloadControlGateway = controls.getOrNull()
+                downloadControlGateway = controls.getOrNull()?.let { controlsGateway ->
+                    SchedulingDownloadControlGateway(
+                        delegate = controlsGateway,
+                        scheduler = AndroidDownloadExecutionScheduler(applicationContext),
+                        settingsSnapshot = { settingsSnapshot },
+                    )
+                }
                 libraryPlaybackGateway = playback.getOrNull()
                 sourceAnalysisGateway = sources.getOrNull()
                 coreGateway?.takeIf { startupFailure == null }?.let { gateway ->
