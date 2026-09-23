@@ -6,19 +6,27 @@ plugins {
 val sourceRevision = providers.environmentVariable("GITHUB_SHA").orElse("local").get()
 val releaseVersionName = providers.environmentVariable("OYP_VERSION_NAME").orElse("0.1.0-dev").get()
 val releaseVersionCode = providers.environmentVariable("OYP_VERSION_CODE").orElse("1").get().toInt()
-val supportedAndroidAbis = listOf("arm64-v8a")
-val rustAndroidTarget = "aarch64-linux-android"
-val rustNativeLibrary = rootProject.layout.projectDirectory.file("target/$rustAndroidTarget/debug/liboffline_yt_core.so")
+val supportedAndroidTargets = mapOf(
+    "arm64-v8a" to "aarch64-linux-android",
+    "x86_64" to "x86_64-linux-android",
+)
 val generatedJniLibsDir = layout.buildDirectory.dir("generated/rustJniLibs").get().asFile
 val generatedUniffiKotlinDir = layout.buildDirectory.dir("generated/uniffiKotlin").get().asFile
 val verificationUniffiKotlinDir = layout.buildDirectory.dir("generated/uniffiKotlinVerification").get().asFile
 
 val prepareRustJniLibs by tasks.registering(Copy::class) {
-    from(rustNativeLibrary)
-    into(generatedJniLibsDir.resolve(supportedAndroidAbis.single()))
+    supportedAndroidTargets.forEach { (abi, target) ->
+        from(rootProject.layout.projectDirectory.file("target/$target/debug/liboffline_yt_core.so")) {
+            into(abi)
+        }
+    }
+    into(generatedJniLibsDir)
     doFirst {
-        check(rustNativeLibrary.asFile.isFile) {
-            "Missing Rust Android native library ${rustNativeLibrary.asFile}; build offline-yt-core for $rustAndroidTarget first"
+        supportedAndroidTargets.values.forEach { target ->
+            val library = rootProject.file("target/$target/debug/liboffline_yt_core.so")
+            check(library.isFile) {
+                "Missing Rust Android native library $library; build offline-yt-core for $target first"
+            }
         }
     }
 }
@@ -78,7 +86,7 @@ android {
         versionName = releaseVersionName
         buildConfigField("String", "SOURCE_REVISION", "\"$sourceRevision\"")
         ndk {
-            abiFilters += supportedAndroidAbis
+            abiFilters += supportedAndroidTargets.keys
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
