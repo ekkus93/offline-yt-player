@@ -51,7 +51,7 @@ jobs:
           export AR_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
           export CC_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
-          export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export AR_x86_64_linux_ANDROID=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           cargo build -p offline-yt-core --target aarch64-linux-android
           cargo build -p offline-yt-core --target x86_64-linux-android
       - name: Run device-side smoke
@@ -65,10 +65,12 @@ jobs:
           # Keep this acceleration tier intentionally small: broader behavioral Compose,
           # golden, accessibility, and E2E suites remain in RMD-1402+ and RMD-1500+.
           # The smoke set proves instrumentation health, packaged Rust/UniFFI runtime loading,
-          # and the RMD-101 deterministic loopback network capability path.
+          # the RMD-101 deterministic loopback network capability path, and the RMD-105
+          # packaged-app notification-permission state behavior that remains relevant even on
+          # pre-runtime-permission API levels.
           script: >-
             ./gradlew --no-daemon connectedDebugAndroidTest
-            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest
       - name: Upload instrumentation evidence
         if: always()
         uses: actions/upload-artifact@v4
