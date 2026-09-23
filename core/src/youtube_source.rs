@@ -1,3 +1,9 @@
+use crate::resource_bounds::{
+    MAX_PROVIDER_REDIRECTS, MAX_PROVIDER_STREAMS, MAX_PROVIDER_SUBTITLE_ID_BYTES,
+    MAX_PROVIDER_SUBTITLE_LABEL_CHARS, MAX_PROVIDER_SUBTITLE_LANGUAGE_BYTES,
+    MAX_PROVIDER_SUBTITLES, ensure_provider_response_size, ensure_provider_url_bound,
+    provider_connect_timeout, provider_request_timeout, truncate_provider_title,
+};
 use crate::youtube_extract::{
     ExtractedStream, ExtractedSubtitle, ExtractedYouTubeMedia, curate_quality_choices,
     normalize_extracted_media,
@@ -8,11 +14,6 @@ use crate::{
 };
 use reqwest::blocking::Client;
 use serde_json::Value;
-use std::time::Duration;
-
-const MAX_WATCH_BYTES: usize = 4 * 1024 * 1024;
-const MAX_STREAMS: usize = 256;
-const MAX_SUBTITLES: usize = 128;
 
 /// Narrow fail-closed production YouTube adapter described by the extraction ADR.
 #[derive(Debug, Clone)]
@@ -24,9 +25,9 @@ impl Default for YouTubeSource {
     fn default() -> Self {
         Self {
             client: Client::builder()
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(20))
-                .redirect(reqwest::redirect::Policy::limited(3))
+                .connect_timeout(provider_connect_timeout())
+                .timeout(provider_request_timeout())
+                .redirect(reqwest::redirect::Policy::limited(MAX_PROVIDER_REDIRECTS))
                 .build()
                 .expect("static YouTube HTTP client configuration"),
         }
@@ -49,20 +50,9 @@ impl YouTubeSource {
                 response.status().is_server_error(),
             ));
         }
-        if response
-            .content_length()
-            .is_some_and(|n| n > MAX_WATCH_BYTES as u64)
-        {
-            return Err(source_changed(
-                "YouTube watch response exceeded the parser bound",
-            ));
-        }
+        ensure_provider_response_size("YouTube watch", response.content_length(), 0)?;
         let bytes = response.bytes().map_err(network_error)?;
-        if bytes.len() > MAX_WATCH_BYTES {
-            return Err(source_changed(
-                "YouTube watch response exceeded the parser bound",
-            ));
-        }
+        ensure_provider_response_size("YouTube watch", None, bytes.len())?;
         let html = std::str::from_utf8(&bytes)
             .map_err(|_| source_changed("YouTube watch response was not UTF-8"))?;
         let player = extract_player_json(html)?;
@@ -252,10 +242,8 @@ fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError> {
     let title = details
         .get("title")
         .and_then(Value::as_str)
-        .unwrap_or("Untitled")
-        .chars()
-        .take(512)
-        .collect();
+        .map(truncate_provider_title)
+        .unwrap_or_else(|| "Untitled".to_owned());
     let duration_ms = details
         .get("lengthSeconds")
         .and_then(Value::as_str)
@@ -268,6 +256,11 @@ fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError> {
         .and_then(|x| x.get("url"))
         .and_then(Value::as_str)
         .map(str::to_owned);
+    if let Some(url) = thumbnail_url.as_deref() {
+        ensure_provider_url_bound("YouTube thumbnail URL", url)?;
+        crate::validate_http_url(url)
+            .map_err(|_| source_changed("YouTube thumbnail URL was invalid"))?;
+    }
     let formats = v
         .pointer("/streamingData/formats")
         .and_then(Value::as_array)
@@ -279,7 +272,7 @@ fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError> {
                 .into_iter()
                 .flatten(),
         )
-        .take(MAX_STREAMS);
+        .take(MAX_PROVIDER_STREAMS);
     let mut streams = Vec::new();
     for format in formats {
         if let Some(stream) = parse_stream(format)? {
@@ -302,32 +295,30 @@ fn parse_subtitles(v: &Value) -> Result<Vec<ExtractedSubtitle>, CoreError> {
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .take(MAX_SUBTITLES);
+        .take(MAX_PROVIDER_SUBTITLES);
     let mut subtitles = Vec::new();
     for (index, track) in tracks.enumerate() {
         let base_url = track
             .get("baseUrl")
             .and_then(Value::as_str)
             .ok_or_else(|| source_changed("YouTube caption track URL was absent"))?;
-        if base_url.len() > 16 * 1024 {
-            return Err(source_changed("YouTube caption track URL exceeded bound"));
-        }
+        ensure_provider_url_bound("YouTube caption track URL", base_url)?;
         crate::validate_http_url(base_url)
             .map_err(|_| source_changed("YouTube caption track URL was invalid"))?;
         let language = track
             .get("languageCode")
             .and_then(Value::as_str)
-            .filter(|s| !s.is_empty() && s.len() <= 64)
+            .filter(|s| !s.is_empty() && s.len() <= MAX_PROVIDER_SUBTITLE_LANGUAGE_BYTES)
             .ok_or_else(|| source_changed("YouTube caption language was invalid"))?;
         let label = track
             .pointer("/name/simpleText")
             .and_then(Value::as_str)
-            .map(|s| s.chars().take(128).collect());
+            .map(|s| s.chars().take(MAX_PROVIDER_SUBTITLE_LABEL_CHARS).collect());
         let auto_generated = track.get("kind").and_then(Value::as_str) == Some("asr");
         let id = track
             .get("vssId")
             .and_then(Value::as_str)
-            .filter(|s| !s.is_empty() && s.len() <= 256)
+            .filter(|s| !s.is_empty() && s.len() <= MAX_PROVIDER_SUBTITLE_ID_BYTES)
             .map(str::to_owned)
             .unwrap_or_else(|| format!("{language}-{index}"));
         subtitles.push(ExtractedSubtitle {
@@ -344,9 +335,7 @@ fn parse_stream(v: &Value) -> Result<Option<ExtractedStream>, CoreError> {
     let Some(url) = v.get("url").and_then(Value::as_str) else {
         return Ok(None);
     };
-    if url.len() > 16 * 1024 {
-        return Err(source_changed("YouTube media URL exceeded bound"));
-    }
+    ensure_provider_url_bound("YouTube media URL", url)?;
     let mime = v.get("mimeType").and_then(Value::as_str).unwrap_or("");
     let (mime_base, codecs) = mime.split_once(';').unwrap_or((mime, ""));
     let container = mime_base.split('/').nth(1).unwrap_or("bin").to_owned();
@@ -476,6 +465,97 @@ mod tests {
         assert!(!tracks[0].auto_generated);
         assert_eq!(tracks[1].language, "es");
         assert!(tracks[1].auto_generated);
+    }
+
+    #[test]
+    fn bounds_stream_caption_thumbnail_and_metadata_fields() {
+        let long_title = "T".repeat(crate::MAX_PROVIDER_TITLE_CHARS + 16);
+        let stream_formats = (0..crate::MAX_PROVIDER_STREAMS + 8)
+            .map(|index| {
+                serde_json::json!({
+                    "itag": index + 1,
+                    "url": format!("https://media.example/video-{index}.mp4"),
+                    "mimeType": "video/mp4; codecs=\"avc1.42E01E, mp4a.40.2\"",
+                    "width": 1280,
+                    "height": 720,
+                    "fps": 30,
+                    "bitrate": 1_000_000,
+                    "contentLength": "42"
+                })
+            })
+            .collect::<Vec<_>>();
+        let caption_tracks = (0..crate::MAX_PROVIDER_SUBTITLES + 8)
+            .map(|index| {
+                serde_json::json!({
+                    "baseUrl": format!("https://www.youtube.com/api/timedtext?v=x&lang=en&track={index}"),
+                    "languageCode": "en",
+                    "name": {"simpleText": "English"},
+                    "vssId": format!(".en-{index}")
+                })
+            })
+            .collect::<Vec<_>>();
+        let player = serde_json::json!({
+            "playabilityStatus": {"status": "OK"},
+            "videoDetails": {
+                "title": long_title,
+                "lengthSeconds": "60",
+                "thumbnail": {"thumbnails": [{"url": "https://i.ytimg.com/vi/example/default.jpg"}]}
+            },
+            "streamingData": {"formats": stream_formats},
+            "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": caption_tracks}}
+        });
+        let parsed = parse_player(&player).unwrap();
+        assert_eq!(
+            parsed.title.chars().count(),
+            crate::MAX_PROVIDER_TITLE_CHARS
+        );
+        assert_eq!(parsed.streams.len(), crate::MAX_PROVIDER_STREAMS);
+        assert_eq!(parsed.subtitles.len(), crate::MAX_PROVIDER_SUBTITLES);
+        assert_eq!(
+            parsed.thumbnail_url.as_deref(),
+            Some("https://i.ytimg.com/vi/example/default.jpg")
+        );
+    }
+
+    #[test]
+    fn rejects_oversized_provider_urls() {
+        let oversized = format!(
+            "https://media.example/{}",
+            "x".repeat(crate::MAX_PROVIDER_URL_BYTES)
+        );
+        let stream = serde_json::json!({
+            "url": oversized,
+            "mimeType": "video/mp4; codecs=\"avc1.42E01E, mp4a.40.2\""
+        });
+        assert_eq!(
+            parse_stream(&stream).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
+
+        let caption = serde_json::json!({
+            "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [{
+                "baseUrl": format!("https://www.youtube.com/api/timedtext?{}", "x".repeat(crate::MAX_PROVIDER_URL_BYTES)),
+                "languageCode": "en"
+            }]}}
+        });
+        assert_eq!(
+            parse_subtitles(&caption).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_or_unbounded_caption_metadata() {
+        let long_language = "x".repeat(crate::MAX_PROVIDER_SUBTITLE_LANGUAGE_BYTES + 1);
+        let player = serde_json::json!({
+            "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [
+                {"baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=en", "languageCode": long_language}
+            ]}}
+        });
+        assert_eq!(
+            parse_subtitles(&player).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
     }
 
     #[test]
