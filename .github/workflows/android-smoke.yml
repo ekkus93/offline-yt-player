@@ -62,7 +62,9 @@ jobs:
           target: default
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          # Keep this acceleration tier intentionally small: the full androidTest suite belongs
+          # to RMD-1402+ qualification, while RMD-1401 only proves install/instrumentation health.
+          script: ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest
       - name: Upload instrumentation evidence
         if: always()
         uses: actions/upload-artifact@v4
