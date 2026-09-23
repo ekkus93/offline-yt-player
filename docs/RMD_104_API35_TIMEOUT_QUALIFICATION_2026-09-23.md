@@ -9,6 +9,7 @@ RMD-104 already had a retained-service inventory, a production `Service.onTimeou
 ## Implementation
 
 - `.github/workflows/android-fgs-timeout.yml` adds an isolated API 35 emulator lane for dataSync foreground-service timeout qualification.
+- The lane uses the CI-oriented `aosp_atd` API 35 x86_64 image with an extended boot timeout so slow, no-hardware-acceleration Linux runners can reach the actual test instead of failing during emulator unlock/setup.
 - `app/src/androidTest/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundTimeoutAdbInstrumentedTest.kt` configures the Android 15+ test hook with `device_config put activity_manager data_sync_fgs_timeout_duration 1000`, starts the production `DownloadForegroundService`, sends the app to the background, and polls the production timeout persistence store until `Service.onTimeout(...)` records timeout state.
 - The test restores the `device_config` key and stops the service after execution.
 
