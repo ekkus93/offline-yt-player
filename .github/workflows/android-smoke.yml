@@ -1,0 +1,66 @@
+name: Android smoke
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  instrumentation-smoke:
+    name: API 35 instrumentation smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Android SDK command-line tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: "false"
+      - name: Build x86_64 Rust core for emulator
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup target add x86_64-linux-android
+          sdkmanager "ndk;30.0.16248370" "platforms;android-37.0" "build-tools;37.0.0"
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export CC_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          cargo build -p offline-yt-core --target x86_64-linux-android
+          mkdir -p target/aarch64-linux-android/debug
+          cp target/x86_64-linux-android/debug/liboffline_yt_core.so target/aarch64-linux-android/debug/liboffline_yt_core.so
+      - name: Run device-side smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+      - name: Upload instrumentation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke-evidence-${{ github.run_id }}
+          path: |
+            app/build/reports/androidTests
+            app/build/outputs/androidTest-results
+            app/build/outputs/managed_device_android_test_additional_output
+          if-no-files-found: ignore
+          retention-days: 7
