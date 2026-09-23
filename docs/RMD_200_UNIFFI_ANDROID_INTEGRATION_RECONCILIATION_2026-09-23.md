@@ -48,6 +48,7 @@ The current smoke proves packaged native loading and representative success-reco
 ## Qualification evidence
 
 - Exact master `41cec8e44aa6c56272aaa76e675e886043b94d04` passed CI `35861440508`, Android smoke `35861440339`, and API-35 Android FGS-timeout qualification `35861440404`.
+- Audit head `af514ca8525e32800476f1b5093257b8ed117f15` passed PR CI `35864123630`, PR Android smoke `35864123399`, PR API-35 FGS-timeout `35864123641`, push CI `35864106413`, and push Android smoke `35864106335`. Its duplicate push API-35 lane `35864106231` reported an instrumentation failure while the same-head PR API-35 lane passed; the audit remains subject to fresh exact-head qualification after this evidence update.
 - The CI fast gate includes Rust fmt/clippy/tests, Android lint/JVM/build, reproducible UniFFI Kotlin generation, both Android Rust ABI builds, and APK native-library verification.
 - The Android smoke lane supplies the acceleration-plan runtime tier without conflating it with later full Compose/golden/E2E qualification.
 
