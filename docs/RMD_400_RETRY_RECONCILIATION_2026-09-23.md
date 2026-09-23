@@ -46,7 +46,7 @@ Qualification evidence:
 
 ## Reconciliation qualification note
 
-The first push CI for this reconciliation branch (`35916543334`) encountered a runner/environment TLS certificate verification failure during `actions/checkout` in the Android lint/unit-build job before repository checkout completed. The equivalent pull-request CI on the same exact SHA passed. This documentation-only follow-up commit advances the branch to a fresh exact head so all required lanes can qualify without relying on that infrastructure failure.
+The first push CI for this reconciliation branch (`35916543334`) encountered a runner/environment TLS certificate verification failure during `actions/checkout` in the Android lint/unit-build job before repository checkout completed. The equivalent pull-request CI on the same exact SHA passed. A later exact head `11eba36157c13a36ed01dc45e07c2c1157fbbebc` passed push CI `35917502192`, Android smoke `35917502268`, and API-35 FGS timeout `35917502234`; its duplicate PR CI `35917507880` failed only because Maven Central returned HTTP 403 while resolving Kotlin buildscript artifacts, while PR Android smoke `35917507935` and PR API-35 FGS timeout `35917507856` passed. This documentation-only follow-up advances the branch again so the transient dependency-resolution failure can be requalified on a fresh exact head.
 
 ## Current canonical status
 
