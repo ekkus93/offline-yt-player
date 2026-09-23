@@ -62,9 +62,12 @@ jobs:
           target: default
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
-          # Keep this acceleration tier intentionally small: the full androidTest suite belongs
-          # to RMD-1402+ qualification, while RMD-1401 only proves install/instrumentation health.
-          script: ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest
+          # Keep this acceleration tier intentionally small: broader behavioral Compose,
+          # golden, accessibility, and E2E suites remain in RMD-1402+ and RMD-1500+.
+          # The smoke set proves instrumentation health plus packaged Rust/UniFFI runtime loading.
+          script: >-
+            ./gradlew --no-daemon connectedDebugAndroidTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest
       - name: Upload instrumentation evidence
         if: always()
         uses: actions/upload-artifact@v4
