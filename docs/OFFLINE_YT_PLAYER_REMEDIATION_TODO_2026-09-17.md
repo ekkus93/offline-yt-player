@@ -742,7 +742,19 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1506 — Connectivity E2E
 
+- [ ] Start transfer.
+- [ ] Remove network.
+- [ ] Verify waiting/pause state.
+- [ ] Restore eligible network.
+- [ ] Verify legal resume.
+- [ ] Repeat with Wi-Fi-only/metered policy where emulator controls permit.
+
 ### RMD-1507 — Notification-control E2E
+
+- [ ] Pause from notification.
+- [ ] Resume from notification.
+- [ ] Cancel from notification.
+- [ ] Verify durable state/UI mirrors each action.
 
 **Acceptance for RMD-1500:** policy enum sequence tests may remain, but they cannot be cited as the E2E evidence for these tasks.
 
