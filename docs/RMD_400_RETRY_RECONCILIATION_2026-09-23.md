@@ -44,6 +44,10 @@ Qualification evidence:
 - PR #340 merged as `11e2020268d0eb35ed59d341cd649c80e56534f5`.
 - Post-merge `master` at `11e2020268d0eb35ed59d341cd649c80e56534f5` passed CI `35913786091`, Android smoke `35913786133`, and API-35 FGS timeout `35913786001`.
 
+## Reconciliation qualification note
+
+The first push CI for this reconciliation branch (`35916543334`) encountered a runner/environment TLS certificate verification failure during `actions/checkout` in the Android lint/unit-build job before repository checkout completed. The equivalent pull-request CI on the same exact SHA passed. This documentation-only follow-up commit advances the branch to a fresh exact head so all required lanes can qualify without relying on that infrastructure failure.
+
 ## Current canonical status
 
 RMD-401 and RMD-402 now have production-path implementation and exact-head/post-merge qualification evidence. The canonical TODO should be reconciled in a later detailed-TODO update that preserves the file's full checklist structure and cites the evidence above. This evidence note alone must not be treated as canonical checkbox completion.
