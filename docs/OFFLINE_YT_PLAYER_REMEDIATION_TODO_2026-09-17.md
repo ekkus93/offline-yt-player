@@ -50,53 +50,63 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-101 — Restore network capability
 
-- [ ] Add `android.permission.INTERNET` to `app/src/main/AndroidManifest.xml`.
-- [ ] Retain only permissions actually needed by implemented runtime paths.
-- [ ] Add a manifest-level test/assertion for required network permission.
-- [ ] Add an Android runtime fixture test that performs a local deterministic HTTP request through the packaged app/core path.
+- [x] Add `android.permission.INTERNET` to `app/src/main/AndroidManifest.xml`.
+- [x] Retain only permissions actually needed by implemented runtime paths.
+- [x] Add a manifest-level test/assertion for required network permission.
+- [x] Add an Android runtime fixture test that performs a local deterministic HTTP request through the packaged app/core path.
 
 **Acceptance:** the Android app can open the deterministic fixture network endpoint on an emulator/device.
 
+**Evidence (RMD-101):** `app/src/main/AndroidManifest.xml` declares `android.permission.INTERNET` and avoids broad storage/location permissions that are not needed by implemented runtime paths. `app/src/test/java/com/ekkus/offlineytplayer/ManifestPermissionTest.kt` asserts required network permissions and rejects unneeded broad permissions. `app/src/androidTest/java/com/ekkus/offlineytplayer/NetworkCapabilityInstrumentedTest.kt` runs a deterministic loopback HTTP fixture through the packaged app process. Supporting reconciliation is recorded in `docs/RMD_101_NETWORK_CAPABILITY_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #323 exact head `83c158817e012df8b53d183ebb231b95548a4841` passed PR CI `35819180161`, PR Android smoke `35819180151`, push CI `35819168370`, and push Android smoke `35819168389`; PR #323 merged as `ea39061a3f2864a360a2912d6a23785190b92a99`; post-merge master CI `35820668106` and Android smoke `35820668108` passed on exact merge SHA `ea39061a3f2864a360a2912d6a23785190b92a99`.
+
 ### RMD-102 — Replace illegal/fragile boot-start behavior
 
-- [ ] Stop launching a `dataSync` foreground service directly from `BOOT_COMPLETED` on target SDK 35+.
-- [ ] Define boot recovery as durable-state reconciliation plus legal future scheduling.
-- [ ] Decide whether `LOCKED_BOOT_COMPLETED` is actually required.
-- [ ] If not required, remove it.
-- [ ] If required, mark the receiver Direct-Boot-aware and move only necessary pre-unlock state to device-protected storage.
-- [ ] Ensure credential-encrypted DB/media are not opened before unlock.
-- [ ] Add API-appropriate boot/restart tests.
+- [x] Stop launching a `dataSync` foreground service directly from `BOOT_COMPLETED` on target SDK 35+.
+- [x] Define boot recovery as durable-state reconciliation plus legal future scheduling.
+- [x] Decide whether `LOCKED_BOOT_COMPLETED` is actually required.
+- [x] If not required, remove it.
+- [x] If required, mark the receiver Direct-Boot-aware and move only necessary pre-unlock state to device-protected storage.
+- [x] Ensure credential-encrypted DB/media are not opened before unlock.
+- [x] Add API-appropriate boot/restart tests.
 
 **Acceptance:** reboot recovery never throws `ForegroundServiceStartNotAllowedException` and never accesses unavailable credential-protected state.
 
+**Evidence (RMD-102):** `app/src/main/java/com/ekkus/offlineytplayer/downloads/DownloadRebootReceiver.kt` treats `BOOT_COMPLETED` as a durable-state signal only, does not call service/scheduler launch APIs from the receiver, does not declare or require `LOCKED_BOOT_COMPLETED`, and defers recovery to `MainActivity.bootstrapProductionUi -> GeneratedUniffiCoreGateway.reconcileStartup` after credential-protected storage is available. JVM coverage in `DownloadBootRecoveryPolicyTest` and `DownloadRebootRecoveryPolicyTest` proves no `dataSync` FGS boot launch, no pre-unlock credential-protected storage access, ignored non-boot broadcasts, and legal deferred recovery. Supporting reconciliation is recorded in `docs/RMD_102_BOOT_RECOVERY_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence includes exact master `4a36792f866bc596b7470d5f0328205d75c7f898` passing CI `35822366166` and Android smoke `35822366114`, plus later exact master `99dfcb811b26c7f9d102ac87c646b88031fdc7dc` passing CI `35835796521` and Android smoke `35835796558`.
+
 ### RMD-103 — Adopt a compliant download runtime by API level
 
-- [ ] Introduce an Android `DownloadExecutionScheduler` abstraction.
-- [ ] On API 34+, implement User-Initiated Data Transfer jobs for user-requested downloads.
-- [ ] Add `android.permission.RUN_USER_INITIATED_JOBS` for the API 34+ path.
-- [ ] Supply required network constraints and estimated bytes when known.
-- [ ] Attach/update the required UIDT notification.
-- [ ] On API 26-33, implement and document a compatible foreground/background transfer fallback.
-- [ ] Keep both paths on the same durable queue/control model.
-- [ ] Add tests for scheduler selection by SDK.
+- [x] Introduce an Android `DownloadExecutionScheduler` abstraction.
+- [x] On API 34+, implement User-Initiated Data Transfer jobs for user-requested downloads.
+- [x] Add `android.permission.RUN_USER_INITIATED_JOBS` for the API 34+ path.
+- [x] Supply required network constraints and estimated bytes when known.
+- [x] Attach/update the required UIDT notification.
+- [x] On API 26-33, implement and document a compatible foreground/background transfer fallback.
+- [x] Keep both paths on the same durable queue/control model.
+- [x] Add tests for scheduler selection by SDK.
 
 **Acceptance:** a user-triggered download is scheduled legally on API 26-33 and API 34+ without duplicating domain state.
 
+**Evidence (RMD-103):** `app/src/main/java/com/ekkus/offlineytplayer/downloads/DownloadExecutionScheduler.kt` introduces `DownloadExecutionScheduler`, selects UIDT jobs on SDK 34+ and foreground-service fallback on SDK 26-33, wires `DownloadUserInitiatedJobService`, supplies durable queue identity extras, network constraints, estimated bytes, `setUserInitiated(true)`, and UIDT notification ownership, while the fallback starts `DownloadForegroundService` with the same durable queue id. `SchedulingDownloadControlGateway.kt` keeps enqueue/schedule flows on the durable control path. Coverage is in `DownloadExecutionSchedulerPolicyTest` and `SchedulingDownloadControlGatewayTest`; `docs/ANDROID_BACKGROUND_EXECUTION.md` documents the API-specific runtime boundaries. Supporting reconciliation is recorded in `docs/RMD_103_ANDROID_SCHEDULER_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #326 exact head `93ecb78670c178853173f3d83e145512e28d0d37` passed PR CI `35827300313`, PR Android smoke `35827300329`, push CI `35827278438`, and push Android smoke `35827278467`; PR #326 merged as `cf5f5e588118273d3dd88eff42ca97994513e232`; post-merge master CI `35830038817` and Android smoke `35830038810` passed on exact merge SHA `cf5f5e588118273d3dd88eff42ca97994513e232`. The scheduler remains separate from RMD-500's durable worker-loop closeout.
+
 ### RMD-104 — Handle foreground-service timeout paths if retained
 
-- [ ] Inventory every remaining `dataSync`/`mediaProcessing` foreground service.
-- [ ] Implement `Service.onTimeout(...)` for any path subject to Android 15+ time limits.
-- [ ] Persist resumable state before stopping.
+- [x] Inventory every remaining `dataSync`/`mediaProcessing` foreground service.
+- [x] Implement `Service.onTimeout(...)` for any path subject to Android 15+ time limits.
+- [x] Persist resumable state before stopping.
 - [ ] Add ADB/emulator qualification using shortened foreground-service timeout where applicable.
 
 **Acceptance:** forced timeout ends cleanly without a fatal `RemoteServiceException` and without corrupting download state.
 
+**Evidence (RMD-104 partial):** `app/src/main/AndroidManifest.xml` retains one download `dataSync` service and one media playback service, with no retained media-processing foreground service; `DownloadForegroundServiceInventory` records the retained-service inventory. `DownloadForegroundService.onTimeout(startId, fgsType)` persists timeout state through `DownloadForegroundTimeoutStore` before `stopForeground(STOP_FOREGROUND_REMOVE)` and `stopSelf(startId)`. JVM coverage in `DownloadForegroundServiceTimeoutPolicyTest` verifies inventory, manifest declarations, and source-order persistence-before-stop behavior; `DownloadForegroundTimeoutPolicyTest` covers the timeout policy surface. `app/src/androidTest/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundTimeoutInstrumentedTest.kt` verifies packaged-app persistence of start id, foreground-service type, and repeated timeout count. Supporting reconciliation is recorded in `docs/RMD_104_FOREGROUND_TIMEOUT_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #328 exact head `4a717dc7d24d934b62bfce15e1792b95a03954b8` passed PR CI `35834845438`, PR Android smoke `35834845359`, push CI `35834653394`, and push Android smoke `35834653338`; PR #328 merged as `99dfcb811b26c7f9d102ac87c646b88031fdc7dc`; post-merge master CI `35835796521` and Android smoke `35835796558` passed on that exact merge SHA. The remaining unchecked item is the API 35+/ADB shortened-timeout qualification because the current fast smoke lane uses API 29 and cannot force the Android 15 timeout callback.
+
 ### RMD-105 — Notification permission behavior
 
-- [ ] Add Android 13+ notification-permission UX where required.
-- [ ] Define behavior when permission is denied.
-- [ ] Ensure denial cannot corrupt or silently misreport queue state.
-- [ ] Add instrumentation coverage for granted/denied state where feasible.
+- [x] Add Android 13+ notification-permission UX where required.
+- [x] Define behavior when permission is denied.
+- [x] Ensure denial cannot corrupt or silently misreport queue state.
+- [x] Add instrumentation coverage for granted/denied state where feasible.
+
+**Evidence (RMD-105):** `app/src/main/AndroidManifest.xml` declares `android.permission.POST_NOTIFICATIONS`; `MainActivity.kt` requests `Manifest.permission.POST_NOTIFICATIONS` via `ActivityResultContracts.RequestPermission` and records outcomes through `DownloadNotificationPermissionStateStore.recordGrantState`. `DownloadNotificationPermissionPolicy` gates runtime permission at SDK 33+, maps denial to `QueueStateOnly`, and preserves the invariant that denial does not mutate durable queue state or falsely complete work. `DownloadNotificationPermissionPolicyTest` covers SDK gating, denied-state behavior, and `MainActivity` request wiring. `DownloadNotificationPermissionInstrumentedTest` and `NotificationPermissionStateInstrumentationTest` verify packaged-app granted, denied, and cleared permission-state persistence. Supporting reconciliation is recorded in `docs/RMD_105_NOTIFICATION_PERMISSION_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #327 exact head `cbaab677cbd0fea0b63fe57a0fb5efdbf7a459b9` passed PR CI `35833272325`, PR Android smoke `35833272315`, push CI `35833267719`, and push Android smoke `35833267706`; PR #327 merged as `192d9f6f569a7483a44c88a132c24a2a32fa1c3c`. PR #328 retained the RMD-105 smoke coverage and merged as `99dfcb811b26c7f9d102ac87c646b88031fdc7dc`, with post-merge master CI `35835796521` and Android smoke `35835796558` passing on that exact SHA. Broader Android 13+ dialog-level behavior remains covered by later RMD-1400/RMD-1500 behavioral qualification rather than blocking this platform-policy item.
 
 ---
 
