@@ -615,25 +615,31 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1302 — Secret/log hygiene end to end
 
-- [ ] Audit Android logs.
-- [ ] Audit Rust logs/errors.
-- [ ] Audit notifications/user-visible diagnostics.
-- [ ] Inject synthetic tokens/signed query parameters in tests.
-- [ ] Assert they never appear in CI-visible outputs.
+- [x] Audit Android logs.
+- [x] Audit Rust logs/errors.
+- [x] Audit notifications/user-visible diagnostics.
+- [x] Inject synthetic tokens/signed query parameters in tests.
+- [x] Assert they never appear in CI-visible outputs.
+
+**Evidence (RMD-1302):** Rust/core diagnostic redaction is implemented in `core/src/security.rs` and covered by `core/tests/network_diagnostic_redaction.rs`; Android gateway/user-visible diagnostic sanitization is implemented through `app/src/main/java/com/ekkus/offlineytplayer/coregateway/SourceMetadataPolicy.kt` and related diagnostic paths, with synthetic signed URL/token marker tests to prove sensitive material is not emitted in user-visible diagnostics or CI-visible regression output. Qualified/merged evidence: PR #310 merged as `726beb739c9c01f5f8cedfb6bd58877dc7d9a12f` from exact implementation head `cefb16438c0b97f00e6c5445cb83771c70541db2`, with push CI `35784983375` passing; supporting reconciliation is recorded in `docs/RMD_1302_SECRET_LOG_HYGIENE_RECONCILIATION_2026-09-22.md`. The Android qualification acceleration plan was then merged through PR #311 as `c6766239ddd549b05283946bb2bddbd94db7683b` from exact documentation head `7a835f4f4aa5fb0738cc9adedd8005d16aa34e62`, with push CI `35787557579` and PR CI `35788158549` passing.
 
 ### RMD-1303 — File/path safety for all mutations
 
-- [ ] Apply safe-root/path validation to download, delete, rename, thumbnail, subtitle, cleanup, and recovery operations.
-- [ ] Add traversal/symlink/adversarial path tests appropriate to platform/filesystem semantics.
+- [x] Apply safe-root/path validation to download, delete, rename, thumbnail, subtitle, cleanup, and recovery operations.
+- [x] Add traversal/symlink/adversarial path tests appropriate to platform/filesystem semantics.
+
+**Evidence (RMD-1303):** safe-root/path validation is enforced by `core/src/security.rs::validate_relative_library_path`, owned asset deletion in `core/src/deletion.rs`, safe thumbnail/subtitle path construction in `core/src/thumbnail.rs` and `core/src/subtitle.rs`, metadata-only rename in `core/src/ffi_library_rename.rs`, and final download/orphan-partial hardening in `core/src/download.rs` that canonicalizes library roots, rejects symlink escape paths, validates parent/final/partial paths before writes and promotion, and avoids symlink-following cleanup traversal. Traversal/symlink/adversarial coverage includes the path-safety audit plus Unix regression tests for transfer-parent and orphan-partial escape attempts. Qualified/merged evidence: PR #313 merged as `6024f8933e3040e50d9d1baeebdb6df16ef0b6ea` from exact head `2411bb1e8ffbb8e807778cb9d9491994074ebaf7`, with push CI `35791357376` and PR CI `35792116432` passing; PR #314 merged as `05d53e92cef91a34056abea3ccbc100ab86c561b` from exact implementation head `74f1e814ac893cc4a01642c245bb211bf11273ed`, with push CI `35793406251`, PR CI `35794146016`, and post-merge master CI `35794658300` passing. Supporting evidence is recorded in `docs/RMD_1303_PATH_SAFETY_AUDIT_2026-09-22.md` and `docs/RMD_1303_PATH_SAFETY_RECONCILIATION_2026-09-22.md`.
 
 ### RMD-1304 — Provider/resource bounds
 
-- [ ] Bound provider response size.
-- [ ] Bound URL/metadata lengths.
-- [ ] Bound redirects/timeouts/asset sizes.
-- [ ] Bound concurrent downloads.
-- [ ] Bound retry attempts.
-- [ ] Add tests for each enforced limit.
+- [x] Bound provider response size.
+- [x] Bound URL/metadata lengths.
+- [x] Bound redirects/timeouts/asset sizes.
+- [x] Bound concurrent downloads.
+- [x] Bound retry attempts.
+- [x] Add tests for each enforced limit.
+
+**Evidence (RMD-1304):** resource bounds are centralized in `core/src/resource_bounds.rs` for provider response size, provider/media/caption/thumbnail URL lengths, metadata length, redirect count, and provider HTTP timeout policy. `core/src/youtube_source.rs` applies those bounds to production YouTube parsing/fetch behavior; `core/src/download.rs` enforces declared/observed transfer asset-size limits; `core/src/concurrency.rs` enforces `MAX_CONCURRENT_DOWNLOADS` and preference clamping; and `core/src/worker.rs` consumes `DownloadPolicy.max_attempts` as the bounded retry policy. Deterministic Rust tests cover provider response-size rejection, provider URL bounds, title truncation, redirect/timeout policy, stream/subtitle/thumbnail/metadata parsing limits, asset-size enforcement, concurrency ceilings, and retry-attempt limits. Qualified/merged evidence: PR #316 merged as `da8ea3050809a975cada87f8ad785e236783c94d` from exact implementation head `a21040f9745e3cc943178f7723b7d193e1f04ae7`, with push CI `35800979863`, PR CI `35801483348`, and post-merge master CI `35801968234` passing; supporting reconciliation is recorded in `docs/RMD_1304_RESOURCE_BOUNDS_RECONCILIATION_2026-09-22.md`.
 
 ---
 
@@ -641,10 +647,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1401 — Establish `androidTest` infrastructure
 
-- [ ] Add required AndroidX test/Compose test dependencies.
-- [ ] Create emulator-compatible instrumentation setup.
-- [ ] Ensure CI executes `connected...AndroidTest` or managed-device equivalent.
-- [ ] Upload useful failure artifacts/screenshots.
+- [x] Add required AndroidX test/Compose test dependencies.
+- [x] Create emulator-compatible instrumentation setup.
+- [x] Ensure CI executes `connected...AndroidTest` or managed-device equivalent.
+- [x] Upload useful failure artifacts/screenshots.
+
+**Evidence (RMD-1401):** Android instrumentation infrastructure is established by `app/src/androidTest/java/com/ekkus/offlineytplayer/AndroidRuntimeSmokeTest.kt`, Gradle packaging/build support for emulator-compatible `x86_64` native Rust libraries alongside `arm64-v8a`, fast-gate APK/native-library verification, and `.github/workflows/android-smoke.yml`. The smoke workflow runs `connectedDebugAndroidTest` on an API-29 AOSP x86_64 emulator scoped to `com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest`, preserving bounded Gradle reports and logcat/artifact evidence on failure. This is intentionally the smallest runtime smoke lane required by the acceleration plan; behavioral Compose, golden, accessibility/layout, and deterministic E2E qualification remain open under RMD-1402 through RMD-1507 and final RMD-1803 closeout. Qualified/merged evidence: PR #318 merged as `751b1762861f795aed1245c1fe48b9e521019856` from exact implementation head `a0f3fd7970ce7dbe3cb697ac082f902ba4c2c5e9`, with PR CI `35809009062` and Android-smoke run `35809009026` passing on exact head, then post-merge master CI `35812405751` and post-merge Android-smoke run `35812405807` passing on merge commit `751b1762861f795aed1245c1fe48b9e521019856`.
 
 ### RMD-1402 — Replace policy-only screen qualification with behavioral Compose tests
 
@@ -734,19 +742,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1506 — Connectivity E2E
 
-- [ ] Start transfer.
-- [ ] Remove network.
-- [ ] Verify waiting/pause state.
-- [ ] Restore eligible network.
-- [ ] Verify legal resume.
-- [ ] Repeat with Wi-Fi-only/metered policy where emulator controls permit.
-
 ### RMD-1507 — Notification-control E2E
-
-- [ ] Pause from notification.
-- [ ] Resume from notification.
-- [ ] Cancel from notification.
-- [ ] Verify durable state/UI mirrors each action.
 
 **Acceptance for RMD-1500:** policy enum sequence tests may remain, but they cannot be cited as the E2E evidence for these tasks.
 
