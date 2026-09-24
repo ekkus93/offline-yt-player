@@ -1,1 +1,1 @@
-{"playabilityStatus":{"status":"OK"},"streamingData":{"formats":[{"itag":22,"mimeType":"video/mp4; codecs=\"avc1.64001F, mp4a.40.2\""}]}}
+{"playabilityStatus":{"status":"OK"},"videoDetails":null,"streamingData":{"formats":[{"itag":22,"mimeType":"video/mp4"}]}}
