@@ -243,20 +243,6 @@ impl DownloadWorker {
         snapshot.bytes_downloaded = snapshot.total_bytes.unwrap_or(snapshot.bytes_downloaded);
         snapshot.retry_at_epoch_ms = None;
         snapshot.last_error = None;
-        progress_epoch_ms = progress_epoch_ms.saturating_add(1_000);
-        let metrics = metric_estimator.observe(
-            progress_epoch_ms,
-            snapshot.bytes_downloaded,
-            snapshot.total_bytes,
-        );
-        if coalescer.should_emit(progress_epoch_ms, snapshot.bytes_downloaded, true) {
-            progress_events.push(CoreEvent::DownloadProgress {
-                job_id: snapshot.job_id.clone(),
-                bytes_downloaded: snapshot.bytes_downloaded,
-                total_bytes: snapshot.total_bytes,
-                metrics,
-            });
-        }
         self.library.save_download_snapshot(snapshot)?;
         Ok(progress_events)
     }
