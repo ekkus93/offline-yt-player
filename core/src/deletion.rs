@@ -242,10 +242,7 @@ mod tests {
 
         assert!(store.get("item-1").unwrap().is_none());
         for (final_path, partial_path, resume_path) in owned_paths {
-            assert!(
-                !final_path.exists(),
-                "final asset remained: {final_path:?}"
-            );
+            assert!(!final_path.exists(), "final asset remained: {final_path:?}");
             assert!(
                 !partial_path.exists(),
                 "partial asset remained: {partial_path:?}"
