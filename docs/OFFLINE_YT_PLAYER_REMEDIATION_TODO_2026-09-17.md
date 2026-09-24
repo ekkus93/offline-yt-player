@@ -93,11 +93,11 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Inventory every remaining `dataSync`/`mediaProcessing` foreground service.
 - [x] Implement `Service.onTimeout(...)` for any path subject to Android 15+ time limits.
 - [x] Persist resumable state before stopping.
-- [ ] Add ADB/emulator qualification using shortened foreground-service timeout where applicable.
+- [x] Add ADB/emulator qualification using shortened foreground-service timeout where applicable.
 
 **Acceptance:** forced timeout ends cleanly without a fatal `RemoteServiceException` and without corrupting download state.
 
-**Evidence (RMD-104 partial):** `app/src/main/AndroidManifest.xml` retains one download `dataSync` service and one media playback service, with no retained media-processing foreground service; `DownloadForegroundServiceInventory` records the retained-service inventory. `DownloadForegroundService.onTimeout(startId, fgsType)` persists timeout state through `DownloadForegroundTimeoutStore` before `stopForeground(STOP_FOREGROUND_REMOVE)` and `stopSelf(startId)`. JVM coverage in `DownloadForegroundServiceTimeoutPolicyTest` verifies inventory, manifest declarations, and source-order persistence-before-stop behavior; `DownloadForegroundTimeoutPolicyTest` covers the timeout policy surface. `app/src/androidTest/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundTimeoutInstrumentedTest.kt` verifies packaged-app persistence of start id, foreground-service type, and repeated timeout count. Supporting reconciliation is recorded in `docs/RMD_104_FOREGROUND_TIMEOUT_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #328 exact head `4a717dc7d24d934b62bfce15e1792b95a03954b8` passed PR CI `35834845438`, PR Android smoke `35834845359`, push CI `35834653394`, and push Android smoke `35834653338`; PR #328 merged as `99dfcb811b26c7f9d102ac87c646b88031fdc7dc`; post-merge master CI `35835796521` and Android smoke `35835796558` passed on that exact merge SHA. The remaining unchecked item is the API 35+/ADB shortened-timeout qualification because the current fast smoke lane uses API 29 and cannot force the Android 15 timeout callback.
+**Evidence (RMD-104):** `app/src/main/AndroidManifest.xml` retains one download `dataSync` service and one media playback service, with no retained media-processing foreground service; `DownloadForegroundServiceInventory` records the retained-service inventory. `DownloadForegroundService.onTimeout(startId, fgsType)` persists timeout state through `DownloadForegroundTimeoutStore` before `stopForeground(STOP_FOREGROUND_REMOVE)` and `stopSelf(startId)`. JVM coverage in `DownloadForegroundServiceTimeoutPolicyTest` verifies inventory, manifest declarations, and source-order persistence-before-stop behavior; `DownloadForegroundTimeoutPolicyTest` covers the timeout policy surface. `app/src/androidTest/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundTimeoutInstrumentedTest.kt` verifies packaged-app persistence of start id, foreground-service type, and repeated timeout count. Supporting reconciliation is recorded in `docs/RMD_104_FOREGROUND_TIMEOUT_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #328 exact head `4a717dc7d24d934b62bfce15e1792b95a03954b8` passed PR CI `35834845438`, PR Android smoke `35834845359`, push CI `35834653394`, and push Android smoke `35834653338`; PR #328 merged as `99dfcb811b26c7f9d102ac87c646b88031fdc7dc`; post-merge master CI `35835796521` and Android smoke `35835796558` passed on that exact merge SHA. The API-35 shortened-timeout requirement is qualified by `.github/workflows/android-fgs-timeout.yml` and `DownloadForegroundTimeoutAdbInstrumentedTest.kt`, which set `device_config put activity_manager data_sync_fgs_timeout_duration 1000`, start the production `dataSync` foreground service on API 35, background the app, and verify the production `Service.onTimeout(...)` path persists timeout state before cleanup. Supporting evidence is `docs/RMD_104_API35_TIMEOUT_QUALIFICATION_2026-09-23.md`: PR #331 exact head `eb00501cb0d657da3ed26678f589cd492818d7c9` passed PR CI `35839348685`, PR Android smoke `35839348689`, and PR Android FGS-timeout `35839348784`, merged as `241ecfc65db2a58e375aee00a9fa9712e6fd3ee9`, and post-merge master CI `35846090097`, Android smoke `35846090151`, and Android FGS-timeout `35846090095` passed. The same API-35 lane also passed on later exact master `601654bf7bf063f014bb8ba5fe7fa368a77a00be` as run `36060145427`.
 
 ### RMD-105 — Notification permission behavior
 
@@ -153,22 +153,22 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-301 — Implement the live production `MediaSource`
 
-- [ ] Add a concrete YouTube `MediaSource` distinct from `DirectFixtureSource`.
-- [ ] Register it in the production `SourceRegistry`.
-- [ ] Support the URL forms documented by the original strategy decision.
-- [ ] Resolve canonical source identity.
-- [ ] Resolve real title/duration/thumbnail metadata.
-- [ ] Discover available media formats.
-- [ ] Produce executable provider-neutral download plans.
-- [ ] Discover subtitles where supported.
-- [ ] Apply strict response/metadata bounds.
+- [x] Add a concrete YouTube `MediaSource` distinct from `DirectFixtureSource`.
+- [x] Register it in the production `SourceRegistry`.
+- [x] Support the URL forms documented by the original strategy decision.
+- [x] Resolve canonical source identity.
+- [x] Resolve real title/duration/thumbnail metadata.
+- [x] Discover available media formats.
+- [x] Produce executable provider-neutral download plans.
+- [x] Discover subtitles where supported.
+- [x] Apply strict response/metadata bounds.
 
 ### RMD-302 — Keep provider logic isolated
 
-- [ ] Keep provider response types/parsers inside the YouTube adapter.
-- [ ] Do not expose provider-specific payloads through Android UI models.
-- [ ] Convert failures to structured source diagnostics.
-- [ ] Distinguish unsupported URL, source changed/parser failure, network failure, and unavailable media.
+- [x] Keep provider response types/parsers inside the YouTube adapter.
+- [x] Do not expose provider-specific payloads through Android UI models.
+- [x] Convert failures to structured source diagnostics.
+- [x] Distinguish unsupported URL, source changed/parser failure, network failure, and unavailable media.
 
 ### RMD-303 — Add deterministic production-adapter fixtures
 
@@ -181,11 +181,13 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-304 — Controlled live-source qualification
 
-- [ ] Add an opt-in/manual or appropriately isolated live-source smoke path that is not required to leak secrets into CI.
-- [ ] Document its policy/legal prerequisites.
-- [ ] Record expected failure behavior when provider structure changes.
+- [x] Add an opt-in/manual or appropriately isolated live-source smoke path that is not required to leak secrets into CI.
+- [x] Document its policy/legal prerequisites.
+- [x] Record expected failure behavior when provider structure changes.
 
 **Acceptance:** OYP-703 can only be considered repaired when the production registry can resolve a supported real URL; fixture-only resolution is insufficient.
+
+**Evidence (RMD-300 partial):** RMD-301, RMD-302, and RMD-304 are implemented and qualified; RMD-303 remains intentionally unchecked pending the complete bounded sanitized provider-response fixture matrix. Production registration and provider isolation are in `core/src/source.rs::SourceRegistry::production`, `core/src/youtube.rs`, `core/src/youtube_source.rs`, and `core/src/youtube_extract.rs`; Android consumes provider-neutral source results through `GeneratedUniffiSourceAnalysisGateway`. The production adapter resolves canonical source identity, bounded title/duration/thumbnail metadata, stream formats, provider-neutral download plans, and subtitles with bounded response/URL/metadata policies and structured diagnostics. Controlled live qualification is the ignored/manual `live_youtube_resolves_real_metadata_and_formats` test using only validated `OYP_LIVE_YOUTUBE_VIDEO_ID`; `docs/YOUTUBE_LIVE_QUALIFICATION.md` and `docs/YOUTUBE_POLICY_RELEASE_GATE.md` keep the policy/legal prerequisites explicit and the external release gate unresolved. Supporting reconciliation is `docs/RMD_300_YOUTUBE_SOURCE_RECONCILIATION_2026-09-20.md`, which records exact master `0f5efc619ec8c700dedeb897ab9bb659466804a3` passing CI `35507540263`. The same production code is present on later exact master `601654bf7bf063f014bb8ba5fe7fa368a77a00be`, which passed CI `36060145525`, Android smoke `36060145407`, and API-35 FGS timeout `36060145427`. RMD-303 remains open, so overall RMD-300 acceptance remains fail-closed.
 
 ---
 
@@ -193,64 +195,66 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-401 — Make retryability authoritative
 
-- [ ] Refactor retry classification so `CoreError.retryable == false` cannot become retryable due only to `ErrorKind`.
-- [ ] Add regression test: HTTP 404/nonretryable status does not retry.
-- [ ] Add regression test: source-change/nonretryable provider failure does not enter generic retry loop.
-- [ ] Add regression tests for retryable transient statuses/network errors.
+- [x] Refactor retry classification so `CoreError.retryable == false` cannot become retryable due only to `ErrorKind`.
+- [x] Add regression test: HTTP 404/nonretryable status does not retry.
+- [x] Add regression test: source-change/nonretryable provider failure does not enter generic retry loop.
+- [x] Add regression tests for retryable transient statuses/network errors.
 
 ### RMD-402 — Unify retry policy with production scheduler
 
-- [ ] Make `DownloadPolicy.max_attempts` authoritative in production or remove it in favor of one authoritative retry policy.
-- [ ] Persist attempt count/next eligible retry time.
-- [ ] Ensure process death preserves retry semantics.
-- [ ] Bound exponential backoff and jitter.
-- [ ] Inject/abstract clock/randomness where needed for deterministic tests.
+- [x] Make `DownloadPolicy.max_attempts` authoritative in production or remove it in favor of one authoritative retry policy.
+- [x] Persist attempt count/next eligible retry time.
+- [x] Ensure process death preserves retry semantics.
+- [x] Bound exponential backoff and jitter.
+- [x] Inject/abstract clock/randomness where needed for deterministic tests.
 
 ### RMD-403 — Separate network-read I/O from filesystem I/O
 
-- [ ] Do not send remote response-body read errors through the generic local `io_error` storage mapper.
-- [ ] Classify socket reset/timeout/truncation correctly.
-- [ ] Preserve retryability where appropriate.
-- [ ] Add fixture tests for mid-body disconnect and timeout.
-- [ ] Verify local ENOSPC/write failures still map to storage errors.
+- [x] Do not send remote response-body read errors through the generic local `io_error` storage mapper.
+- [x] Classify socket reset/timeout/truncation correctly.
+- [x] Preserve retryability where appropriate.
+- [x] Add fixture tests for mid-body disconnect and timeout.
+- [x] Verify local ENOSPC/write failures still map to storage errors.
 
 ### RMD-404 — Make deletion remove owned assets
 
-- [ ] Define deletion transaction/state machine for metadata plus files.
-- [ ] Delete video/audio/thumbnail/subtitle/partial assets owned by the item.
-- [ ] Prevent traversal/out-of-root deletion.
-- [ ] Surface file-delete failures explicitly.
-- [ ] Add interrupted-deletion reconciliation.
-- [ ] Add tests proving files are gone after successful delete.
+- [x] Define deletion transaction/state machine for metadata plus files.
+- [x] Delete video/audio/thumbnail/subtitle/partial assets owned by the item.
+- [x] Prevent traversal/out-of-root deletion.
+- [x] Surface file-delete failures explicitly.
+- [x] Add interrupted-deletion reconciliation.
+- [x] Add tests proving files are gone after successful delete.
 
 ### RMD-405 — Use stored hashes for corruption detection
 
-- [ ] Preserve cheap existence/size checks where appropriate.
-- [ ] Add SHA-256 verification when a stored hash exists during explicit/deep validation or suspected corruption.
-- [ ] Add same-length corruption regression test.
-- [ ] Map corruption to a repairable/user-visible state.
+- [x] Preserve cheap existence/size checks where appropriate.
+- [x] Add SHA-256 verification when a stored hash exists during explicit/deep validation or suspected corruption.
+- [x] Add same-length corruption regression test.
+- [x] Map corruption to a repairable/user-visible state.
 
 ### RMD-406 — Redact network diagnostics
 
-- [ ] Replace raw `reqwest::Error` user-facing text with structured safe diagnostics.
-- [ ] Strip/redact URLs, query strings, signed parameters, tokens, and sensitive filesystem details.
-- [ ] Add tests with synthetic signed URLs/secrets.
-- [ ] Verify logs and FFI error messages contain no injected secret markers.
+- [x] Replace raw `reqwest::Error` user-facing text with structured safe diagnostics.
+- [x] Strip/redact URLs, query strings, signed parameters, tokens, and sensitive filesystem details.
+- [x] Add tests with synthetic signed URLs/secrets.
+- [x] Verify logs and FFI error messages contain no injected secret markers.
 
 ### RMD-407 — Deterministic quality ranking
 
-- [ ] Rank formats by compatibility before deduplicating equal heights.
-- [ ] Prefer direct-play combined streams where product policy says so.
-- [ ] Prefer compatible split A/V over mux-required variants where appropriate.
-- [ ] Add deterministic tie-breakers for codec/bitrate/fps/format ID.
-- [ ] Add tests where provider order is intentionally adversarial.
+- [x] Rank formats by compatibility before deduplicating equal heights.
+- [x] Prefer direct-play combined streams where product policy says so.
+- [x] Prefer compatible split A/V over mux-required variants where appropriate.
+- [x] Add deterministic tie-breakers for codec/bitrate/fps/format ID.
+- [x] Add tests where provider order is intentionally adversarial.
 
 ### RMD-408 — Reconcile concurrency/resource-policy duplication
 
-- [ ] Identify conflicting core/Android concurrency constants.
-- [ ] Establish one maximum enforced by core and one user preference bounded by it.
-- [ ] Ensure Android cannot request a value above the core bound.
-- [ ] Add mapping tests.
+- [x] Identify conflicting core/Android concurrency constants.
+- [x] Establish one maximum enforced by core and one user preference bounded by it.
+- [x] Ensure Android cannot request a value above the core bound.
+- [x] Add mapping tests.
+
+**Evidence (RMD-400):** Current-master production behavior and deterministic regression coverage satisfy RMD-401 through RMD-408. RMD-401/RMD-402 use `core/src/retry.rs`, `core/src/worker.rs`, persistence, and `core/src/rmd_402_retry_policy_tests.rs` so explicit `CoreError.retryable` remains authoritative, `DownloadPolicy.max_attempts` is the bounded production policy, retry attempt/deadline state survives restart, and timing/jitter can be deterministic. RMD-403 uses `core/src/download.rs::remote_body_read_error` rather than local `io_error`, with disconnect/truncation/timeout coverage in `core/tests/download_disconnect_matrix.rs` and `core/tests/download_http_matrix.rs` while local write failures retain persistence/storage semantics. RMD-404 is `core/src/deletion.rs::delete_library_item_owned_assets`, which deletes owned media/thumbnail/subtitle/partial/resume assets before metadata, rejects traversal/symlink escape, surfaces delete failures, and remains safely retryable after partial deletion; its tests prove assets are gone after success and interrupted deletion is recoverable. RMD-405 is `core/src/asset_validation.rs`, preserving cheap existence/size checks while deep validation verifies stored SHA-256 and detects same-length corruption as explicit repairable `Missing`/`Corrupt` state. RMD-406 uses structured network diagnostics and `core/src/security.rs::redact_sensitive`, with synthetic secret/signed-URL tests in `core/tests/network_diagnostic_redaction.rs` and the FFI boundary. RMD-407 is `core/src/youtube_extract.rs::curate_quality_choices`, which ranks before equal-height deduplication and deterministically prefers direct-play combined, then compatible split, with bitrate/FPS/codec/container/format-ID tie-breakers and adversarial-order tests. RMD-408 centralizes the hard ceiling in `core/src/concurrency.rs::MAX_CONCURRENT_DOWNLOADS`, clamps platform/user preferences with `bounded_download_concurrency`, enforces the bound in the worker/gate, and exposes/tests the mapping through UniFFI and Android. Supporting reconciliation is `docs/RMD_400_CORE_CORRECTNESS_RECONCILIATION_2026-09-20.md` plus the later focused RMD-402/RMD-403/RMD-405/RMD-406/RMD-407/RMD-408 notes. PR #245 evidence head `39ad72bcbe51e60eeb7c19fbfd9e3c4121996de0` passed CI runs `35515774802` and `35516082761`; the same current production/test paths are present on exact master `601654bf7bf063f014bb8ba5fe7fa368a77a00be`, which passed CI `36060145525`, Android smoke `36060145407`, and API-35 FGS timeout `36060145427`.
 
 ---
 
