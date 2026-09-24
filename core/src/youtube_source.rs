@@ -562,7 +562,7 @@ mod tests {
         let text = match name {
             "combined" => include_str!("../tests/fixtures/youtube/combined_av.json"),
             "split" => include_str!("../tests/fixtures/youtube/split_av.json"),
-            "unavailable" => include_str!("../tests/fixtures/youtube/unavailable.json"),
+            "unavailable" => include_str!("../tests/fixtures/youtube/provider_unavailable.json"),
             _ => panic!("unknown fixture"),
         };
         serde_json::from_str(text).expect("sanitized YouTube fixture must be valid JSON")
@@ -586,12 +586,16 @@ mod tests {
         let parsed = parse_player(&fixture("split")).unwrap();
         assert_eq!(parsed.title, "Sanitized Split Fixture");
         assert_eq!(parsed.streams.len(), 2);
-        assert!(parsed.streams.iter().any(|s| s.id == "137"
-            && s.video_codec.as_deref() == Some("h264")
-            && s.audio_codec.is_none()));
-        assert!(parsed.streams.iter().any(|s| s.id == "140"
-            && s.video_codec.is_none()
-            && s.audio_codec.as_deref() == Some("aac")));
+        assert!(
+            parsed.streams.iter().any(|s| s.id == "137"
+                && s.video_codec.as_deref() == Some("h264")
+                && s.audio_codec.is_none())
+        );
+        assert!(
+            parsed.streams.iter().any(|s| s.id == "140"
+                && s.video_codec.is_none()
+                && s.audio_codec.as_deref() == Some("aac"))
+        );
     }
 
     #[test]
