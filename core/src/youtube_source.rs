@@ -586,16 +586,14 @@ mod tests {
         let parsed = parse_player(&fixture("split")).unwrap();
         assert_eq!(parsed.title, "Sanitized Split Fixture");
         assert_eq!(parsed.streams.len(), 2);
-        assert!(
-            parsed.streams.iter().any(|s| s.id == "137"
-                && s.video_codec.as_deref() == Some("h264")
-                && s.audio_codec.is_none())
-        );
-        assert!(
-            parsed.streams.iter().any(|s| s.id == "140"
-                && s.video_codec.is_none()
-                && s.audio_codec.as_deref() == Some("aac"))
-        );
+        let has_video_only = parsed.streams.iter().any(|s| {
+            s.id == "137" && s.video_codec.as_deref() == Some("h264") && s.audio_codec.is_none()
+        });
+        let has_audio_only = parsed.streams.iter().any(|s| {
+            s.id == "140" && s.video_codec.is_none() && s.audio_codec.as_deref() == Some("aac")
+        });
+        assert!(has_video_only);
+        assert!(has_audio_only);
     }
 
     #[test]
