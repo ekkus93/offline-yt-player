@@ -168,7 +168,11 @@ mod tests {
         store.promote_completed("job-1", item).unwrap();
     }
 
-    fn write_asset_family(root: &Path, relative_path: &str, bytes: u64) -> (PathBuf, PathBuf, PathBuf) {
+    fn write_asset_family(
+        root: &Path,
+        relative_path: &str,
+        bytes: u64,
+    ) -> (PathBuf, PathBuf, PathBuf) {
         let final_path = root.join(relative_path);
         std::fs::create_dir_all(final_path.parent().unwrap()).unwrap();
         std::fs::write(&final_path, vec![0_u8; bytes as usize]).unwrap();
@@ -238,9 +242,18 @@ mod tests {
 
         assert!(store.get("item-1").unwrap().is_none());
         for (final_path, partial_path, resume_path) in owned_paths {
-            assert!(!final_path.exists(), "final asset remained: {final_path:?}");
-            assert!(!partial_path.exists(), "partial asset remained: {partial_path:?}");
-            assert!(!resume_path.exists(), "resume sidecar remained: {resume_path:?}");
+            assert!(
+                !final_path.exists(),
+                "final asset remained: {final_path:?}"
+            );
+            assert!(
+                !partial_path.exists(),
+                "partial asset remained: {partial_path:?}"
+            );
+            assert!(
+                !resume_path.exists(),
+                "resume sidecar remained: {resume_path:?}"
+            );
         }
     }
 
@@ -276,8 +289,11 @@ mod tests {
         item.assets.truncate(1);
         persist(&store, &item);
         let root = tempdir().unwrap();
-        let (final_path, partial_path, resume_path) =
-            write_asset_family(root.path(), &item.assets[0].relative_path, item.assets[0].bytes);
+        let (final_path, partial_path, resume_path) = write_asset_family(
+            root.path(),
+            &item.assets[0].relative_path,
+            item.assets[0].bytes,
+        );
         std::fs::remove_file(&resume_path).unwrap();
         std::fs::create_dir(&resume_path).unwrap();
 
