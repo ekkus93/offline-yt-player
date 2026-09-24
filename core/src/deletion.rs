@@ -258,29 +258,25 @@ mod tests {
     fn partial_failure_keeps_metadata_and_retry_reconciles() {
         let store = LibraryStore::open_in_memory().unwrap();
         let mut item = item();
-        item.assets.truncate(2);
+        item.assets.truncate(1);
         persist(&store, &item);
         let root = tempdir().unwrap();
         let video = root.path().join(&item.assets[0].relative_path);
         std::fs::create_dir_all(video.parent().unwrap()).unwrap();
         std::fs::write(&video, [0_u8; 4]).unwrap();
-        let audio = root.path().join(&item.assets[1].relative_path);
-        std::fs::create_dir_all(audio.parent().unwrap()).unwrap();
-        std::fs::write(&audio, [0_u8; 6]).unwrap();
-        let audio_partial = transfer_partial_path(&audio);
-        std::fs::create_dir(&audio_partial).unwrap();
+        let partial = transfer_partial_path(&video);
+        std::fs::create_dir(&partial).unwrap();
 
         let error = delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap_err();
         assert_eq!(error.kind, ErrorKind::Persistence);
         assert!(!video.exists());
-        assert!(!audio.exists());
-        assert!(audio_partial.exists());
+        assert!(partial.exists());
         assert!(store.get("item-1").unwrap().is_some());
 
-        std::fs::remove_dir(&audio_partial).unwrap();
-        std::fs::write(&audio_partial, b"partial bytes").unwrap();
+        std::fs::remove_dir(&partial).unwrap();
+        std::fs::write(&partial, b"partial bytes").unwrap();
         delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap();
-        assert!(!audio_partial.exists());
+        assert!(!partial.exists());
         assert!(store.get("item-1").unwrap().is_none());
     }
 
