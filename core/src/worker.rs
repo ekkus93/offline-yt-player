@@ -1,8 +1,9 @@
 use crate::{
-    CoreError, DownloadEngine, DownloadPlan, DownloadPolicy, DownloadState, DownloadStateMachine,
-    DurableDownloadSnapshot, DurableStopReason, ErrorKind, LibraryItem, LibraryStore, LocalAsset,
-    PAUSE_POLL_INTERVAL, ProgressCoalescer, TransferRequest, bounded_download_concurrency,
-    durable_stop_reason, propagate_durable_stop, retry_delay,
+    CoreError, CoreEvent, DownloadEngine, DownloadPlan, DownloadPolicy, DownloadState,
+    DownloadStateMachine, DurableDownloadSnapshot, DurableStopReason, ErrorKind, LibraryItem,
+    LibraryStore, LocalAsset, PAUSE_POLL_INTERVAL, ProgressCoalescer, TransferMetricEstimator,
+    TransferRequest, bounded_download_concurrency, durable_stop_reason, propagate_durable_stop,
+    retry_delay,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -24,6 +25,7 @@ pub struct DownloadWorkerReport {
     pub retry_wait: Vec<String>,
     pub canceled: Vec<String>,
     pub repaired: Vec<String>,
+    pub progress_events: Vec<CoreEvent>,
 }
 
 pub struct DownloadWorker {
@@ -67,7 +69,10 @@ impl DownloadWorker {
                 continue;
             }
             match self.execute_one(&engine, item, &mut snapshot, cancel, now_epoch_ms) {
-                Ok(()) => report.completed.push(snapshot.job_id.clone()),
+                Ok(progress_events) => {
+                    report.progress_events.extend(progress_events);
+                    report.completed.push(snapshot.job_id.clone());
+                }
                 Err(error) if error.kind == ErrorKind::Canceled => {
                     match durable_stop_reason(&self.library, &snapshot.job_id)? {
                         Some(DurableStopReason::Pause) => {
@@ -160,13 +165,22 @@ impl DownloadWorker {
         snapshot: &mut DurableDownloadSnapshot,
         cancel: &AtomicBool,
         now_epoch_ms: u64,
-    ) -> Result<(), CoreError> {
+    ) -> Result<Vec<CoreEvent>, CoreError> {
         transition_snapshot(snapshot, DownloadState::Downloading)?;
         snapshot.total_bytes = total_expected_bytes(&item.plan);
         self.library.save_download_snapshot(snapshot)?;
 
         let mut assets = Vec::new();
         let mut coalescer = ProgressCoalescer::default();
+        let mut metric_estimator = TransferMetricEstimator::default();
+        let mut progress_epoch_ms = now_epoch_ms;
+        let mut progress_events = Vec::new();
+        metric_estimator.observe(
+            progress_epoch_ms,
+            snapshot.bytes_downloaded,
+            snapshot.total_bytes,
+        );
+
         for plan_asset in &item.plan.assets {
             if cancel.load(Ordering::Relaxed) {
                 return Err(CoreError::new(
@@ -183,7 +197,19 @@ impl DownloadWorker {
             };
             let result = self.transfer_with_durable_stop(engine, &item.job_id, &request, cancel)?;
             snapshot.bytes_downloaded = snapshot.bytes_downloaded.saturating_add(result.bytes);
-            if coalescer.should_emit(now_epoch_ms, snapshot.bytes_downloaded, false) {
+            progress_epoch_ms = progress_epoch_ms.saturating_add(1_000);
+            let metrics = metric_estimator.observe(
+                progress_epoch_ms,
+                snapshot.bytes_downloaded,
+                snapshot.total_bytes,
+            );
+            if coalescer.should_emit(progress_epoch_ms, snapshot.bytes_downloaded, false) {
+                progress_events.push(CoreEvent::DownloadProgress {
+                    job_id: snapshot.job_id.clone(),
+                    bytes_downloaded: snapshot.bytes_downloaded,
+                    total_bytes: snapshot.total_bytes,
+                    metrics,
+                });
                 self.library.save_download_snapshot(snapshot)?;
             }
             let local = LocalAsset {
@@ -218,7 +244,7 @@ impl DownloadWorker {
         snapshot.retry_at_epoch_ms = None;
         snapshot.last_error = None;
         self.library.save_download_snapshot(snapshot)?;
-        Ok(())
+        Ok(progress_events)
     }
 
     fn transfer_with_durable_stop(
@@ -409,6 +435,13 @@ mod tests {
         }
     }
 
+    fn unknown_length_plan(job_id: &str, url: String) -> DownloadWorkItem {
+        let mut item = plan(job_id, url, 0);
+        item.plan.quality.estimated_bytes = None;
+        item.plan.assets[0].expected_bytes = None;
+        item
+    }
+
     #[test]
     fn executes_real_transfer_promotes_item_and_honors_concurrency() {
         let data = b"worker fixture".repeat(32);
@@ -443,6 +476,82 @@ mod tests {
         assert_eq!(jobs[0].state, DownloadState::Completed);
         assert_eq!(jobs[0].bytes_downloaded, data.len() as u64);
         assert_eq!(jobs[1].state, DownloadState::Queued);
+    }
+
+    #[test]
+    fn worker_emits_real_progress_bytes_speed_and_eta_for_known_length_transfer() {
+        let data = b"metric fixture".repeat(64);
+        let server = FixtureServer::start(data.clone());
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("metric-job", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+
+        let report = worker
+            .execute_ready_at(
+                &[plan(
+                    "metric-job",
+                    format!("{}/metric.mp4", server.address),
+                    data.len(),
+                )],
+                &AtomicBool::new(false),
+                50_000,
+            )
+            .unwrap();
+
+        let CoreEvent::DownloadProgress {
+            job_id,
+            bytes_downloaded,
+            total_bytes,
+            metrics,
+        } = report.progress_events.last().unwrap()
+        else {
+            panic!("worker emitted a non-progress event");
+        };
+        assert_eq!(job_id, "metric-job");
+        assert_eq!(*bytes_downloaded, data.len() as u64);
+        assert_eq!(*total_bytes, Some(data.len() as u64));
+        assert_eq!(metrics.bytes_per_second, Some(data.len() as u64));
+        assert_eq!(metrics.eta_seconds, Some(0));
+    }
+
+    #[test]
+    fn worker_does_not_fabricate_eta_for_unknown_length_transfer() {
+        let data = b"unknown metric fixture".repeat(32);
+        let server = FixtureServer::start(data.clone());
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("unknown-job", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+
+        let report = worker
+            .execute_ready_at(
+                &[unknown_length_plan(
+                    "unknown-job",
+                    format!("{}/unknown.mp4", server.address),
+                )],
+                &AtomicBool::new(false),
+                60_000,
+            )
+            .unwrap();
+
+        let CoreEvent::DownloadProgress {
+            bytes_downloaded,
+            total_bytes,
+            metrics,
+            ..
+        } = report.progress_events.last().unwrap()
+        else {
+            panic!("worker emitted a non-progress event");
+        };
+        assert_eq!(*bytes_downloaded, data.len() as u64);
+        assert_eq!(*total_bytes, None);
+        assert_eq!(metrics.bytes_per_second, Some(data.len() as u64));
+        assert_eq!(metrics.eta_seconds, None);
     }
 
     #[test]
