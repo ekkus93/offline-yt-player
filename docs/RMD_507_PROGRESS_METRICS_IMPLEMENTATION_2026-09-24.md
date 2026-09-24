@@ -1,22 +1,29 @@
-# RMD-507 progress/speed/ETA implementation evidence — 2026-09-24
+# RMD-507 progress/speed/ETA implementation — 2026-09-24
 
 Canonical checklist: `docs/OFFLINE_YT_PLAYER_REMEDIATION_TODO_2026-09-17.md`, RMD-507.
 
-## Production-path changes
+## Implementation
 
-- `core/src/download.rs` now exposes `DownloadEngine::transfer_with_progress`, which reports transferred bytes after each response-body chunk is durably written to the partial file. Existing callers can still use `transfer` with a no-op progress callback.
-- `core/src/worker.rs` wires the production worker path to that callback. Observed transfer progress updates `bytes_downloaded`, calculates bounded-window `bytes_per_second` and `eta_seconds` through `TransferMetricEstimator`, and persists coalesced snapshots through `ProgressCoalescer`.
-- `core/src/persistence.rs` migrates the queue schema to persist the latest live metrics separately from the durable lifecycle fields, so queue state remains process-reconstructable while progress metrics are exposed to the app.
-- `core/src/ffi.rs` exposes speed/ETA through `FfiDurableDownloadSnapshot` / `download_queue`.
-- `app/src/main/java/com/ekkus/offlineytplayer/coregateway/AppCoreGateway.kt` maps generated metric fields into app download snapshots.
-- `MainActivity.toDownloadsScreenState` renders speed labels only for positive speeds and ETA labels only when total bytes are known.
+RMD-507 is repaired in the production core worker path rather than by UI-only formatting policy.
 
-## Behavioral proof added
+- `core/src/events.rs::TransferMetricEstimator` calculates bounded-window transfer speed and emits ETA only when total bytes are known.
+- `core/src/worker.rs::DownloadWorkerReport` now carries `CoreEvent::DownloadProgress` events emitted by the real `DownloadWorker` execution path.
+- `DownloadWorker::execute_one` seeds the estimator from the durable snapshot, updates transferred bytes after real `DownloadEngine::transfer` results, coalesces progress emissions, and sends a final progress event at completion.
+- Known-length transfers propagate `bytes_downloaded`, `total_bytes`, positive speed, and completion ETA `0`.
+- Unknown-length transfers propagate real transferred bytes and speed while preserving `total_bytes = None` and `eta_seconds = None`, so no numeric percent or ETA is fabricated.
 
-- `core/src/worker.rs` tests prove known-length progress records bounded-window speed and ETA.
-- `core/src/worker.rs` tests prove unknown-length progress records speed but never fabricates ETA.
-- `core/src/ffi.rs` tests prove metrics cross the FFI-visible queue model.
+## Behavioral proof
+
+Deterministic Rust fixture tests exercise the production worker against loopback transfers:
+
+- `worker_emits_real_progress_bytes_speed_and_eta_for_known_length_transfer`
+- `worker_does_not_fabricate_eta_for_unknown_length_transfer`
+
+Existing UI policy coverage remains relevant for presentation safety:
+
+- `DownloadRowPolicyTest.unknownLengthProgressDoesNotFabricatePercentageOrEta`
+- `DownloadRowPolicyTest.progressMapperKeepsOnlyRealPositiveMetrics`
 
 ## Qualification policy
 
-This is primarily portable-core/FFI state behavior, so deterministic Rust/JVM tests are the primary fast proof under the Android qualification acceleration plan. Android smoke and API-35 timeout qualification remain required exact-head integration evidence before merge.
+The primary proof is deterministic Rust/core behavior because RMD-507 is portable worker orchestration and presentation-policy mapping, matching the Android qualification acceleration plan's instruction to move non-runtime proof out of emulator lanes. Android smoke and API-35 timeout lanes remain required exact-head integration gates before merge.
