@@ -114,36 +114,38 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-201 — Package Rust native libraries into the APK
 
-- [ ] Define supported Android ABIs for v1.
-- [ ] Build Rust `cdylib` for each supported ABI.
-- [ ] Copy/package `.so` files through Gradle/JNI libs or an equivalent deterministic mechanism.
-- [ ] Verify packaged APK contains each required native library.
-- [ ] Fail CI when an expected ABI library is absent.
+- [x] Define supported Android ABIs for v1.
+- [x] Build Rust `cdylib` for each supported ABI.
+- [x] Copy/package `.so` files through Gradle/JNI libs or an equivalent deterministic mechanism.
+- [x] Verify packaged APK contains each required native library.
+- [x] Fail CI when an expected ABI library is absent.
 
 ### RMD-202 — Compile generated UniFFI Kotlin bindings into the app
 
-- [ ] Make binding generation reproducible from the Rust interface.
-- [ ] Add generated sources to the Android compile source set or consume them from a generated module/artifact.
-- [ ] Prevent stale checked/generated bindings from silently diverging.
-- [ ] Add CI diff/consistency verification.
+- [x] Make binding generation reproducible from the Rust interface.
+- [x] Add generated sources to the Android compile source set or consume them from a generated module/artifact.
+- [x] Prevent stale checked/generated bindings from silently diverging.
+- [x] Add CI diff/consistency verification.
 
 ### RMD-203 — Create an app-owned core gateway
 
-- [ ] Add a stable Kotlin interface wrapping generated UniFFI services.
-- [ ] Centralize FFI model/error conversion.
-- [ ] Ensure blocking calls execute off the Android main thread.
-- [ ] Define cancellation/lifecycle semantics.
-- [ ] Expose repository/state APIs suitable for ViewModels.
-- [ ] Provide a fake implementation for deterministic Android UI tests.
+- [x] Add a stable Kotlin interface wrapping generated UniFFI services.
+- [x] Centralize FFI model/error conversion.
+- [x] Ensure blocking calls execute off the Android main thread.
+- [x] Define cancellation/lifecycle semantics.
+- [x] Expose repository/state APIs suitable for ViewModels.
+- [x] Provide a fake implementation for deterministic Android UI tests.
 
 ### RMD-204 — Android runtime FFI smoke test
 
-- [ ] Add at least one `androidTest` that loads the packaged native library.
-- [ ] Execute a real representative FFI call.
-- [ ] Round-trip representative records/errors.
-- [ ] Exercise a temporary app-private DB/media root.
+- [x] Add at least one `androidTest` that loads the packaged native library.
+- [x] Execute a real representative FFI call.
+- [x] Round-trip representative records/errors.
+- [x] Exercise a temporary app-private DB/media root.
 
 **Acceptance for RMD-200:** production Kotlin imports/calls the packaged generated core interface; FFI is no longer a separate CI-only artifact.
+
+**Evidence (RMD-200):** RMD-201/RMD-202 packaging and binding-generation evidence is recorded in `docs/RMD_200_UNIFFI_CURRENT_MASTER_EVIDENCE_2026-09-24.md`: `app/build.gradle.kts` defines the v1 `arm64-v8a`/`aarch64-linux-android` and `x86_64`/`x86_64-linux-android` targets, packages generated JNI libraries, and wires generated UniFFI Kotlin into the Android source set; `.github/workflows/ci.yml` builds both Android Rust targets, verifies both packaged `liboffline_yt_core.so` paths, and runs reproducible binding consistency checks. RMD-204 runtime proof is `app/src/androidTest/java/com/ekkus/offlineytplayer/coregateway/GeneratedUniffiCoreGatewaySmokeTest.kt`, which loads the packaged native library, opens a temporary app-private DB/root, executes representative generated-core calls, round-trips durable queue state and structured errors, and is included in the Android smoke workflow. PR #358 exact evidence head `0df83e1b9313f2e55486170a1c029e20c0cc4e86` passed push CI `35995849486`, push Android smoke `35995849463`, push Android FGS timeout `35995849548`, PR CI `35996192854`, PR Android smoke `35996192911`, and PR Android FGS timeout `35996192874`; it merged as `8b34e44a2645d161a629e1bf972dc7554324883b`, whose post-merge master CI `36002691070`, Android smoke `36002691159`, and Android FGS timeout `36002691152` passed. RMD-203 app-owned gateway evidence is recorded in `docs/RMD_203_APP_CORE_GATEWAY_RECONCILIATION_2026-09-24.md`: stable app-owned core/control interfaces, centralized model/error conversion, off-main-thread execution, lifecycle/cancellation semantics, repository/state APIs, and deterministic fakes are all present in the production gateway layer. PR #359 exact head `8094b8051f33d8ca68bb099bf14edc6bff1d5784` passed all six push/PR CI, Android smoke, and Android FGS-timeout runs and merged as `010228734192069d0fbbfd7b906fd9220911cd97`; post-merge master CI `36017284912`, Android smoke `36017284906`, and Android FGS timeout `36017284973` passed. The final reconciliation intent was merged by PR #360 as `601654bf7bf063f014bb8ba5fe7fa368a77a00be`; post-merge master CI `36060145525`, Android smoke `36060145407`, and Android FGS timeout `36060145427` passed on that exact SHA.
 
 ---
 
