@@ -595,4 +595,62 @@ mod tests {
             ErrorKind::SourceChanged
         );
     }
+    fn provider_fixture(name: &str) -> Value {
+        let raw = match name {
+            "combined" => include_str!("../tests/fixtures/youtube/combined_av.json"),
+            "split" => include_str!("../tests/fixtures/youtube/split_av.json"),
+            "unavailable" => include_str!("../tests/fixtures/youtube/provider_unavailable.json"),
+            "private" => include_str!("../tests/fixtures/youtube/provider_private.json"),
+            "changed" => include_str!("../tests/fixtures/youtube/provider_changed.json"),
+            "malformed" => include_str!("../tests/fixtures/youtube/provider_malformed.json"),
+            _ => panic!("unknown provider fixture"),
+        };
+        assert!(raw.len() < 16 * 1024, "sanitized fixture must remain bounded");
+        assert!(!raw.contains("signature="));
+        assert!(!raw.contains("token="));
+        serde_json::from_str(raw).expect("provider fixture must be valid JSON")
+    }
+
+    #[test]
+    fn provider_fixture_extracts_metadata_and_combined_av() {
+        let parsed = parse_player(&provider_fixture("combined")).unwrap();
+        assert_eq!(parsed.title, "Fixture Combined");
+        assert_eq!(parsed.duration_ms, Some(61_000));
+        assert_eq!(parsed.streams.len(), 1);
+        assert_eq!(parsed.streams[0].video_codec.as_deref(), Some("h264"));
+        assert_eq!(parsed.streams[0].audio_codec.as_deref(), Some("aac"));
+        assert_eq!(parsed.subtitles.len(), 1);
+        assert_eq!(parsed.subtitles[0].language, "en");
+    }
+
+    #[test]
+    fn provider_fixture_extracts_split_av() {
+        let parsed = parse_player(&provider_fixture("split")).unwrap();
+        assert_eq!(parsed.title, "Fixture Split");
+        assert_eq!(parsed.streams.len(), 2);
+        assert!(parsed.streams.iter().any(|s| s.video_codec.as_deref() == Some("h264") && s.audio_codec.is_none()));
+        assert!(parsed.streams.iter().any(|s| s.video_codec.is_none() && s.audio_codec.as_deref() == Some("aac")));
+    }
+
+    #[test]
+    fn provider_fixtures_fail_closed_for_unavailable_private_and_changed_shapes() {
+        for name in ["unavailable", "private", "changed", "malformed"] {
+            let err = parse_player(&provider_fixture(name)).unwrap_err();
+            assert_eq!(err.kind, ErrorKind::SourceChanged, "{name}");
+            assert!(!err.retryable, "{name}");
+        }
+    }
+
+    #[test]
+    fn provider_response_bound_rejects_oversized_payload() {
+        let err = ensure_provider_response_size(
+            "YouTube watch",
+            Some(crate::MAX_PROVIDER_RESPONSE_BYTES as u64 + 1),
+            0,
+        )
+        .unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+        assert!(!err.retryable);
+    }
+
 }
