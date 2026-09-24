@@ -208,11 +208,13 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-403 — Separate network-read I/O from filesystem I/O
 
-- [ ] Do not send remote response-body read errors through the generic local `io_error` storage mapper.
-- [ ] Classify socket reset/timeout/truncation correctly.
-- [ ] Preserve retryability where appropriate.
-- [ ] Add fixture tests for mid-body disconnect and timeout.
-- [ ] Verify local ENOSPC/write failures still map to storage errors.
+- [x] Do not send remote response-body read errors through the generic local `io_error` storage mapper.
+- [x] Classify socket reset/timeout/truncation correctly.
+- [x] Preserve retryability where appropriate.
+- [x] Add fixture tests for mid-body disconnect and timeout.
+- [x] Verify local ENOSPC/write failures still map to storage errors.
+
+**Evidence (RMD-403):** `core/src/download.rs` routes remote response-body reads through `remote_body_read_error` instead of the local-filesystem `io_error` mapper. Timeout-like body-read failures map to retryable `NetworkTimeout`; connection reset/abort/interrupted/not-connected/broken-pipe failures map to retryable `NetworkUnavailable`; unexpected EOF/truncation remains a retryable integrity failure. Deterministic raw-HTTP fixture tests `mid_body_disconnect_is_retryable_remote_failure_not_storage` and `delayed_response_body_is_retryable_remote_failure_not_storage`, plus `remote_body_timed_out_io_error_maps_to_network_timeout`, prove remote read failures are not mislabeled as storage failures. `local_enospc_still_maps_to_insufficient_storage` separately proves local ENOSPC still maps through `io_error` to nonretryable `InsufficientStorage`. Current-master exact-head qualification on `f7fc2cfd58e813d30c8ac9466bee2e4df7df5d4e`: CI run `36064354105` and Android smoke run `36064354191` passed.
 
 ### RMD-404 — Make deletion remove owned assets
 
@@ -398,6 +400,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 - [x] Discover thumbnail URL through source adapter.
 - [x] Download through bounded safe transfer path.
+
 - [x] Store as managed local asset.
 - [x] Persist asset metadata.
 - [x] Render from local file in Library/Setup/Details while offline.
@@ -798,6 +801,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Add Android/Gradle dependency vulnerability/license review tooling where practical.
 - [ ] Generate/reconcile OSS license notices for shipped dependencies.
 - [ ] Fail release qualification on unresolved prohibited/license-incompatible dependencies.
+
 
 ### RMD-1603 — CI evidence quality
 
