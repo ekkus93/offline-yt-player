@@ -101,13 +101,25 @@ internal object DownloadForegroundTimeoutStore {
 }
 
 class DownloadForegroundService : Service() {
+    private val connectivityCoordinator = DownloadConnectivityCoordinator()
+    private var connectivityObserver: DownloadConnectivityObserver? = null
+    private var activeQueueItemId: String? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        connectivityObserver = DownloadConnectivityObserver(
+            context = this,
+            preferenceProvider = ::currentNetworkPreference,
+            onConnectivityChanged = ::dispatchConnectivityChange,
+        ).also { it.start() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val queueItemId = intent?.getStringExtra(EXTRA_QUEUE_ITEM_ID)
+        if (!queueItemId.isNullOrBlank()) {
+            activeQueueItemId = queueItemId
+        }
         when (intent?.action) {
             ACTION_STOP -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -121,7 +133,7 @@ class DownloadForegroundService : Service() {
             ACTION_CONNECTIVITY_RETRY,
             ACTION_RECONCILE_AFTER_REBOOT,
             ACTION_SCHEDULE_WORK,
-            -> Unit
+            -> connectivityObserver?.emitCurrentConnectivity()
         }
         startForeground(DownloadServicePolicy.NotificationId, activeNotification(queueItemId))
         return START_STICKY
@@ -137,6 +149,12 @@ class DownloadForegroundService : Service() {
         stopSelf(startId)
     }
 
+    override fun onDestroy() {
+        connectivityObserver?.stop()
+        connectivityObserver = null
+        super.onDestroy()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun dispatchControlAction(intent: Intent): Boolean = try {
@@ -150,6 +168,24 @@ class DownloadForegroundService : Service() {
     } catch (_: RuntimeException) {
         false
     }
+
+    private fun dispatchConnectivityChange(
+        preference: DownloadNetworkPreference,
+        connectivity: DownloadConnectivity,
+    ): Boolean = try {
+        GeneratedUniffiDownloadControlGateway.open(downloadDatabasePath()).use { gateway ->
+            connectivityCoordinator.dispatch(
+                preference = preference,
+                connectivity = connectivity,
+                queueItemId = activeQueueItemId,
+                gateway = gateway,
+            )
+        }
+    } catch (_: RuntimeException) {
+        false
+    }
+
+    private fun currentNetworkPreference(): DownloadNetworkPreference = DownloadNetworkPreference.AnyNetwork
 
     private fun downloadDatabasePath(): String = File(filesDir, "library.sqlite3").absolutePath
 

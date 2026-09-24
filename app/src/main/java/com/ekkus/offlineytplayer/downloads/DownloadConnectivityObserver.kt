@@ -4,73 +4,120 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
+import android.os.Build
+import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 
-/** Maps Android network capabilities to the download policy's portable connectivity states. */
-internal object DownloadConnectivityMapper {
-    fun fromCapabilities(capabilities: NetworkCapabilities?): DownloadConnectivity =
-        fromCapabilityFlags(
-            hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
-            isUnmetered = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true,
-        )
-
-    fun fromCapabilityFlags(hasInternet: Boolean, isUnmetered: Boolean): DownloadConnectivity {
-        if (!hasInternet) return DownloadConnectivity.None
-        return if (isUnmetered) DownloadConnectivity.Unmetered else DownloadConnectivity.Metered
-    }
+internal enum class DownloadConnectivityCommand {
+    PauseActive,
+    ResumeConnectivityPaused,
+    Noop,
 }
 
 /**
- * Production observer for connectivity changes. The callback receives only the bounded policy
- * state; Android Network/NetworkCapabilities objects do not escape this integration layer.
+ * Bridges Android network callbacks into durable download-control transitions.
+ *
+ * The coordinator deliberately tracks only jobs that this process paused for connectivity so a
+ * restored network does not resume a user-paused item. Durable state remains owned by the core
+ * gateway; this object only decides which gateway operation to request when Android reports a
+ * connectivity change for the active foreground queue item.
  */
-internal class AndroidDownloadConnectivityObserver(
+internal class DownloadConnectivityCoordinator {
+    private val connectivityPausedJobIds = mutableSetOf<String>()
+
+    fun command(
+        preference: DownloadNetworkPreference,
+        connectivity: DownloadConnectivity,
+        queueItemId: String?,
+    ): DownloadConnectivityCommand {
+        val jobId = queueItemId?.trim()?.takeIf { it.isNotEmpty() } ?: return DownloadConnectivityCommand.Noop
+        return when (DownloadNetworkPolicy.decision(preference, connectivity)) {
+            DownloadNetworkDecision.PauseForConnectivity -> DownloadConnectivityCommand.PauseActive
+            DownloadNetworkDecision.Allow -> if (jobId in connectivityPausedJobIds) {
+                DownloadConnectivityCommand.ResumeConnectivityPaused
+            } else {
+                DownloadConnectivityCommand.Noop
+            }
+        }
+    }
+
+    fun dispatch(
+        preference: DownloadNetworkPreference,
+        connectivity: DownloadConnectivity,
+        queueItemId: String?,
+        gateway: AppDownloadControlGateway,
+    ): Boolean {
+        val jobId = queueItemId?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        return when (command(preference, connectivity, jobId)) {
+            DownloadConnectivityCommand.PauseActive -> {
+                val result = gateway.pause(jobId)
+                if (result.error == null && result.value == true) {
+                    connectivityPausedJobIds += jobId
+                    true
+                } else {
+                    false
+                }
+            }
+            DownloadConnectivityCommand.ResumeConnectivityPaused -> {
+                val result = gateway.resume(jobId)
+                if (result.error == null && result.value == true) {
+                    connectivityPausedJobIds -= jobId
+                    true
+                } else {
+                    false
+                }
+            }
+            DownloadConnectivityCommand.Noop -> false
+        }
+    }
+}
+
+internal class DownloadConnectivityObserver(
     context: Context,
-    private val onConnectivityChanged: (DownloadConnectivity) -> Unit,
-    private val connectivityManager: ConnectivityManager =
-        requireNotNull(context.getSystemService(ConnectivityManager::class.java)),
-) : AutoCloseable {
+    private val preferenceProvider: () -> DownloadNetworkPreference,
+    private val onConnectivityChanged: (DownloadNetworkPreference, DownloadConnectivity) -> Unit,
+) {
+    private val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
     private var started = false
-    private var lastConnectivity: DownloadConnectivity? = null
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = publishCurrent()
-
-        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            publish(DownloadConnectivityMapper.fromCapabilities(capabilities))
-        }
-
-        override fun onLost(network: Network) = publishCurrent()
-
-        override fun onUnavailable() = publish(DownloadConnectivity.None)
+        override fun onAvailable(network: Network) = emitCurrentConnectivity()
+        override fun onLost(network: Network) = emitCurrentConnectivity()
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) =
+            emit(networkCapabilities.toDownloadConnectivity(connectivityManager.isActiveNetworkMetered))
     }
 
     fun start() {
         if (started) return
         started = true
-        connectivityManager.registerNetworkCallback(
-            NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build(),
-            callback,
-        )
-        publishCurrent()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            connectivityManager.registerDefaultNetworkCallback(callback)
+        }
+        emitCurrentConnectivity()
     }
 
-    override fun close() {
+    fun stop() {
         if (!started) return
         started = false
-        connectivityManager.unregisterNetworkCallback(callback)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+        }
     }
 
-    private fun publishCurrent() {
+    fun emitCurrentConnectivity() {
         val network = connectivityManager.activeNetwork
-        publish(DownloadConnectivityMapper.fromCapabilities(network?.let(connectivityManager::getNetworkCapabilities)))
+        val capabilities = network?.let(connectivityManager::getNetworkCapabilities)
+        emit(capabilities.toDownloadConnectivity(connectivityManager.isActiveNetworkMetered))
     }
 
-    private fun publish(connectivity: DownloadConnectivity) {
-        if (lastConnectivity == connectivity) return
-        lastConnectivity = connectivity
-        onConnectivityChanged(connectivity)
+    private fun emit(connectivity: DownloadConnectivity) {
+        onConnectivityChanged(preferenceProvider(), connectivity)
     }
+}
+
+internal fun NetworkCapabilities?.toDownloadConnectivity(isMetered: Boolean): DownloadConnectivity = when {
+    this == null -> DownloadConnectivity.None
+    !hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) -> DownloadConnectivity.None
+    !hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) -> DownloadConnectivity.None
+    isMetered -> DownloadConnectivity.Metered
+    else -> DownloadConnectivity.Unmetered
 }
