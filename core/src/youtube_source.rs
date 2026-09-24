@@ -558,6 +558,59 @@ mod tests {
         );
     }
 
+    fn fixture(name: &str) -> Value {
+        let text = match name {
+            "combined" => include_str!("../tests/fixtures/youtube/combined_av.json"),
+            "split" => include_str!("../tests/fixtures/youtube/split_av.json"),
+            "unavailable" => include_str!("../tests/fixtures/youtube/unavailable.json"),
+            _ => panic!("unknown fixture"),
+        };
+        serde_json::from_str(text).expect("sanitized YouTube fixture must be valid JSON")
+    }
+
+    #[test]
+    fn sanitized_combined_av_fixture_extracts_metadata_and_format() {
+        let parsed = parse_player(&fixture("combined")).unwrap();
+        assert_eq!(parsed.title, "Sanitized Combined Fixture");
+        assert_eq!(parsed.duration_ms, Some(123_000));
+        assert_eq!(parsed.streams.len(), 1);
+        assert_eq!(parsed.streams[0].id, "22");
+        assert_eq!(parsed.streams[0].video_codec.as_deref(), Some("h264"));
+        assert_eq!(parsed.streams[0].audio_codec.as_deref(), Some("aac"));
+        assert_eq!(parsed.subtitles.len(), 1);
+        assert_eq!(parsed.subtitles[0].language, "en");
+    }
+
+    #[test]
+    fn sanitized_split_av_fixture_extracts_separate_video_and_audio() {
+        let parsed = parse_player(&fixture("split")).unwrap();
+        assert_eq!(parsed.title, "Sanitized Split Fixture");
+        assert_eq!(parsed.streams.len(), 2);
+        assert!(parsed.streams.iter().any(|s| s.id == "137" && s.video_codec.as_deref() == Some("h264") && s.audio_codec.is_none()));
+        assert!(parsed.streams.iter().any(|s| s.id == "140" && s.video_codec.is_none() && s.audio_codec.as_deref() == Some("aac")));
+    }
+
+    #[test]
+    fn sanitized_unavailable_fixture_fails_closed() {
+        let err = parse_player(&fixture("unavailable")).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+    }
+
+    #[test]
+    fn malformed_watch_fixture_is_rejected() {
+        let html = include_str!("../tests/fixtures/youtube/malformed_watch.html");
+        let err = extract_player_json(html).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+    }
+
+    #[test]
+    fn oversized_watch_response_is_rejected_before_parsing() {
+        let oversized = crate::MAX_PROVIDER_RESPONSE_BYTES + 1;
+        let err = ensure_provider_response_size("YouTube watch", Some(oversized as u64), 0)
+            .unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+    }
+
     #[test]
     #[ignore = "manual live YouTube qualification; requires OYP_LIVE_YOUTUBE_VIDEO_ID"]
     fn live_youtube_resolves_real_metadata_and_formats() {
