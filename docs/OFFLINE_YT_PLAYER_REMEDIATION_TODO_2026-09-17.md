@@ -301,10 +301,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-507 — Implement real progress/speed/ETA
 
-- [ ] Propagate transferred/total bytes.
-- [ ] Calculate speed from bounded recent samples.
-- [ ] Show ETA only when meaningful.
-- [ ] Never fabricate numeric progress for unknown-length responses.
+- [x] Propagate transferred/total bytes.
+- [x] Calculate speed from bounded recent samples.
+- [x] Show ETA only when meaningful.
+- [x] Never fabricate numeric progress for unknown-length responses.
+
+**Evidence (RMD-507):** `core/src/events.rs::TransferMetricEstimator` computes speed from a bounded recent sample window and emits ETA only when a meaningful total is known. `core/src/worker.rs::DownloadWorker` seeds the estimator from durable transferred/total byte state, updates it from real transfer results, emits bounded-cadence `CoreEvent::DownloadProgress` events, and preserves unknown-length transfers as unknown-total/unknown-ETA rather than fabricating percentage or ETA. Android presentation mapping preserves the invariant through `DownloadProgressPresentationMapper` and `DownloadRowPresentation`. Behavioral coverage includes `worker_emits_real_progress_bytes_speed_and_eta_for_known_length_transfer`, `worker_does_not_fabricate_eta_for_unknown_length_transfer`, `DownloadRowPolicyTest.unknownLengthProgressDoesNotFabricatePercentageOrEta`, and `DownloadRowPolicyTest.progressMapperKeepsOnlyRealPositiveMetrics`. Supporting implementation/evidence docs are `docs/RMD_507_PROGRESS_METRICS_IMPLEMENTATION_2026-09-24.md` and `docs/RMD_507_PROGRESS_METRICS_RECONCILIATION_2026-09-24.md`. Qualified/merged evidence: PR #354 exact implementation head `4b881b06d60540b2a8c7e15e3dfdb1cb63b54f63` passed push CI `35983598837`, push Android smoke `35983599037`, push Android FGS timeout `35983599025`, PR CI `35984323724`, PR Android smoke `35984323707`, and PR Android FGS timeout `35984323690`; PR #354 merged as `72b2af7a85576250655eb10fdd08de48923fec46`; post-merge master CI `35986175688`, Android smoke `35986175695`, and Android FGS timeout `35986175679` passed on that exact merge SHA. Evidence PR #355 exact head `58bd8c1fed59d7f6a6a0672b0e8055a6164691b0` passed PR CI `35986430735`, PR Android smoke `35986430765`, PR Android FGS timeout `35986430829`, push CI `35986393668`, push Android smoke `35986393598`, and push Android FGS timeout `35986393706`; PR #355 merged as `ebb66af299320c6d03d1de44a5efb5ba1352627e`, with post-merge master CI `35988142447`, Android smoke `35988142417`, and Android FGS timeout `35988142407` passing on that exact merge SHA.
 
 ### RMD-508 — Connectivity integration
 
