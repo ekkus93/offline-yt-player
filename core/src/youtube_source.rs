@@ -586,8 +586,12 @@ mod tests {
         let parsed = parse_player(&fixture("split")).unwrap();
         assert_eq!(parsed.title, "Sanitized Split Fixture");
         assert_eq!(parsed.streams.len(), 2);
-        assert!(parsed.streams.iter().any(|s| s.id == "137" && s.video_codec.as_deref() == Some("h264") && s.audio_codec.is_none()));
-        assert!(parsed.streams.iter().any(|s| s.id == "140" && s.video_codec.is_none() && s.audio_codec.as_deref() == Some("aac")));
+        assert!(parsed.streams.iter().any(|s| s.id == "137"
+            && s.video_codec.as_deref() == Some("h264")
+            && s.audio_codec.is_none()));
+        assert!(parsed.streams.iter().any(|s| s.id == "140"
+            && s.video_codec.is_none()
+            && s.audio_codec.as_deref() == Some("aac")));
     }
 
     #[test]
@@ -606,8 +610,8 @@ mod tests {
     #[test]
     fn oversized_watch_response_is_rejected_before_parsing() {
         let oversized = crate::MAX_PROVIDER_RESPONSE_BYTES + 1;
-        let err = ensure_provider_response_size("YouTube watch", Some(oversized as u64), 0)
-            .unwrap_err();
+        let err =
+            ensure_provider_response_size("YouTube watch", Some(oversized as u64), 0).unwrap_err();
         assert_eq!(err.kind, ErrorKind::SourceChanged);
     }
 
