@@ -66,14 +66,8 @@ jobs:
           # Compose goldens. The smoke set proves instrumentation health, packaged Rust/UniFFI
           # runtime loading, platform runtime paths, behavioral Compose coverage, and RMD-1403
           # exact-raster screenshot regression coverage.
-          script: |
-            set +e
-            ./gradlew --no-daemon connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest,com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest
-            status=$?
-            mkdir -p app/build/reports/androidGoldens
-            adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ || true
-            exit "$status"
+          script: >-
+            sh -c './gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest,com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest; status=$?; mkdir -p app/build/reports/androidGoldens; adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ || true; exit $status'
       - name: Upload instrumentation evidence
         if: always()
         uses: actions/upload-artifact@v4
