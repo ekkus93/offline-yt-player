@@ -674,13 +674,15 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1402 — Replace policy-only screen qualification with behavioral Compose tests
 
-- [ ] Library empty/populated behavior.
-- [ ] Add input/paste/analyze behavior.
-- [ ] Download Setup choices/actions.
-- [ ] Downloads state/actions.
-- [ ] Player controls.
-- [ ] Settings persistence/interaction.
-- [ ] Share navigation/back stack.
+- [x] Library empty/populated behavior.
+- [x] Add input/paste/analyze behavior.
+- [x] Download Setup choices/actions.
+- [x] Downloads state/actions.
+- [x] Player controls.
+- [x] Settings persistence/interaction.
+- [x] Share navigation/back stack.
+
+**Evidence (RMD-1402):** production Compose instrumentation coverage is in `app/src/androidTest/java/com/ekkus/offlineytplayer/ui/ProductionComposeBehaviorTest.kt`, with detailed reconciliation in `docs/RMD_1402_BEHAVIORAL_COMPOSE_RECONCILIATION_2026-09-25.md`. The behavior was delivered incrementally by PRs #371–#373 and is merged on master through exact SHA `c6a1b80d033285c2bb4ceb7209b589467ab454bf`. Post-merge exact-head master CI `36181189252`, Android smoke `36181189235`, and Android FGS-timeout `36181189239` all passed. The tests exercise Library empty/populated state, Add paste/analyze, Download Setup options/actions, Downloads actions, Player controls, Settings interactions, and Share navigation/back-stack behavior through production Compose surfaces and app-owned gateway boundaries.
 
 ### RMD-1403 — Deterministic screenshot/golden tests
 
