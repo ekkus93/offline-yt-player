@@ -44,12 +44,16 @@ impl FfiDownloadRuntimeService {
         library_root: String,
     ) -> Result<Arc<Self>, FfiDownloadRuntimeOpenError> {
         LibraryStore::open(&database_path)
-            .map(|library| Arc::new(Self {
-                library,
-                library_root: PathBuf::from(library_root),
-                cancel: AtomicBool::new(false),
-            }))
-            .map_err(|error| FfiDownloadRuntimeOpenError::Persistence { message: error.message })
+            .map(|library| {
+                Arc::new(Self {
+                    library,
+                    library_root: PathBuf::from(library_root),
+                    cancel: AtomicBool::new(false),
+                })
+            })
+            .map_err(|error| FfiDownloadRuntimeOpenError::Persistence {
+                message: error.message,
+            })
     }
 
     pub fn run_ready(&self, now_epoch_ms: u64, max_concurrent: u32) -> FfiDownloadWorkerResult {
@@ -178,16 +182,21 @@ mod tests {
         std::fs::create_dir_all(&library_root).unwrap();
         {
             let store = LibraryStore::open(&database).unwrap();
-            assert!(store.enqueue_download_work_item(&work(
-                "runtime-job",
-                format!("{address}/media.mp4"),
-                expected_bytes,
-            )).unwrap());
+            assert!(
+                store
+                    .enqueue_download_work_item(&work(
+                        "runtime-job",
+                        format!("{address}/media.mp4"),
+                        expected_bytes,
+                    ))
+                    .unwrap()
+            );
         }
         let service = FfiDownloadRuntimeService::open(
             database.to_string_lossy().into_owned(),
             library_root.to_string_lossy().into_owned(),
-        ).unwrap();
+        )
+        .unwrap();
         let result = service.run_ready(10_000, 1);
         assert!(result.error.is_none());
         assert_eq!(result.report.unwrap().completed, vec!["runtime-job"]);

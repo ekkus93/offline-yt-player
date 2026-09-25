@@ -1,9 +1,9 @@
 use crate::{
     CoreError, CoreEvent, DownloadEngine, DownloadPlan, DownloadPolicy, DownloadState,
-    DownloadStateMachine, DownloadWorkItem, DurableDownloadSnapshot, DurableStopReason, ErrorKind, LibraryItem,
-    LibraryStore, LocalAsset, PAUSE_POLL_INTERVAL, ProgressCoalescer, TransferMetricEstimator,
-    TransferRequest, bounded_download_concurrency, durable_stop_reason, propagate_durable_stop,
-    retry_delay,
+    DownloadStateMachine, DownloadWorkItem, DurableDownloadSnapshot, DurableStopReason, ErrorKind,
+    LibraryItem, LibraryStore, LocalAsset, PAUSE_POLL_INTERVAL, ProgressCoalescer,
+    TransferMetricEstimator, TransferRequest, bounded_download_concurrency, durable_stop_reason,
+    propagate_durable_stop, retry_delay,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;

@@ -1,4 +1,6 @@
-use crate::domain::{CoreError, DownloadWorkItem, ErrorKind, LibraryItem, LocalAsset, SourceIdentity};
+use crate::domain::{
+    CoreError, DownloadWorkItem, ErrorKind, LibraryItem, LocalAsset, SourceIdentity,
+};
 use crate::events::DurableDownloadSnapshot;
 use crate::state::DownloadState;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -306,10 +308,7 @@ impl LibraryStore {
         Ok(())
     }
 
-    pub fn enqueue_download_work_item(
-        &self,
-        item: &DownloadWorkItem,
-    ) -> Result<bool, CoreError> {
+    pub fn enqueue_download_work_item(&self, item: &DownloadWorkItem) -> Result<bool, CoreError> {
         if item.job_id.trim().is_empty() {
             return Err(CoreError::new(
                 ErrorKind::InvalidInput,
@@ -796,7 +795,10 @@ mod tests {
             let store = LibraryStore::open(&database).unwrap();
             assert!(store.enqueue_download_work_item(&work).unwrap());
             assert!(!store.enqueue_download_work_item(&work).unwrap());
-            assert_eq!(store.load_download_work_items().unwrap(), vec![work.clone()]);
+            assert_eq!(
+                store.load_download_work_items().unwrap(),
+                vec![work.clone()]
+            );
             let snapshots = store.load_download_snapshots().unwrap();
             assert_eq!(snapshots.len(), 1);
             assert_eq!(snapshots[0].job_id, work.job_id);
