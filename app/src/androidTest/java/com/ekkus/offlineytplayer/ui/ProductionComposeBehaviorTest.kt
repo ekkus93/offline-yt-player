@@ -1,9 +1,16 @@
 package com.ekkus.offlineytplayer.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
+import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
+import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
+import com.ekkus.offlineytplayer.coregateway.CoreSourceQualityChoice
 import com.ekkus.offlineytplayer.coregateway.FakeDownloadControlGateway
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -80,6 +87,59 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun paste_button_reads_clipboard_into_add_input() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(ClipData.newPlainText("video-url", "https://youtu.be/dQw4w9WgXcQ"))
+
+        compose.setContent { OfflineYTPlayerApp() }
+
+        compose.onNodeWithText("Add").performClick()
+        compose.onNodeWithText("Paste").performClick()
+
+        compose.onNodeWithText("https://youtu.be/dQw4w9WgXcQ").assertIsDisplayed()
+        compose.onNodeWithText("Pasted clipboard text. Choose Analyze to validate it.").assertIsDisplayed()
+    }
+
+    @Test
+    fun add_analyze_setup_and_download_use_gateway_boundaries() {
+        val source = FakeSourceAnalysisGateway()
+        val controls = FakeDownloadControlGateway()
+        compose.setContent {
+            OfflineYTPlayerApp(
+                initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ",
+                sourceAnalysisGateway = source,
+                downloadControlGateway = controls,
+            )
+        }
+
+        compose.onNodeWithText("Analyze").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                compose.onNodeWithText("Fixture source").assertIsDisplayed()
+            }.isSuccess
+        }
+
+        compose.runOnIdle {
+            assertEquals(listOf("https://youtu.be/dQw4w9WgXcQ"), source.analyzedUrls)
+        }
+        compose.onNodeWithText("Download setup").assertIsDisplayed()
+        compose.onNodeWithText("Fixture source").assertIsDisplayed()
+        compose.onNodeWithText("0:42 · 720p · 12.0 MB").assertIsDisplayed()
+        compose.onNodeWithText("Options").performClick()
+        compose.onNodeWithText("Quality choices").assertIsDisplayed()
+        compose.onNodeWithText("720p · Audio only").assertIsDisplayed()
+        compose.onNodeWithText("Subtitle tracks").assertIsDisplayed()
+        compose.onNodeWithText("Preferred language").assertIsDisplayed()
+        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithText("Download").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { controls.enqueuedJobIds.isNotEmpty() }
+        compose.runOnIdle {
+            assertEquals(listOf("https://youtu.be/dQw4w9WgXcQ"), controls.enqueuedJobIds)
+        }
+    }
+
+    @Test
     fun settings_hub_navigation_exposes_operational_pages() {
         compose.setContent { OfflineYTPlayerApp() }
 
@@ -90,4 +150,28 @@ class ProductionComposeBehaviorTest {
         compose.onNodeWithText("Playback").performClick()
         compose.onNodeWithText("Remember position").assertIsDisplayed()
     }
+}
+
+private class FakeSourceAnalysisGateway(
+    private val analysis: CoreSourceAnalysis = CoreSourceAnalysis(
+        sourceUrl = "https://youtu.be/dQw4w9WgXcQ",
+        title = "Fixture source",
+        durationMs = 42_000,
+        thumbnailUrl = "https://example.test/thumb.jpg",
+        qualityLabel = "720p",
+        estimatedBytes = 12L * 1024L * 1024L,
+        qualityOptions = listOf(
+            CoreSourceQualityChoice("720p", 12L * 1024L * 1024L),
+            CoreSourceQualityChoice("Audio only", 2L * 1024L * 1024L),
+        ),
+    ),
+) : AppSourceAnalysisGateway {
+    val analyzedUrls = mutableListOf<String>()
+
+    override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> {
+        analyzedUrls += sourceUrl
+        return CoreGatewayResult(value = analysis, error = null)
+    }
+
+    override fun close() = Unit
 }
