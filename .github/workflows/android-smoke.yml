@@ -70,7 +70,7 @@ jobs:
           # state behavior that remains relevant even on pre-runtime-permission API levels.
           script: >-
             ./gradlew --no-daemon connectedDebugAndroidTest
-            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest
       - name: Upload instrumentation evidence
         if: always()
         uses: actions/upload-artifact@v4
