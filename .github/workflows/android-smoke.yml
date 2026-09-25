@@ -69,13 +69,16 @@ jobs:
           script: >-
             sh -c 'status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest || status=$?;
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest || status=$?;
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest || status=$?;
+            golden_status=0;
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest || golden_status=$?;
             mkdir -p app/build/reports/androidGoldens;
             adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ || true;
             echo "Golden raster SHA-256 manifest:";
             cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true;
-            if [ "$status" -ne 0 ]; then find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; fi;
+            if [ "$golden_status" -ne 0 ]; then echo "Golden test XML:"; find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; status=$golden_status; fi;
+            layout_status=0;
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest || layout_status=$?;
+            if [ "$layout_status" -ne 0 ]; then echo "Layout/accessibility test XML:"; find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; status=$layout_status; fi;
             exit $status'
       - name: Upload instrumentation evidence
         if: always()

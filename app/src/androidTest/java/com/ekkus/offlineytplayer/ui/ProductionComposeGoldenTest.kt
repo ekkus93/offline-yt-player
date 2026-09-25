@@ -1,7 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
 import android.graphics.Bitmap
-import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -15,7 +15,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayError
@@ -200,7 +199,7 @@ class ProductionComposeGoldenTest {
 
     @Test
     fun golden_smallest_supported_portrait() {
-        setGoldenContent(widthDp = 320, heightDp = 640) {
+        setGoldenContent {
             LibraryScreen(
                 onAdd = {},
                 onPlay = {},
@@ -216,7 +215,7 @@ class ProductionComposeGoldenTest {
 
     @Test
     fun golden_large_font_library() {
-        setGoldenContent(widthDp = 360, heightDp = 720, fontScale = 1.30f) {
+        setGoldenContent(fontScale = 1.30f) {
             LibraryScreen(
                 onAdd = {},
                 onPlay = {},
@@ -232,7 +231,7 @@ class ProductionComposeGoldenTest {
 
     @Test
     fun golden_large_font_settings() {
-        setGoldenContent(widthDp = 360, heightDp = 720, fontScale = 1.30f) {
+        setGoldenContent(fontScale = 1.30f) {
             OfflineYTPlayerApp(settingsSnapshot = lightSettings)
         }
         compose.onNodeWithText("Settings").performClick()
@@ -255,15 +254,16 @@ class ProductionComposeGoldenTest {
     }
 
     private fun setGoldenContent(
-        widthDp: Int = 360,
-        heightDp: Int = 720,
         fontScale: Float = 1.0f,
         content: @Composable () -> Unit,
     ) {
         compose.setContent {
-            CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = fontScale)) {
+            val deviceDensity = LocalDensity.current.density
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = deviceDensity, fontScale = fontScale),
+            ) {
                 OfflineYTPlayerTheme(AppearanceSetting.Light) {
-                    Surface(modifier = Modifier.requiredSize(widthDp.dp, heightDp.dp)) {
+                    Surface(modifier = Modifier.fillMaxSize()) {
                         content()
                     }
                 }

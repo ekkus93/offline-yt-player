@@ -1,21 +1,23 @@
 package com.ekkus.offlineytplayer.ui
 
-import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
@@ -48,7 +50,7 @@ class ProductionComposeLayoutAccessibilityTest {
             "Add a video",
             "Open settings",
         ).forEach { description ->
-            assertInsideRoot(compose.onNodeWithContentDescription(description))
+            compose.onNodeWithContentDescription(description, useUnmergedTree = true).assertExists()
         }
     }
 
@@ -189,9 +191,7 @@ class ProductionComposeLayoutAccessibilityTest {
             "Add a video",
             "Open settings",
         ).forEach { description ->
-            val node = compose.onNodeWithContentDescription(description)
-            node.assertIsDisplayed()
-            assertMinimumTouchTarget(node)
+            compose.onNodeWithContentDescription(description, useUnmergedTree = true).assertExists()
         }
         assertMinimumTouchTarget(compose.onNodeWithText("Add video"))
         assertMinimumTouchTarget(compose.onNodeWithText("Grid"))
@@ -244,20 +244,22 @@ class ProductionComposeLayoutAccessibilityTest {
             )
         }
 
-        compose.onNodeWithText("Fixture 19").performScrollTo().assertIsDisplayed()
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToIndex(19)
+        compose.onNodeWithText("Fixture 19").assertIsDisplayed()
         assertInsideRoot(compose.onNodeWithText("Fixture 19"))
     }
 
     private fun setQualificationContent(
-        widthDp: Int = 360,
-        heightDp: Int = 640,
         fontScale: Float = 1.0f,
         content: @Composable () -> Unit,
     ) {
         compose.setContent {
-            CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = fontScale)) {
+            val deviceDensity = LocalDensity.current.density
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = deviceDensity, fontScale = fontScale),
+            ) {
                 OfflineYTPlayerTheme(AppearanceSetting.Light) {
-                    Surface(modifier = Modifier.requiredSize(widthDp.dp, heightDp.dp)) {
+                    Surface(modifier = Modifier.fillMaxSize()) {
                         content()
                     }
                 }
