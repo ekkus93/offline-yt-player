@@ -27,7 +27,7 @@ fn combined_fixture_contains_metadata_and_direct_play_stream() {
     );
     assert_eq!(
         v.pointer("/videoDetails/title").and_then(Value::as_str),
-        Some("Fixture Combined")
+        Some("Sanitized Combined Fixture")
     );
     let formats = v
         .pointer("/streamingData/formats")

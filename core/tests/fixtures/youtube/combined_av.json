@@ -1,1 +1,19 @@
-{"playabilityStatus":{"status":"OK"},"videoDetails":{"title":"Fixture Combined","lengthSeconds":"61","thumbnail":{"thumbnails":[{"url":"https://img.example/combined.jpg"}]}},"streamingData":{"formats":[{"itag":22,"url":"https://media.example/combined.mp4","mimeType":"video/mp4; codecs=\"avc1.64001F, mp4a.40.2\"","bitrate":1200000,"contentLength":"42000000","width":1280,"height":720,"fps":30,"audioChannels":2}]}}
+{
+  "playabilityStatus": {"status": "OK"},
+  "videoDetails": {
+    "title": "Sanitized Combined Fixture",
+    "lengthSeconds": "123",
+    "thumbnail": {"thumbnails": [{"url": "https://i.ytimg.com/vi/sanitized/default.jpg"}]}
+  },
+  "streamingData": {"formats": [{
+    "itag": 22,
+    "url": "https://media.example/combined.mp4",
+    "mimeType": "video/mp4; codecs=\"avc1.64001F, mp4a.40.2\"",
+    "width": 1280, "height": 720, "fps": 30, "bitrate": 1500000,
+    "audioChannels": 2, "contentLength": "123456"
+  }]},
+  "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [{
+    "baseUrl": "https://www.youtube.com/api/timedtext?v=sanitized&lang=en",
+    "languageCode": "en", "name": {"simpleText": "English"}, "vssId": ".en"
+  }]}}
+}
