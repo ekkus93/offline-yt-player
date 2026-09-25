@@ -7,11 +7,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasScrollAction
-import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -244,7 +242,7 @@ class ProductionComposeLayoutAccessibilityTest {
             )
         }
 
-        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToIndex(19)
+        compose.onAllNodes(hasScrollAction())[0].performScrollToIndex(19)
         compose.onNodeWithText("Fixture 19").assertIsDisplayed()
         assertInsideRoot(compose.onNodeWithText("Fixture 19"))
     }
