@@ -1,6 +1,6 @@
 use crate::{
     CoreError, CoreEvent, DownloadEngine, DownloadPlan, DownloadPolicy, DownloadState,
-    DownloadStateMachine, DurableDownloadSnapshot, DurableStopReason, ErrorKind, LibraryItem,
+    DownloadStateMachine, DownloadWorkItem, DurableDownloadSnapshot, DurableStopReason, ErrorKind, LibraryItem,
     LibraryStore, LocalAsset, PAUSE_POLL_INTERVAL, ProgressCoalescer, TransferMetricEstimator,
     TransferRequest, bounded_download_concurrency, durable_stop_reason, propagate_durable_stop,
     retry_delay,
@@ -8,13 +8,6 @@ use crate::{
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-
-#[derive(Debug, Clone)]
-pub struct DownloadWorkItem {
-    pub job_id: String,
-    pub plan: DownloadPlan,
-    pub created_at_epoch_ms: u64,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DownloadWorkerReport {

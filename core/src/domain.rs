@@ -161,6 +161,13 @@ pub struct DownloadPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DownloadWorkItem {
+    pub job_id: String,
+    pub plan: DownloadPlan,
+    pub created_at_epoch_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorKind {
     InvalidInput,
     UnsupportedSource,
