@@ -73,6 +73,9 @@ jobs:
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest || status=$?;
             mkdir -p app/build/reports/androidGoldens;
             adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ || true;
+            echo "Golden raster SHA-256 manifest:";
+            cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true;
+            if [ "$status" -ne 0 ]; then find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; fi;
             exit $status'
       - name: Upload instrumentation evidence
         if: always()

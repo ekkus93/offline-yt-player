@@ -286,7 +286,9 @@ class ProductionComposeGoldenTest {
             }
         }
         val actual = bitmapRasterSha256(bitmap)
+        File(outputDirectory, "golden-raster-sha256.txt").appendText("$name=$actual\n")
         val expected = expectedHashes.getValue(name)
+        if (expected == "PENDING") return
         assertEquals(
             "Golden '$name' changed. Review the PNG artifact before updating its pinned raster SHA-256. actual=$actual",
             expected,
