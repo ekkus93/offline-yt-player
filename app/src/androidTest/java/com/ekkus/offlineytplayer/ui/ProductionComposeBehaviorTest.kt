@@ -2,16 +2,26 @@ package com.ekkus.offlineytplayer.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.media3.common.MimeTypes
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
 import com.ekkus.offlineytplayer.coregateway.CoreSourceQualityChoice
 import com.ekkus.offlineytplayer.coregateway.FakeDownloadControlGateway
+import com.ekkus.offlineytplayer.playback.LocalAudioTrack
+import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
+import com.ekkus.offlineytplayer.playback.LocalSubtitleTrack
+import com.ekkus.offlineytplayer.settings.AppSettingsMutation
+import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -140,6 +150,98 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun player_entry_exposes_transport_and_track_controls() {
+        compose.setContent {
+            OfflineYTPlayerApp(
+                libraryState = LibraryScreenState.Ready(
+                    listOf(
+                        LibraryRowModel(
+                            id = "item-playback",
+                            title = "Fixture playable",
+                            detail = "720p · 0:42",
+                            videoPath = "/data/local/tmp/fixture-video.mp4",
+                            audioPath = "/data/local/tmp/fixture-audio.m4a",
+                            resumePositionMs = 12_000,
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        compose.onNodeWithText("Fixture playable").assertIsDisplayed()
+        compose.onNodeWithText("Play").performClick()
+        compose.onNodeWithText("Fixture playable").assertIsDisplayed()
+        compose.onNodeWithText("-10s").assertIsDisplayed()
+        compose.onNodeWithText("Play/Pause").assertIsDisplayed()
+        compose.onNodeWithText("+10s").assertIsDisplayed()
+        compose.onNodeWithText("Speed 1.0×").assertIsDisplayed()
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        compose.onNodeWithText("Audio").assertIsDisplayed()
+        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithText("Fixture playable").assertIsDisplayed()
+    }
+
+    @Test
+    fun player_screen_exposes_subtitle_and_audio_track_labels() {
+        compose.setContent {
+            PortraitPlayerScreen(
+                asset = LocalPlaybackAsset(
+                    videoPath = "/data/local/tmp/fixture-video.mp4",
+                    audioPath = "/data/local/tmp/fixture-audio.m4a",
+                    title = "Fixture track controls",
+                    subtitleTracks = listOf(
+                        LocalSubtitleTrack(
+                            path = "/data/local/tmp/subtitles.vtt",
+                            language = "en",
+                            label = "English",
+                            mimeType = MimeTypes.TEXT_VTT,
+                        ),
+                    ),
+                    audioTracks = listOf(
+                        LocalAudioTrack("/data/local/tmp/fixture-audio-en.m4a", language = "en", label = "Main"),
+                        LocalAudioTrack("/data/local/tmp/fixture-audio-es.m4a", language = "es", label = "Spanish"),
+                    ),
+                ),
+                settings = AppSettingsSnapshot(),
+                onUpdateSettings = {},
+                onBack = {},
+            )
+        }
+
+        compose.onNodeWithText("Fixture track controls").assertIsDisplayed()
+        compose.onNodeWithText("Subtitles: English").assertIsDisplayed()
+        compose.onNodeWithText("Audio: Main").assertIsDisplayed()
+    }
+
+    @Test
+    fun settings_interactions_update_runtime_snapshot() {
+        compose.setContent {
+            var settings by remember { mutableStateOf(AppSettingsSnapshot()) }
+            OfflineYTPlayerApp(
+                settingsSnapshot = settings,
+                onUpdateSettings = { mutation -> settings = settings.updated(mutation) },
+            )
+        }
+
+        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithText("Downloads").performClick()
+        compose.onNodeWithText("Default quality: Best compatible").performClick()
+        compose.onNodeWithText("Default quality: Audio only").assertIsDisplayed()
+        compose.onNodeWithText("Concurrent downloads: 2").performClick()
+        compose.onNodeWithText("Concurrent downloads: 3").assertIsDisplayed()
+        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithText("Playback").performClick()
+        compose.onNodeWithText("Default speed: 1.0×").performClick()
+        compose.onNodeWithText("Default speed: 1.25×").assertIsDisplayed()
+        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithText("Appearance").performClick()
+        compose.onNodeWithText("Theme: System").performClick()
+        compose.onNodeWithText("Theme: Light").assertIsDisplayed()
+        compose.onNodeWithText("Library layout: List").performClick()
+        compose.onNodeWithText("Library layout: Grid").assertIsDisplayed()
+    }
+
+    @Test
     fun settings_hub_navigation_exposes_operational_pages() {
         compose.setContent { OfflineYTPlayerApp() }
 
@@ -151,6 +253,9 @@ class ProductionComposeBehaviorTest {
         compose.onNodeWithText("Remember position").assertIsDisplayed()
     }
 }
+
+private fun AppSettingsSnapshot.updated(mutator: AppSettingsMutation.() -> Unit): AppSettingsSnapshot =
+    AppSettingsMutation(this).apply(mutator).build()
 
 private class FakeSourceAnalysisGateway(
     private val analysis: CoreSourceAnalysis = CoreSourceAnalysis(
