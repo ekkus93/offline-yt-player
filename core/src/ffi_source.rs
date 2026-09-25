@@ -1,6 +1,6 @@
 use crate::{
-    CoreError, DirectFixtureSource, ErrorKind, FfiCancellationToken, FfiError, FfiMediaSummary,
-    FfiQualityChoice, FixtureMedia, MediaSource, YouTubeSource,
+    CoreError, DirectFixtureSource, DownloadWorkItem, ErrorKind, FfiCancellationToken, FfiError,
+    FfiMediaSummary, FfiQualityChoice, FixtureMedia, LibraryStore, MediaSource, YouTubeSource,
 };
 use futures::executor::block_on;
 use std::sync::Arc;
@@ -25,6 +25,12 @@ pub struct FfiResolveResult {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FfiChoiceListResult {
     pub choices: Vec<FfiQualityChoice>,
+    pub error: Option<FfiError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiPrepareDownloadResult {
+    pub queued: bool,
     pub error: Option<FfiError>,
 }
 
@@ -92,6 +98,26 @@ impl FfiSourceService {
                 error: Some(FfiError::from(&error)),
             },
         }
+    }
+
+    pub fn prepare_download(
+        &self,
+        database_path: String,
+        job_id: String,
+        url: String,
+        choice_id: String,
+        created_at_epoch_ms: i64,
+        cancel: Arc<FfiCancellationToken>,
+    ) -> FfiPrepareDownloadResult {
+        prepare_download(
+            &self.source,
+            &database_path,
+            &job_id,
+            &url,
+            &choice_id,
+            created_at_epoch_ms,
+            &cancel,
+        )
     }
 }
 
@@ -166,6 +192,69 @@ impl FfiYouTubeSourceService {
             },
         }
     }
+
+    pub fn prepare_download(
+        &self,
+        database_path: String,
+        job_id: String,
+        url: String,
+        choice_id: String,
+        created_at_epoch_ms: i64,
+        cancel: Arc<FfiCancellationToken>,
+    ) -> FfiPrepareDownloadResult {
+        prepare_download(
+            &self.source,
+            &database_path,
+            &job_id,
+            &url,
+            &choice_id,
+            created_at_epoch_ms,
+            &cancel,
+        )
+    }
+}
+
+fn prepare_download<S: MediaSource>(
+    source: &S,
+    database_path: &str,
+    job_id: &str,
+    url: &str,
+    choice_id: &str,
+    created_at_epoch_ms: i64,
+    cancel: &FfiCancellationToken,
+) -> FfiPrepareDownloadResult {
+    let result = (|| -> Result<bool, CoreError> {
+        if job_id.trim().is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "download job id must not be empty",
+                false,
+            ));
+        }
+        let created_at_epoch_ms = u64::try_from(created_at_epoch_ms).map_err(|_| {
+            CoreError::new(
+                ErrorKind::InvalidInput,
+                "download creation time must not be negative",
+                false,
+            )
+        })?;
+        let media = resolve_source(source, url, cancel)?;
+        cancel.check()?;
+        let plan = block_on(source.download_plan(&media, choice_id))?;
+        cancel.check()?;
+        LibraryStore::open(database_path)?.enqueue_download_work_item(&DownloadWorkItem {
+            job_id: job_id.to_owned(),
+            plan,
+            created_at_epoch_ms,
+        })
+    })();
+    match result {
+        Ok(queued) => FfiPrepareDownloadResult { queued, error: None },
+        Err(error) => FfiPrepareDownloadResult {
+            queued: false,
+            error: Some(FfiError::from(&error)),
+        },
+    }
 }
 
 fn resolve_source<S: MediaSource>(
@@ -224,6 +313,32 @@ mod tests {
         assert!(listed.error.is_none());
         assert_eq!(listed.choices.len(), 1);
         assert_eq!(listed.choices[0].label, "720p");
+    }
+
+    #[test]
+    fn fixture_prepare_download_persists_executable_plan_and_queue_state() {
+        let service = service();
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let result = service.prepare_download(
+            database.to_string_lossy().into_owned(),
+            "fixture-job".into(),
+            "https://fixture.invalid/watch/one".into(),
+            "fixture-720p".into(),
+            123,
+            FfiCancellationToken::new(),
+        );
+        assert!(result.error.is_none());
+        assert!(result.queued);
+        let store = LibraryStore::open(&database).unwrap();
+        let work = store.load_download_work_items().unwrap();
+        assert_eq!(work.len(), 1);
+        assert_eq!(work[0].job_id, "fixture-job");
+        assert_eq!(work[0].plan.quality.choice_id, "fixture-720p");
+        assert_eq!(
+            store.load_download_snapshots().unwrap()[0].state,
+            crate::DownloadState::Queued
+        );
     }
 
     #[test]
