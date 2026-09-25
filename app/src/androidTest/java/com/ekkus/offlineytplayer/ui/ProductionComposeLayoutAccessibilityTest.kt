@@ -153,7 +153,7 @@ class ProductionComposeLayoutAccessibilityTest {
     }
 
     @Test
-    fun large_text_keeps_representative_primary_actions_visible() {
+    fun large_text_keeps_library_primary_actions_visible() {
         setQualificationContent(fontScale = 1.30f) {
             LibraryScreen(
                 onAdd = {},
@@ -164,7 +164,10 @@ class ProductionComposeLayoutAccessibilityTest {
         }
         assertInsideRoot(compose.onNodeWithText("Grid"))
         assertInsideRoot(compose.onNodeWithText("Add video"))
+    }
 
+    @Test
+    fun large_text_keeps_settings_primary_actions_visible() {
         setQualificationContent(fontScale = 1.30f) {
             OfflineYTPlayerApp(settingsSnapshot = lightSettings)
         }

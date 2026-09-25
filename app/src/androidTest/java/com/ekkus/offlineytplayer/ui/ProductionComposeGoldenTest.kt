@@ -28,6 +28,7 @@ import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.settings.AppearanceSetting
 import java.io.File
 import java.io.FileOutputStream
+import java.io.FileInputStream
 import java.security.MessageDigest
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -287,13 +288,25 @@ class ProductionComposeGoldenTest {
         }
         val actual = bitmapRasterSha256(bitmap)
         File(outputDirectory, "golden-raster-sha256.txt").appendText("$name=$actual\n")
+        persistGoldenEvidence(output, name, actual)
         val expected = expectedHashes.getValue(name)
-        if (expected == "PENDING") return
+        if (expected == "PENDING") {
+            throw AssertionError("Golden '$name' baseline is not pinned; actual=$actual")
+        }
         assertEquals(
             "Golden '$name' changed. Review the PNG artifact before updating its pinned raster SHA-256. actual=$actual",
             expected,
             actual,
         )
+    }
+
+    private fun persistGoldenEvidence(output: File, name: String, actual: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val evidenceDir = "/sdcard/Download/offline-yt-player-goldens"
+        val command = "mkdir -p $evidenceDir && cp '${output.absolutePath}' '$evidenceDir/$name.png' && printf '%s\\n' '$name=$actual' >> '$evidenceDir/golden-raster-sha256.txt'"
+        instrumentation.uiAutomation.executeShellCommand(command).use { descriptor ->
+            FileInputStream(descriptor.fileDescriptor).use { input -> input.readBytes() }
+        }
     }
 
     private fun bitmapRasterSha256(bitmap: Bitmap): String {

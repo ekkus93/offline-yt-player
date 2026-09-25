@@ -72,7 +72,7 @@ jobs:
             golden_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest || golden_status=$?;
             mkdir -p app/build/reports/androidGoldens;
-            adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ || true;
+            adb pull /sdcard/Download/offline-yt-player-goldens/. app/build/reports/androidGoldens/ || true;
             echo "Golden raster SHA-256 manifest:";
             cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true;
             if [ "$golden_status" -ne 0 ]; then echo "Golden test XML:"; find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; status=$golden_status; fi;
