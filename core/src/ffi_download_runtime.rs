@@ -1,6 +1,5 @@
 use crate::{
-    CoreError, DownloadPolicy, DownloadWorkItem, DownloadWorker, DownloadWorkerReport, FfiError,
-    LibraryStore,
+    CoreError, DownloadPolicy, DownloadWorker, DownloadWorkerReport, FfiError, LibraryStore,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -133,7 +132,8 @@ impl From<&DownloadWorkerReport> for FfiDownloadWorkerReport {
 mod tests {
     use super::*;
     use crate::{
-        Compatibility, DownloadPlan, DownloadPlanAsset, MediaKind, QualityChoice, SourceIdentity,
+        Compatibility, DownloadPlan, DownloadPlanAsset, DownloadWorkItem, MediaKind, QualityChoice,
+        SourceIdentity,
     };
     use std::thread;
     use tiny_http::{Response as TinyResponse, Server};
