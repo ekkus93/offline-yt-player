@@ -1,11 +1,11 @@
-use crate::domain::{CoreError, ErrorKind, LibraryItem, LocalAsset, SourceIdentity};
+use crate::domain::{CoreError, DownloadWorkItem, ErrorKind, LibraryItem, LocalAsset, SourceIdentity};
 use crate::events::DurableDownloadSnapshot;
 use crate::state::DownloadState;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use std::path::{Component, Path};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Clone)]
 pub struct LibraryStore {
@@ -111,6 +111,19 @@ impl LibraryStore {
                        error_json TEXT
                      );
                      UPDATE schema_meta SET version=1 WHERE id=1;
+                     COMMIT;",
+                )
+                .map_err(db_error)?;
+        }
+        if version < 2 {
+            connection
+                .execute_batch(
+                    "BEGIN IMMEDIATE;
+                     CREATE TABLE download_work_items (
+                       job_id TEXT PRIMARY KEY,
+                       work_json TEXT NOT NULL
+                     );
+                     UPDATE schema_meta SET version=2 WHERE id=1;
                      COMMIT;",
                 )
                 .map_err(db_error)?;
@@ -291,6 +304,105 @@ impl LibraryStore {
             }
         }
         Ok(())
+    }
+
+    pub fn enqueue_download_work_item(
+        &self,
+        item: &DownloadWorkItem,
+    ) -> Result<bool, CoreError> {
+        if item.job_id.trim().is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "download job id must not be empty",
+                false,
+            ));
+        }
+        for asset in &item.plan.assets {
+            validate_relative_asset_path(&asset.relative_path)?;
+        }
+        let work_json = serde_json::to_string(item).map_err(json_error)?;
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction().map_err(db_error)?;
+        let exists: i64 = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM download_jobs WHERE job_id=?1)",
+                [item.job_id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(db_error)?;
+        if exists != 0 {
+            return Ok(false);
+        }
+        transaction
+            .execute(
+                "INSERT INTO download_jobs(job_id, state_json, bytes_downloaded, total_bytes,
+                     attempt, retry_at_epoch_ms, error_json)
+                 VALUES(?1, ?2, 0, NULL, 0, NULL, NULL)",
+                params![
+                    item.job_id,
+                    serde_json::to_string(&DownloadState::Queued).map_err(json_error)?
+                ],
+            )
+            .map_err(db_error)?;
+        transaction
+            .execute(
+                "INSERT INTO download_work_items(job_id, work_json) VALUES(?1, ?2)",
+                params![item.job_id, work_json],
+            )
+            .map_err(db_error)?;
+        transaction.commit().map_err(db_error)?;
+        Ok(true)
+    }
+
+    pub fn save_download_work_item(&self, item: &DownloadWorkItem) -> Result<(), CoreError> {
+        if item.job_id.trim().is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "download job id must not be empty",
+                false,
+            ));
+        }
+        for asset in &item.plan.assets {
+            validate_relative_asset_path(&asset.relative_path)?;
+        }
+        let work_json = serde_json::to_string(item).map_err(json_error)?;
+        self.connection()?
+            .execute(
+                "INSERT INTO download_work_items(job_id, work_json)
+                 VALUES(?1, ?2)
+                 ON CONFLICT(job_id) DO UPDATE SET work_json=excluded.work_json",
+                params![item.job_id, work_json],
+            )
+            .map_err(db_error)?;
+        Ok(())
+    }
+
+    pub fn load_download_work_items(&self) -> Result<Vec<DownloadWorkItem>, CoreError> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare("SELECT work_json FROM download_work_items ORDER BY job_id")
+            .map_err(db_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                let work_json: String = row.get(0)?;
+                serde_json::from_str::<DownloadWorkItem>(&work_json).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })
+            })
+            .map_err(db_error)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
+    }
+
+    pub fn remove_download_work_item(&self, job_id: &str) -> Result<bool, CoreError> {
+        let changed = self
+            .connection()?
+            .execute("DELETE FROM download_work_items WHERE job_id=?1", [job_id])
+            .map_err(db_error)?;
+        Ok(changed == 1)
     }
 
     pub fn save_download_snapshot(
@@ -645,6 +757,70 @@ mod tests {
         };
         store.save_download_snapshot(&snapshot).unwrap();
         assert_eq!(store.load_download_snapshots().unwrap(), vec![snapshot]);
+    }
+
+    fn planned_work(job_id: &str) -> DownloadWorkItem {
+        DownloadWorkItem {
+            job_id: job_id.into(),
+            created_at_epoch_ms: 123,
+            plan: crate::DownloadPlan {
+                source: SourceIdentity::new("fixture", job_id),
+                title: "Planned fixture".into(),
+                quality: crate::QualityChoice {
+                    choice_id: "fixture-720p".into(),
+                    label: "720p".into(),
+                    estimated_bytes: Some(4),
+                    video_height: Some(720),
+                    audio_only: false,
+                    compatibility: crate::Compatibility::Preferred,
+                },
+                assets: vec![crate::DownloadPlanAsset {
+                    asset_id: "combined".into(),
+                    kind: MediaKind::Video,
+                    url: "https://fixture.invalid/media.mp4".into(),
+                    relative_path: format!("items/{job_id}/video.mp4"),
+                    expected_bytes: Some(4),
+                    expected_sha256: None,
+                    mime_type: Some("video/mp4".into()),
+                }],
+            },
+        }
+    }
+
+    #[test]
+    fn durable_download_work_item_round_trips_across_reopen_and_queues_atomically() {
+        let temp = tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let work = planned_work("planned-job");
+        {
+            let store = LibraryStore::open(&database).unwrap();
+            assert!(store.enqueue_download_work_item(&work).unwrap());
+            assert!(!store.enqueue_download_work_item(&work).unwrap());
+            assert_eq!(store.load_download_work_items().unwrap(), vec![work.clone()]);
+            let snapshots = store.load_download_snapshots().unwrap();
+            assert_eq!(snapshots.len(), 1);
+            assert_eq!(snapshots[0].job_id, work.job_id);
+            assert_eq!(snapshots[0].state, DownloadState::Queued);
+        }
+
+        let reopened = LibraryStore::open(&database).unwrap();
+        assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(reopened.load_download_work_items().unwrap(), vec![work]);
+        assert!(reopened.remove_download_work_item("planned-job").unwrap());
+        assert!(reopened.load_download_work_items().unwrap().is_empty());
+    }
+
+    #[test]
+    fn durable_work_rejects_unsafe_asset_path_before_queue_mutation() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut work = planned_work("unsafe");
+        work.plan.assets[0].relative_path = "../escape.mp4".into();
+        assert_eq!(
+            store.enqueue_download_work_item(&work).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+        assert!(store.load_download_snapshots().unwrap().is_empty());
+        assert!(store.load_download_work_items().unwrap().is_empty());
     }
 
     #[test]
