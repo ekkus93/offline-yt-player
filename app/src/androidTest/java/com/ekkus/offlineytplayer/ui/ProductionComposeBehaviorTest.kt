@@ -3,9 +3,7 @@ package com.ekkus.offlineytplayer.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.fetchSemanticsNodes
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
@@ -117,7 +115,9 @@ class ProductionComposeBehaviorTest {
 
         compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithText("Fixture source").fetchSemanticsNodes().isNotEmpty()
+            runCatching {
+                compose.onNodeWithText("Fixture source").assertIsDisplayed()
+            }.isSuccess
         }
 
         compose.runOnIdle {
