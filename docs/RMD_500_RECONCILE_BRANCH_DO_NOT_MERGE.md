@@ -1,0 +1,7 @@
+# RMD-500 reconcile branch status
+
+This branch is intentionally not mergeable.
+
+It originally contained a broad stale canonical-TODO rewrite that touched unrelated sections. The branch now exists only to prevent that stale rewrite from being mistaken for valid reconciliation work.
+
+Continue RMD-500 work from current `master` on a fresh, narrow branch. Do not merge this branch.
