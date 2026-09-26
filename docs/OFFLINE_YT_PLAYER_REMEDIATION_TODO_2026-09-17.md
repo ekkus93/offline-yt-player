@@ -249,6 +249,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-408 — Reconcile concurrency/resource-policy duplication
 
+
 - [x] Identify conflicting core/Android concurrency constants.
 - [x] Establish one maximum enforced by core and one user preference bounded by it.
 - [x] Ensure Android cannot request a value above the core bound.
@@ -498,6 +499,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Open canonical playback session for selected completed item.
 - [ ] Reject/disable play for incomplete/corrupt items with explanation.
 
+
 ### RMD-1003 — Library Details action
 
 - [ ] Add real details screen/sheet.
@@ -686,32 +688,34 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1403 — Deterministic screenshot/golden tests
 
-- [ ] Add actual image/golden infrastructure.
-- [ ] Capture Library empty/populated.
-- [ ] Capture Add invalid/resolved.
-- [ ] Capture Download Setup.
-- [ ] Capture Downloads active/failure.
-- [ ] Capture Player.
-- [ ] Capture Settings hub.
-- [ ] Capture at least one smallest-supported portrait case.
-- [ ] Capture representative large-font cases.
-- [ ] Fail tests on unintended golden changes.
+- [x] Add actual image/golden infrastructure.
+- [x] Capture Library empty/populated.
+- [x] Capture Add invalid/resolved.
+- [x] Capture Download Setup.
+- [x] Capture Downloads active/failure.
+- [x] Capture Player.
+- [x] Capture Settings hub.
+- [x] Capture at least one smallest-supported portrait case.
+- [x] Capture representative large-font cases.
+- [x] Fail tests on unintended golden changes.
 
 ### RMD-1404 — No-hidden-controls behavioral gate
 
-- [ ] Render each primary screen at compact supported dimensions.
-- [ ] Assert primary actions are visible/reachable without horizontal scrolling.
-- [ ] Allow bounded vertical content scrolling only where designed.
-- [ ] Remove/replace existing all-boolean policy as the sole acceptance proof.
+- [x] Render each primary screen at compact supported dimensions.
+- [x] Assert primary actions are visible/reachable without horizontal scrolling.
+- [x] Allow bounded vertical content scrolling only where designed.
+- [x] Remove/replace existing all-boolean policy as the sole acceptance proof.
 
 ### RMD-1405 — Accessibility qualification
 
-- [ ] Verify semantic labels on actionable icons/controls.
-- [ ] Verify logical traversal/focus order.
-- [ ] Verify minimum touch target behavior.
-- [ ] Verify state is not communicated by color alone.
-- [ ] Verify representative TalkBack semantics using Compose semantics tests and documented manual checks where automation is insufficient.
-- [ ] Verify large text does not hide primary actions.
+- [x] Verify semantic labels on actionable icons/controls.
+- [x] Verify logical traversal/focus order.
+- [x] Verify minimum touch target behavior.
+- [x] Verify state is not communicated by color alone.
+- [x] Verify representative TalkBack semantics using Compose semantics tests and documented manual checks where automation is insufficient.
+- [x] Verify large text does not hide primary actions.
+
+**Evidence (RMD-1403 through RMD-1405):** `ProductionComposeGoldenTest.kt` provides production-Compose raster capture with pinned SHA-256 golden hashes for Library empty/populated, Add invalid/resolved, Download Setup, Downloads active/failure, Player, Settings, compact portrait, and representative large-font states. `ProductionComposeLayoutAccessibilityTest.kt` provides device-side compact-layout, reachability, vertical-scroll, semantics, traversal, minimum-touch-target, non-color-only state, and large-text assertions. `.github/workflows/android-smoke.yml` executes both suites and uploads bounded golden/instrumentation evidence. Detailed evidence is in `docs/RMD_1403_1405_UI_QUALIFICATION_RECONCILIATION_2026-09-25.md`. Implementation merged by PR #376 as `6d21f1db5e5a5444793aeb1ddf7eb62a3ed100bd`; post-merge CI `36219448765`, Android smoke `36219448785`, and Android FGS timeout `36219448766` passed. Later exact master `58f240c4dec8f699540f06552dcbfa6e8407d815` retains this implementation and passed CI `36235854097`, Android smoke `36235854115`, Android FGS timeout `36235854212`, and Supply chain `36235854130`.
 
 ---
 
@@ -748,6 +752,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 - [ ] Send `ACTION_SEND text/plain` fixture/supported input.
 - [ ] Enter real analysis/setup pipeline.
+
 - [ ] Schedule/download.
 - [ ] Verify Library state.
 - [ ] Verify back-stack behavior.
@@ -794,11 +799,11 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Android Rust ABI builds.
 - [x] APK native-library packaging verification.
 - [x] Android instrumentation/Compose tests.
-- [ ] Screenshot/golden tests.
+- [x] Screenshot/golden tests.
 - [ ] Deterministic E2E fixture lane.
 - [x] Exact-head identity assertion.
 
-**Evidence (RMD-1601 partial reconciliation):** The fast deterministic matrix is already implemented on current master. `.github/workflows/ci.yml` runs exact-commit identity checks, Rust fmt, clippy with `-D warnings`, workspace tests, Android lint/JVM tests/assemble, reproducible UniFFI generation, both supported Android Rust ABI builds, and APK native-library verification. `.github/workflows/android-smoke.yml` also asserts exact commit identity and runs the packaged instrumentation/Compose suite including `ProductionComposeBehaviorTest`. Exact master `dc18f27c01620cd7b3254b1c5bb8d8f9b15b08eb` passed CI run `36186074873` and Android smoke run `36186075209`. Screenshot/golden and deterministic fixture E2E lanes remain deliberately unchecked until RMD-1403 and RMD-1500 are implemented and qualified.
+**Evidence (RMD-1601 partial reconciliation):** The fast deterministic matrix is already implemented on current master. `.github/workflows/ci.yml` runs exact-commit identity checks, Rust fmt, clippy with `-D warnings`, workspace tests, Android lint/JVM tests/assemble, reproducible UniFFI generation, both supported Android Rust ABI builds, and APK native-library verification. `.github/workflows/android-smoke.yml` also asserts exact commit identity and runs the packaged instrumentation/Compose suite including `ProductionComposeBehaviorTest`. Exact master `dc18f27c01620cd7b3254b1c5bb8d8f9b15b08eb` passed CI run `36186074873` and Android smoke run `36186075209`. Screenshot/golden qualification is now implemented and qualified under RMD-1403 through RMD-1405 and `.github/workflows/android-smoke.yml`; deterministic fixture E2E remains deliberately unchecked until RMD-1500 is implemented and qualified.
 
 ### RMD-1602 — Dependency/advisory checks
 
