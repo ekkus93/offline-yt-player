@@ -6,4 +6,4 @@ It originally contained a broad stale canonical-TODO rewrite that touched unrela
 
 Continue RMD-500 work from current `master` on a fresh, narrow branch. Do not merge this branch.
 
-Status refreshed after the stale-branch warning was added. Canonical TODO reconciliation must use current `master`, not this branch. No further work should use this branch. Final marker. Superseded. Locked by note. Do not use. Sentinel. Stop.
+Status refreshed after the stale-branch warning was added. Canonical TODO reconciliation must use current `master`, not this branch. No further work should use this branch. Final marker. Superseded. Locked by note. Do not use. Sentinel. Stop. End.
