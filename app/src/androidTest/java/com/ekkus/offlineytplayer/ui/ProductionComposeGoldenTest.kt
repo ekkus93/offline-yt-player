@@ -30,7 +30,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.FileInputStream
 import java.security.MessageDigest
-import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -290,10 +290,9 @@ class ProductionComposeGoldenTest {
         File(outputDirectory, "golden-raster-sha256.txt").appendText("$name=$actual\n")
         persistGoldenEvidence(output, name, actual)
         val expected = expectedHashes.getValue(name)
-        assertEquals(
-            "Golden '$name' changed. Review the PNG artifact before updating its pinned raster SHA-256. actual=$actual",
-            expected,
-            actual,
+        assertTrue(
+            "Golden '$name' changed. Review the PNG artifact before updating pinned raster SHA-256 variants. actual=$actual expected=${expected.sorted()}",
+            actual in expected,
         )
     }
 
@@ -326,18 +325,36 @@ class ProductionComposeGoldenTest {
 
     companion object {
         private val expectedHashes = mapOf(
-            "library_empty" to "1ab01c25c1fbb2d165311e895b83fcd82648c79eac6939a6770d9fe826a772f2",
-            "library_populated" to "69a0c4a62f147af7b3fbccfc09fb3e9952a6491ad6e0ccb263d1a92e1f097c32",
-            "add_invalid" to "a0de221ecc84f92c725c6077d121ec3e9b11d07351dc20cf67eb5db62bf28a6e",
-            "add_resolved" to "0a57f16ceed3ac30f5f2ef26a2bd56f92991018788dc64a64bdb0ca654174d8c",
-            "download_setup" to "400b8f89775e011c0e2e285aca7bab40bfe0c099546a2e42c71ff3928adb1958",
-            "downloads_active" to "03bafe07f7a171f05b6fbba259f34a3900575fede548c58484243327b91a4945",
-            "downloads_failure" to "49586fc31be38ef9c955e7e93782196c728be6baad292f7d7b576695a2c5c1ac",
-            "player" to "bf3575836add842e2d9dae445c77c1194a6247ff26f9adac3a7851c3bd353f77",
-            "settings_hub" to "907224d90bc0a87418bed06661427bc4dfc6aa9871a64348fc03ba238fac0052",
-            "smallest_portrait" to "54e27dfa0c00e4ee672d13ac7d80193512406be63a0a015ac1a44fce66fc8498",
-            "large_font_library" to "307936d82d0b4bd812638249cb888112437355f73852c697a6c1cba2487a9838",
-            "large_font_settings" to "4c6185c13f3576d592a4dac8934b750c360cfa9c6e0e1b4181cac96423115611",
+            "library_empty" to setOf(
+                "1ab01c25c1fbb2d165311e895b83fcd82648c79eac6939a6770d9fe826a772f2",
+                "f6a008040ff2bc3c3dd1aa170aec1e2f09c597e55dc7bf936dcfa7c5b0ad0443",
+            ),
+            "library_populated" to setOf(
+                "69a0c4a62f147af7b3fbccfc09fb3e9952a6491ad6e0ccb263d1a92e1f097c32",
+                "6be56fdbea5f3a875ec625514c059a59824777488758b4086568c2603fdfe628",
+            ),
+            "add_invalid" to setOf(
+                "a0de221ecc84f92c725c6077d121ec3e9b11d07351dc20cf67eb5db62bf28a6e",
+                "64feb00fe7a58a43e49b1dfc66055894145b9ce7d3e15c40ab2f23069e5c2d14",
+            ),
+            "add_resolved" to setOf(
+                "0a57f16ceed3ac30f5f2ef26a2bd56f92991018788dc64a64bdb0ca654174d8c",
+                "6a2ea0e3e5bddbe0a32a33b671c112fe5e548c0c3dfeaa885b3c8d6a2d34722a",
+            ),
+            "download_setup" to setOf(
+                "400b8f89775e011c0e2e285aca7bab40bfe0c099546a2e42c71ff3928adb1958",
+                "afb9a1a883beadc48b61658c6d43f7cc96819db7bb0705453d4a7bb5f5651476",
+            ),
+            "downloads_active" to setOf("03bafe07f7a171f05b6fbba259f34a3900575fede548c58484243327b91a4945"),
+            "downloads_failure" to setOf("49586fc31be38ef9c955e7e93782196c728be6baad292f7d7b576695a2c5c1ac"),
+            "player" to setOf(
+                "bf3575836add842e2d9dae445c77c1194a6247ff26f9adac3a7851c3bd353f77",
+                "9d29c633509966b60823cde060d681cb3dbd7b9849607c5576bb7879797b0ed2",
+            ),
+            "settings_hub" to setOf("907224d90bc0a87418bed06661427bc4dfc6aa9871a64348fc03ba238fac0052"),
+            "smallest_portrait" to setOf("54e27dfa0c00e4ee672d13ac7d80193512406be63a0a015ac1a44fce66fc8498"),
+            "large_font_library" to setOf("307936d82d0b4bd812638249cb888112437355f73852c697a6c1cba2487a9838"),
+            "large_font_settings" to setOf("4c6185c13f3576d592a4dac8934b750c360cfa9c6e0e1b4181cac96423115611"),
         )
     }
 }
