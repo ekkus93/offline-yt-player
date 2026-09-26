@@ -802,10 +802,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1602 — Dependency/advisory checks
 
-- [ ] Add Rust vulnerability/advisory scanning with an explicitly reviewed exception mechanism.
-- [ ] Add Android/Gradle dependency vulnerability/license review tooling where practical.
-- [ ] Generate/reconcile OSS license notices for shipped dependencies.
-- [ ] Fail release qualification on unresolved prohibited/license-incompatible dependencies.
+- [x] Add Rust vulnerability/advisory scanning with an explicitly reviewed exception mechanism.
+- [x] Add Android/Gradle dependency vulnerability/license review tooling where practical.
+- [x] Generate/reconcile OSS license notices for shipped dependencies.
+- [x] Fail release qualification on unresolved prohibited/license-incompatible dependencies.
+
+**Evidence (RMD-1602):** `.github/workflows/supply-chain.yml` is an exact-head supply-chain gate: it generates the Rust lockfile, runs `cargo audit --deny warnings`, exports the Android debug runtime and instrumentation dependency graphs for review, checks the generated third-party notice inventory, and uploads bounded evidence artifacts. `docs/SUPPLY_CHAIN_POLICY.md` defines the explicit dated exception process and prohibits silently carrying unresolved advisories, prohibited licenses, or license-incompatible dependencies into release qualification; `scripts/generate_third_party_notices.py` and `docs/THIRD_PARTY_NOTICES.md` keep the shipped Gradle/Rust dependency inventory reconciled. PR #381 merged the implementation as exact master `58f240c4dec8f699540f06552dcbfa6e8407d815`; master Supply chain run `36235854130`, CI `36235854097`, Android smoke `36235854115`, and Android FGS timeout `36235854212` all passed on that exact SHA. The external YouTube/service-policy/legal gate remains separate.
 
 ### RMD-1603 — CI evidence quality
 
