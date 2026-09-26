@@ -25,6 +25,8 @@ import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGatew
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.downloads.AndroidDownloadExecutionScheduler
+import com.ekkus.offlineytplayer.downloads.AndroidDownloadConnectivityObserver
+import com.ekkus.offlineytplayer.downloads.DownloadConnectivity
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionStateStore
 import com.ekkus.offlineytplayer.downloads.SchedulingDownloadControlGateway
@@ -52,6 +54,8 @@ class MainActivity : ComponentActivity() {
     private var settingsStore: SharedPreferencesAppSettingsStore? = null
     private var settingsSubscription: SettingsSubscription? = null
     private var stateRefresher: AppStateRefresher? = null
+    private var downloadConnectivityObserver: AndroidDownloadConnectivityObserver? = null
+    @Volatile private var currentDownloadConnectivity: DownloadConnectivity = DownloadConnectivity.None
     private var activityStarted = false
     private var libraryState by mutableStateOf<LibraryScreenState>(LibraryScreenState.Loading)
     private var downloadsState by mutableStateOf<DownloadsScreenState>(DownloadsScreenState.Loading)
@@ -68,6 +72,9 @@ class MainActivity : ComponentActivity() {
         settingsSnapshot = settings.snapshot()
         settingsSubscription = settings.observe { snapshot -> settingsSnapshot = snapshot }
         requestNotificationPermissionIfNeeded()
+        downloadConnectivityObserver = AndroidDownloadConnectivityObserver(applicationContext) { connectivity ->
+            currentDownloadConnectivity = connectivity
+        }
         val sharedUrl = ShareInput.parse(intent?.action, intent?.type, intent?.getStringExtra(Intent.EXTRA_TEXT))
         setContent {
             OfflineYTPlayerApp(
@@ -86,17 +93,20 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         activityStarted = true
+        downloadConnectivityObserver?.start()
         stateRefresher?.start()
     }
 
     override fun onStop() {
         activityStarted = false
         stateRefresher?.stop()
+        downloadConnectivityObserver?.close()
         super.onStop()
     }
 
     override fun onDestroy() {
         stateRefresher?.close()
+        downloadConnectivityObserver?.close()
         coreGateway?.close()
         downloadControlGateway?.close()
         libraryPlaybackGateway?.close()
@@ -146,6 +156,7 @@ class MainActivity : ComponentActivity() {
                         delegate = controlsGateway,
                         scheduler = AndroidDownloadExecutionScheduler(applicationContext),
                         settingsSnapshot = { settingsSnapshot },
+                        connectivitySnapshot = { currentDownloadConnectivity },
                     )
                 }
                 libraryPlaybackGateway = playback.getOrNull()
