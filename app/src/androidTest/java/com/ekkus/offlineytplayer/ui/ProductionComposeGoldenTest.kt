@@ -290,9 +290,6 @@ class ProductionComposeGoldenTest {
         File(outputDirectory, "golden-raster-sha256.txt").appendText("$name=$actual\n")
         persistGoldenEvidence(output, name, actual)
         val expected = expectedHashes.getValue(name)
-        if (expected == "PENDING") {
-            throw AssertionError("Golden '$name' baseline is not pinned; actual=$actual")
-        }
         assertEquals(
             "Golden '$name' changed. Review the PNG artifact before updating its pinned raster SHA-256. actual=$actual",
             expected,
@@ -329,18 +326,18 @@ class ProductionComposeGoldenTest {
 
     companion object {
         private val expectedHashes = mapOf(
-            "library_empty" to "PENDING",
-            "library_populated" to "PENDING",
-            "add_invalid" to "PENDING",
-            "add_resolved" to "PENDING",
-            "download_setup" to "PENDING",
-            "downloads_active" to "PENDING",
-            "downloads_failure" to "PENDING",
-            "player" to "PENDING",
-            "settings_hub" to "PENDING",
-            "smallest_portrait" to "PENDING",
-            "large_font_library" to "PENDING",
-            "large_font_settings" to "PENDING",
+            "library_empty" to "1ab01c25c1fbb2d165311e895b83fcd82648c79eac6939a6770d9fe826a772f2",
+            "library_populated" to "69a0c4a62f147af7b3fbccfc09fb3e9952a6491ad6e0ccb263d1a92e1f097c32",
+            "add_invalid" to "a0de221ecc84f92c725c6077d121ec3e9b11d07351dc20cf67eb5db62bf28a6e",
+            "add_resolved" to "0a57f16ceed3ac30f5f2ef26a2bd56f92991018788dc64a64bdb0ca654174d8c",
+            "download_setup" to "400b8f89775e011c0e2e285aca7bab40bfe0c099546a2e42c71ff3928adb1958",
+            "downloads_active" to "03bafe07f7a171f05b6fbba259f34a3900575fede548c58484243327b91a4945",
+            "downloads_failure" to "49586fc31be38ef9c955e7e93782196c728be6baad292f7d7b576695a2c5c1ac",
+            "player" to "bf3575836add842e2d9dae445c77c1194a6247ff26f9adac3a7851c3bd353f77",
+            "settings_hub" to "907224d90bc0a87418bed06661427bc4dfc6aa9871a64348fc03ba238fac0052",
+            "smallest_portrait" to "54e27dfa0c00e4ee672d13ac7d80193512406be63a0a015ac1a44fce66fc8498",
+            "large_font_library" to "307936d82d0b4bd812638249cb888112437355f73852c697a6c1cba2487a9838",
+            "large_font_settings" to "4c6185c13f3576d592a4dac8934b750c360cfa9c6e0e1b4181cac96423115611",
         )
     }
 }
