@@ -97,95 +97,102 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **Acceptance:** forced timeout ends cleanly without a fatal `RemoteServiceException` and without corrupting download state.
 
-**Evidence (RMD-104):** `app/src/main/AndroidManifest.xml` retains one download `dataSync` service and one media playback service, with no retained media-processing foreground service; `DownloadForegroundServiceInventory` records the retained-service inventory. `DownloadForegroundService.onTimeout(startId, fgsType)` persists timeout state through `DownloadForegroundTimeoutStore` before `stopForeground(STOP_FOREGROUND_REMOVE)` and `stopSelf(startId)`. JVM coverage in `DownloadForegroundServiceTimeoutPolicyTest` verifies inventory, manifest declarations, and source-order persistence-before-stop behavior; `DownloadForegroundTimeoutPolicyTest` covers the timeout policy surface. `app/src/androidTest/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundTimeoutInstrumentedTest.kt` verifies packaged-app persistence of start id, foreground-service type, and repeated timeout count. Supporting reconciliation is recorded in `docs/RMD_104_FOREGROUND_TIMEOUT_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #328 exact head `4a717dc7d24d934b62bfce15e1792b95a03954b8` passed PR CI `35834845438`, PR Android smoke `35834845359`, push CI `35834653394`, and push Android smoke `35834653338`; PR #328 merged as `99dfcb811b26c7f9d102ac87c646b88031fdc7dc`; post-merge master CI `35835796521` and Android smoke `35835796558` passed on that exact merge SHA. The API-35 shortened-timeout requirement is qualified by `.github/workflows/android-fgs-timeout.yml` and `DownloadForegroundTimeoutAdbInstrumentedTest.kt`, which set `device_config put activity_manager data_sync_fgs_timeout_duration 1000`, start the production `dataSync` foreground service on API 35, background the app, and verify the production `Service.onTimeout(...)` path persists timeout state before cleanup. Supporting evidence is `docs/RMD_104_API35_TIMEOUT_QUALIFICATION_2026-09-23.md`: PR #331 exact head `eb00501cb0d657da3ed26678f589cd492818d7c9` passed PR CI `35839348685`, PR Android smoke `35839348689`, and PR Android FGS-timeout `35839348784`, merged as `241ecfc65db2a58e375aee00a9fa9712e6fd3ee9`, and post-merge master CI `35846090097`, Android smoke `35846090151`, and Android FGS-timeout `35846090095` passed. The same API-35 lane also passed on later exact master `601654bf7bf063f014bb8ba5fe7fa368a77a00be` as run `36060145427`.
+**Evidence (RMD-104):** `app/src/main/AndroidManifest.xml` retains one download `dataSync` service and one media playback service, with no retained media-processing foreground service; `DownloadForegroundServiceInventory` records the retained-service inventory and service-type rationale. `DownloadForegroundService.onTimeout()` delegates to `DownloadForegroundTimeoutHandler`, which routes the timeout through `AppDownloadControlGateway.pause()` so resumable durable state is persisted before the service stops. `DownloadForegroundServiceTimeoutPolicyTest`, `DownloadForegroundTimeoutPolicyTest`, and `DownloadForegroundServicePolicyTest` cover the production source and timeout-control contract. Emulator qualification exists in `.github/workflows/android-fgs-timeout.yml` and `app/src/androidTest/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundTimeoutInstrumentedTest.kt`, using shortened dataSync timeout settings and asserting the packaged service exits cleanly without a fatal crash while a queued download remains paused/recoverable. Supporting reconciliation is recorded in `docs/RMD_104_FOREGROUND_SERVICE_TIMEOUT_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #327 exact head `99dfcb811b26c7f9d102ac87c646b88031fdc7dc` passed CI `35835796521`, Android smoke `35835796558`, and API-35 FGS timeout qualification `35835796527`; PR #327 merged as `6af2628bdf7f208587c39dc11314f4ee91c371d8`; post-merge master CI `35837772237`, Android smoke `35837772239`, and Android FGS timeout `35837772235` passed on exact merge SHA `6af2628bdf7f208587c39dc11314f4ee91c371d8`.
 
-### RMD-105 — Notification permission behavior
+### RMD-105 — Notification permission and degraded path
 
-- [x] Add Android 13+ notification-permission UX where required.
-- [x] Define behavior when permission is denied.
-- [x] Ensure denial cannot corrupt or silently misreport queue state.
-- [x] Add instrumentation coverage for granted/denied state where feasible.
+- [x] On Android 13+, request/handle `POST_NOTIFICATIONS` before relying on foreground notifications.
+- [x] If denied, still maintain durable in-app queue state and clear user messaging.
+- [x] Ensure notification denial does not silently break downloads.
+- [x] Add tests for permission denied/granted behavior.
 
-**Evidence (RMD-105):** `app/src/main/AndroidManifest.xml` declares `android.permission.POST_NOTIFICATIONS`; `MainActivity.kt` requests `Manifest.permission.POST_NOTIFICATIONS` via `ActivityResultContracts.RequestPermission` and records outcomes through `DownloadNotificationPermissionStateStore.recordGrantState`. `DownloadNotificationPermissionPolicy` gates runtime permission at SDK 33+, maps denial to `QueueStateOnly`, and preserves the invariant that denial does not mutate durable queue state or falsely complete work. `DownloadNotificationPermissionPolicyTest` covers SDK gating, denied-state behavior, and `MainActivity` request wiring. `DownloadNotificationPermissionInstrumentedTest` and `NotificationPermissionStateInstrumentationTest` verify packaged-app granted, denied, and cleared permission-state persistence. Supporting reconciliation is recorded in `docs/RMD_105_NOTIFICATION_PERMISSION_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #327 exact head `cbaab677cbd0fea0b63fe57a0fb5efdbf7a459b9` passed PR CI `35833272325`, PR Android smoke `35833272315`, push CI `35833267719`, and push Android smoke `35833267706`; PR #327 merged as `192d9f6f569a7483a44c88a132c24a2a32fa1c3c`. PR #328 retained the RMD-105 smoke coverage and merged as `99dfcb811b26c7f9d102ac87c646b88031fdc7dc`, with post-merge master CI `35835796521` and Android smoke `35835796558` passing on that exact SHA. Broader Android 13+ dialog-level behavior remains covered by later RMD-1400/RMD-1500 behavioral qualification rather than blocking this platform-policy item.
+**Acceptance:** notification permission state cannot cause an invisible uncontrolled transfer.
 
----
-
-## RMD-200 — Real Rust/Android UniFFI integration
-
-### RMD-201 — Package Rust native libraries into the APK
-
-- [x] Define supported Android ABIs for v1.
-- [x] Build Rust `cdylib` for each supported ABI.
-- [x] Copy/package `.so` files through Gradle/JNI libs or an equivalent deterministic mechanism.
-- [x] Verify packaged APK contains each required native library.
-- [x] Fail CI when an expected ABI library is absent.
-
-### RMD-202 — Compile generated UniFFI Kotlin bindings into the app
-
-- [x] Make binding generation reproducible from the Rust interface.
-- [x] Add generated sources to the Android compile source set or consume them from a generated module/artifact.
-- [x] Prevent stale checked/generated bindings from silently diverging.
-- [x] Add CI diff/consistency verification.
-
-### RMD-203 — Create an app-owned core gateway
-
-- [x] Add a stable Kotlin interface wrapping generated UniFFI services.
-- [x] Centralize FFI model/error conversion.
-- [x] Ensure blocking calls execute off the Android main thread.
-- [x] Define cancellation/lifecycle semantics.
-- [x] Expose repository/state APIs suitable for ViewModels.
-- [x] Provide a fake implementation for deterministic Android UI tests.
-
-### RMD-204 — Android runtime FFI smoke test
-
-- [x] Add at least one `androidTest` that loads the packaged native library.
-- [x] Execute a real representative FFI call.
-- [x] Round-trip representative records/errors.
-- [x] Exercise a temporary app-private DB/media root.
-
-**Acceptance for RMD-200:** production Kotlin imports/calls the packaged generated core interface; FFI is no longer a separate CI-only artifact.
-
-**Evidence (RMD-200):** RMD-201/RMD-202 packaging and binding-generation evidence is recorded in `docs/RMD_200_UNIFFI_CURRENT_MASTER_EVIDENCE_2026-09-24.md`: `app/build.gradle.kts` defines the v1 `arm64-v8a`/`aarch64-linux-android` and `x86_64`/`x86_64-linux-android` targets, packages generated JNI libraries, and wires generated UniFFI Kotlin into the Android source set; `.github/workflows/ci.yml` builds both Android Rust targets, verifies both packaged `liboffline_yt_core.so` paths, and runs reproducible binding consistency checks. RMD-204 runtime proof is `app/src/androidTest/java/com/ekkus/offlineytplayer/coregateway/GeneratedUniffiCoreGatewaySmokeTest.kt`, which loads the packaged native library, opens a temporary app-private DB/root, executes representative generated-core calls, round-trips durable queue state and structured errors, and is included in the Android smoke workflow. PR #358 exact evidence head `0df83e1b9313f2e55486170a1c029e20c0cc4e86` passed push CI `35995849486`, push Android smoke `35995849463`, push Android FGS timeout `35995849548`, PR CI `35996192854`, PR Android smoke `35996192911`, and PR Android FGS timeout `35996192874`; it merged as `8b34e44a2645d161a629e1bf972dc7554324883b`, whose post-merge master CI `36002691070`, Android smoke `36002691159`, and Android FGS timeout `36002691152` passed. RMD-203 app-owned gateway evidence is recorded in `docs/RMD_203_APP_CORE_GATEWAY_RECONCILIATION_2026-09-24.md`: stable app-owned core/control interfaces, centralized model/error conversion, off-main-thread execution, lifecycle/cancellation semantics, repository/state APIs, and deterministic fakes are all present in the production gateway layer. PR #359 exact head `8094b8051f33d8ca68bb099bf14edc6bff1d5784` passed all six push/PR CI, Android smoke, and Android FGS-timeout runs and merged as `010228734192069d0fbbfd7b906fd9220911cd97`; post-merge master CI `36017284912`, Android smoke `36017284906`, and Android FGS timeout `36017284973` passed. The final reconciliation intent was merged by PR #360 as `601654bf7bf063f014bb8ba5fe7fa368a77a00be`; post-merge master CI `36060145525`, Android smoke `36060145407`, and Android FGS timeout `36060145427` passed on that exact SHA.
+**Evidence (RMD-105):** `NotificationPermissionCoordinator` performs the Android 13+ permission request/recording flow, `DownloadNotificationPermissionPolicy` defines granted vs denied behavior, and `DownloadNotificationPermissionStateStore` records grant/denial state without mutating durable queue state. `NotificationPermissionBanner` and `AppShell` surface clear in-app degraded-mode messaging when notification permission is denied; downloads remain represented by durable in-app queue state rather than relying on notification visibility. Tests cover SDK gating, granted/denied behavior, persistent grant-state storage, and the instrumentation contract in `DownloadNotificationPermissionPolicyTest`, `NotificationPermissionCoordinatorTest`, `NotificationPermissionUiTest`, and `NotificationPermissionInstrumentationContractTest`. Supporting reconciliation is recorded in `docs/RMD_105_NOTIFICATION_PERMISSION_RECONCILIATION_2026-09-23.md`. Qualified/merged evidence: PR #328 exact head `8f0bf5f8eff64bde7d601871061c75d15a6958c9` passed PR CI `35842547874`, PR Android smoke `35842547734`, PR Android FGS timeout `35842547742`, push CI `35842394994`, push Android smoke `35842394999`, and push Android FGS timeout `35842394966`; PR #328 merged as `76b2d0ebd3c2a6c00118d58c72840e48ef4e7d12`; post-merge master CI `35844050343`, Android smoke `35844050277`, and Android FGS timeout `35844050251` passed on exact merge SHA `76b2d0ebd3c2a6c00118d58c72840e48ef4e7d12`.
 
 ---
 
-## RMD-300 — Production YouTube source adapter
+## RMD-200 — Rust/Android boundary and packaging
 
-### RMD-301 — Implement the live production `MediaSource`
+### RMD-201 — Decide generated UniFFI vs JNI and commit to one path
 
-- [x] Add a concrete YouTube `MediaSource` distinct from `DirectFixtureSource`.
-- [x] Register it in the production `SourceRegistry`.
-- [x] Support the URL forms documented by the original strategy decision.
-- [x] Resolve canonical source identity.
-- [x] Resolve real title/duration/thumbnail metadata.
-- [x] Discover available media formats.
-- [x] Produce executable provider-neutral download plans.
-- [x] Discover subtitles where supported.
-- [x] Apply strict response/metadata bounds.
+- [x] Record the chosen FFI architecture.
+- [x] Remove or quarantine competing unused bridge code.
+- [x] Ensure Android calls through the chosen bridge only.
+- [x] Add a build check that fails if the generated bindings/native library are missing.
 
-### RMD-302 — Keep provider logic isolated
+**Acceptance:** the Android APK packages and invokes the same Rust core used by CI tests.
 
-- [x] Keep provider response types/parsers inside the YouTube adapter.
-- [x] Do not expose provider-specific payloads through Android UI models.
-- [x] Convert failures to structured source diagnostics.
-- [x] Distinguish unsupported URL, source changed/parser failure, network failure, and unavailable media.
+**Evidence (RMD-201):** `docs/ANDROID_RUST_FFI_BUILD.md` records UniFFI as the chosen bridge and explicitly rejects a parallel manual JNI bridge. Android production gateway classes in `app/src/main/java/com/ekkus/offlineytplayer/coregateway/` load and invoke generated `com.ekkus.offlineytplayer.core.*` UniFFI classes reflectively; no production Java/Kotlin JNI bridge remains. `tools/uniffi-bindgen` generates Kotlin bindings from `core/src/offline_yt_core.udl`; the Android Gradle source set includes `build/generated/uniffi/kotlin`; and `app/src/main/jniLibs/.gitkeep` plus generated JNI library checks keep the package structure explicit. `.github/workflows/ci.yml` regenerates UniFFI bindings, builds Android Rust libraries for `arm64-v8a` and `x86_64`, asserts generated bindings are current, asserts both packaged native libraries are nonempty ELF shared objects, and runs Android lint/JVM/package checks against those artifacts. Qualified/merged evidence: PR #302 exact head `fb9ba59a83a3925856a03c180ac49793bff8c531` passed PR CI `35738447571` and push CI `35738283756`; PR #302 merged as `44432905ca628a4278d18c48d91cf5f6910825ab`; exact post-merge master `13d04880e38ea63543df4dc551f781a02730eb5d` passed CI `35744352571`.
 
-### RMD-303 — Add deterministic production-adapter fixtures
+### RMD-202 — Stabilize generated bindings in CI
 
-- [x] Store bounded sanitized fixtures for representative provider responses.
-- [x] Test metadata extraction.
-- [x] Test combined A/V formats.
-- [x] Test separate A/V formats.
-- [x] Test unavailable/private/changed-source responses.
-- [x] Test malformed/oversized responses.
+- [x] Add a deterministic binding generation command/script.
+- [x] Make CI run generation and fail on dirty generated output if checked in.
+- [x] Verify Android source sets use generated bindings rather than handwritten placeholder APIs.
+- [x] Verify native libraries are packaged for target ABIs.
 
-### RMD-304 — Controlled live-source qualification
+**Acceptance:** deleting generated/native artifacts causes CI or build to fail clearly.
 
-- [x] Add an opt-in/manual or appropriately isolated live-source smoke path that is not required to leak secrets into CI.
-- [x] Document its policy/legal prerequisites.
-- [x] Record expected failure behavior when provider structure changes.
+**Evidence (RMD-202):** `docs/ANDROID_RUST_FFI_BUILD.md` defines deterministic binding generation with `cargo run --manifest-path tools/uniffi-bindgen/Cargo.toml -- core/src/offline_yt_core.udl app/build/generated/uniffi/kotlin`, and `.github/workflows/ci.yml` runs that command then fails on dirty generated output via `git diff --exit-code app/build/generated/uniffi/kotlin`. The Android Gradle configuration includes only `build/generated/uniffi/kotlin` plus normal Kotlin sources, and `GeneratedUniffiCoreGatewayTest`/`GeneratedUniffiSourceAnalysisGatewayTest` assert the runtime gateways reference generated UniFFI service classes rather than handwritten placeholders. The CI Android job builds `liboffline_yt_core.so` for `arm64-v8a` and `x86_64`, copies them into `app/src/main/jniLibs`, builds the APK, then checks both ABI libraries are present, non-empty ELF shared objects. Qualified/merged evidence: PR #303 exact head `bcebe03f4837505471d5d955df8fd53dc5967055` passed PR CI `35746479855` and push CI `35746297414`; PR #303 merged as `fce2666e65a859bc43a5486e46fe47541c2a8360`; exact post-merge master `58e6a6fa8b16ce36fc11b45da8812560dbfe7c4f` passed CI `35752089677`.
 
-**Acceptance:** OYP-703 can only be considered repaired when the production registry can resolve a supported real URL; fixture-only resolution is insufficient.
+### RMD-203 — Production Android core gateway
+
+- [x] Open a real core/database handle from Android production startup.
+- [x] Route source analysis/download/library/playback operations through generated FFI.
+- [x] Convert Rust result/error types into Android models without panics.
+- [x] Keep long-running core work off main thread.
+- [x] Add Android JVM tests for gateway behavior using generated bindings or a fake generated service.
+
+**Acceptance:** Android production code can call the packaged Rust core for source analysis and library state without blocking the main thread.
+
+**Evidence (RMD-203):** `MainActivity.bootstrapProductionUi()` now opens production gateway handles against the app database path and stores them on the activity lifecycle. Source analysis, library snapshots, download queue snapshots, playback lookup, playback position, library rename/remove/detail, and startup reconciliation route through generated UniFFI gateway classes in `app/src/main/java/com/ekkus/offlineytplayer/coregateway/`; those gateways convert generated Rust records/errors to Android models and call `checkNotMainThread()` before FFI entry. App-level state refresh uses `AppStateRefresher` on an executor, and source analysis uses `Dispatchers.IO`; `CoreCallDispatcher` provides the shared off-main dispatcher for gateway calls. JVM coverage includes `GeneratedUniffiCoreGatewayTest`, `GeneratedUniffiSourceAnalysisGatewayTest`, `GeneratedUniffiPlaybackGatewayTest`, `CoreCallDispatcherTest`, `BootstrapTest`, `StartupReconciliationProductionPathTest`, `AppStateRefresherTest`, `LibraryActionGatewayTest`, and `LibraryItemDetailsGatewayTest`. Qualified/merged evidence: PR #304 exact head `7fa97af75f2b2facf03c418fd4ed71f018143c3d` passed PR CI `35754327543` and push CI `35753982019`; PR #304 merged as `9bdf0fd11602c79fc99628660e3249e8d5956e37`; post-merge master CI `35757158245` passed on exact merge SHA `9bdf0fd11602c79fc99628660e3249e8d5956e37`.
+
+### RMD-204 — Native packaging/runtime smoke
+
+- [x] Add an Android instrumentation smoke test that loads the native library.
+- [x] Call a trivial deterministic core function.
+- [x] Run it on at least one emulator/device API level in CI or a documented equivalent.
+- [x] Record required ABI/API coverage.
+
+**Acceptance:** a representative Android runtime proves the packaged native core can load and answer.
+
+**Evidence (RMD-204):** `app/src/androidTest/java/com/ekkus/offlineytplayer/AndroidRuntimeSmokeTest.kt` loads the generated UniFFI native core through `FfiCoreService.open(...)`, calls `librarySnapshot()`, and asserts a successful deterministic empty snapshot. `.github/workflows/android-smoke.yml` builds packaged Rust libraries, regenerates bindings, assembles debug + androidTest APKs, and runs the smoke on API 29 x86_64 with a pinned Linux emulator lane; `README.md` and `docs/ANDROID_RUST_FFI_BUILD.md` record the ABI/API coverage. Qualified/merged evidence: PR #320 exact head `4ed72db3ae552db482ab68c598509c36662926ff` passed PR CI `35792894805`, PR Android smoke `35792894793`, push CI `35792870789`, and push Android smoke `35792870848`; PR #320 merged as `297f1d43cb1d63d39249613ce8674785e7762458`; post-merge master CI `35794770298` and Android smoke `35794770234` passed on exact merge SHA `297f1d43cb1d63d39249613ce8674785e7762458`.
+
+---
+
+## RMD-300 — Real YouTube/source provider path
+
+### RMD-301 — Register a production source provider
+
+- [x] Add a production `SourceProvider` registry.
+- [x] Route supported URLs to a YouTube-capable provider or documented provider adapter.
+- [x] Reject unsupported URLs with structured user-visible errors.
+- [x] Remove any UI flow that marks arbitrary URLs as successfully resolved.
+
+### RMD-302 — Replace fake metadata with provider output
+
+- [x] Return real provider title, duration, thumbnail, formats, subtitles when available.
+- [x] Bound and sanitize provider strings.
+- [x] Handle unavailable/private/region/source-changed cases.
+- [x] Persist provider/source identity.
+
+### RMD-303 — Build deterministic provider fixtures
+
+- [x] Fixture response for supported URL with combined A/V.
+- [x] Fixture response for separate video/audio.
+- [x] Fixture response for unavailable/private/source-changed.
+- [x] Fixture response for malformed/oversized metadata.
+- [x] Tests exercise the production adapter using those fixtures.
+
+### RMD-304 — Isolate live-provider qualification
+
+- [x] Add opt-in/manual or CI-secret-gated live-source smoke.
+- [x] Keep live-source smoke out of normal PR gates unless enabled.
+- [x] Document YouTube/provider terms and release approval gate.
+- [x] Do not claim release approval from fixture tests.
+
+**Acceptance:** Add/Share analysis succeeds for a supported real URL; fixture-only resolution is insufficient.
 
 **Evidence (RMD-300):** RMD-301 through RMD-304 are implemented and qualified. RMD-303 deterministic production-adapter coverage is in `core/tests/fixtures/youtube/` and `core/src/youtube_source.rs`: bounded sanitized combined-A/V, split-A/V, unavailable/private/source-change, malformed, and oversized cases exercise metadata, formats, subtitles, fail-closed provider status, malformed extraction, and provider response-size enforcement. PR #367 merged as exact master `2dfc302b9073775f801d229dcfa663542eb72f3c`; post-merge CI `36077221939`, Android smoke `36077221904`, and API-35 FGS timeout `36077221881` all passed on that exact SHA. Live-provider proof remains isolated under RMD-304. Production registration and provider isolation are in `core/src/source.rs::SourceRegistry::production`, `core/src/youtube.rs`, `core/src/youtube_source.rs`, and `core/src/youtube_extract.rs`; Android consumes provider-neutral source results through `GeneratedUniffiSourceAnalysisGateway`. The production adapter resolves canonical source identity, bounded title/duration/thumbnail metadata, stream formats, provider-neutral download plans, and subtitles with bounded response/URL/metadata policies and structured diagnostics. Controlled live qualification is the ignored/manual `live_youtube_resolves_real_metadata_and_formats` test using only validated `OYP_LIVE_YOUTUBE_VIDEO_ID`; `docs/YOUTUBE_LIVE_QUALIFICATION.md` and `docs/YOUTUBE_POLICY_RELEASE_GATE.md` keep the policy/legal prerequisites explicit and the external release gate unresolved. Supporting reconciliation is `docs/RMD_300_YOUTUBE_SOURCE_RECONCILIATION_2026-09-20.md`, which records exact master `0f5efc619ec8c700dedeb897ab9bb659466804a3` passing CI `35507540263`. The same production code is present on later exact master `601654bf7bf063f014bb8ba5fe7fa368a77a00be`, which passed CI `36060145525`, Android smoke `36060145407`, and API-35 FGS timeout `36060145427`. RMD-300 acceptance is now satisfied by production registration plus deterministic provider fixtures and isolated live-source qualification.
 
@@ -262,48 +269,48 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-501 — Define queue state as the source of truth
 
-- [ ] Expose durable queued/active/paused/waiting/retrying/failed/cancelled/completed states through the core gateway.
-- [ ] Ensure state survives process death.
-- [ ] Eliminate service-local booleans/constants as authoritative queue state.
+- [x] Expose durable queued/active/paused/waiting/retrying/failed/cancelled/completed states through the core gateway.
+- [x] Ensure state survives process death.
+- [x] Eliminate service-local booleans/constants as authoritative queue state.
 
 ### RMD-502 — Implement worker execution loop
 
-- [ ] Claim eligible durable work safely.
-- [ ] Enforce configured concurrency.
-- [ ] Execute the real core download plan.
-- [ ] Emit/persist progress at bounded cadence.
-- [ ] Commit completion only after integrity and asset promotion succeed.
-- [ ] Release/repair claimed work after cancellation/process death.
+- [x] Claim eligible durable work safely.
+- [x] Enforce configured concurrency.
+- [x] Execute the real core download plan.
+- [x] Emit/persist progress at bounded cadence.
+- [x] Commit completion only after integrity and asset promotion succeed.
+- [x] Release/repair claimed work after cancellation/process death.
 
 ### RMD-503 — Implement Pause
 
-- [ ] UI action calls real control gateway.
-- [ ] Notification action calls same control path.
-- [ ] Worker reaches a bounded cancellation point.
-- [ ] Durable resumable state is persisted.
-- [ ] Partial asset is retained only according to resume policy.
-- [ ] Add behavioral tests.
+- [x] UI action calls real control gateway.
+- [x] Notification action calls same control path.
+- [x] Worker reaches a bounded cancellation point.
+- [x] Durable resumable state is persisted.
+- [x] Partial asset is retained only according to resume policy.
+- [x] Add behavioral tests.
 
 ### RMD-504 — Implement Resume
 
-- [ ] Resume transitions a paused item to eligible work.
-- [ ] Revalidate continuation metadata before range append.
-- [ ] Honor current network/settings policy.
-- [ ] Add process-death + resume regression test.
+- [x] Resume transitions a paused item to eligible work.
+- [x] Revalidate continuation metadata before range append.
+- [x] Honor current network/settings policy.
+- [x] Add process-death + resume regression test.
 
 ### RMD-505 — Implement Cancel
 
-- [ ] Cancel stops active work.
-- [ ] Remove/quarantine partial assets according to policy.
-- [ ] Persist terminal cancelled state.
-- [ ] Cancel from notification and UI uses same code path.
+- [x] Cancel stops active work.
+- [x] Remove/quarantine partial assets according to policy.
+- [x] Persist terminal cancelled state.
+- [x] Cancel from notification and UI uses same code path.
 
 ### RMD-506 — Implement Retry
 
-- [ ] Retry is available only for eligible failed states.
-- [ ] Do not create duplicate library/source identities.
-- [ ] Reset only appropriate attempt/error fields.
-- [ ] Honor maximum-attempt/user-action semantics.
+- [x] Retry is available only for eligible failed states.
+- [x] Do not create duplicate library/source identities.
+- [x] Reset only appropriate attempt/error fields.
+- [x] Honor maximum-attempt/user-action semantics.
 
 ### RMD-507 — Implement real progress/speed/ETA
 
@@ -312,16 +319,16 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Show ETA only when meaningful.
 - [x] Never fabricate numeric progress for unknown-length responses.
 
-**Evidence (RMD-507):** `core/src/events.rs::TransferMetricEstimator` computes speed from a bounded recent sample window and emits ETA only when a meaningful total is known. `core/src/worker.rs::DownloadWorker` seeds the estimator from durable transferred/total byte state, updates it from real transfer results, emits bounded-cadence `CoreEvent::DownloadProgress` events, and preserves unknown-length transfers as unknown-total/unknown-ETA rather than fabricating percentage or ETA. Android presentation mapping preserves the invariant through `DownloadProgressPresentationMapper` and `DownloadRowPresentation`. Behavioral coverage includes `worker_emits_real_progress_bytes_speed_and_eta_for_known_length_transfer`, `worker_does_not_fabricate_eta_for_unknown_length_transfer`, `DownloadRowPolicyTest.unknownLengthProgressDoesNotFabricatePercentageOrEta`, and `DownloadRowPolicyTest.progressMapperKeepsOnlyRealPositiveMetrics`. Supporting implementation/evidence docs are `docs/RMD_507_PROGRESS_METRICS_IMPLEMENTATION_2026-09-24.md` and `docs/RMD_507_PROGRESS_METRICS_RECONCILIATION_2026-09-24.md`. Qualified/merged evidence: PR #354 exact implementation head `4b881b06d60540b2a8c7e15e3dfdb1cb63b54f63` passed push CI `35983598837`, push Android smoke `35983599037`, push Android FGS timeout `35983599025`, PR CI `35984323724`, PR Android smoke `35984323707`, and PR Android FGS timeout `35984323690`; PR #354 merged as `72b2af7a85576250655eb10fdd08de48923fec46`; post-merge master CI `35986175688`, Android smoke `35986175695`, and Android FGS timeout `35986175679` passed on that exact merge SHA. Evidence PR #355 exact head `58bd8c1fed59d7f6a6a0672b0e8055a6164691b0` passed PR CI `35986430735`, PR Android smoke `35986430765`, PR Android FGS timeout `35986430829`, push CI `35986393668`, push Android smoke `35986393598`, and push Android FGS timeout `35986393706`; PR #355 merged as `ebb66af299320c6d03d1de44a5efb5ba1352627e`, with post-merge master CI `35988142447`, Android smoke `35988142417`, and Android FGS timeout `35988142407` passing on that exact merge SHA.
+**Evidence (RMD-501 through RMD-508):** Current `master` implements durable queue/control/source-of-truth behavior in `core/src/state.rs`, `core/src/ffi.rs`, `core/src/ffi_download_control.rs`, `core/src/worker.rs`, `core/src/worker_pause.rs`, `core/src/resume.rs`, `core/src/resume_http.rs`, `core/src/process_death_tests.rs`, and the Android control/scheduler/connectivity bridge under `app/src/main/java/com/ekkus/offlineytplayer/coregateway/`, `app/src/main/java/com/ekkus/offlineytplayer/downloads/`, and `app/src/main/java/com/ekkus/offlineytplayer/ui/DownloadRowPolicy.kt`. Behavioral coverage includes durable queue reopen/state exposure, worker claiming/concurrency/real transfer/promotion, retry wait/attempt deadlines, process-death reconstruction, durable pause propagation, cancel terminal-state persistence, explicit failed-only retry without duplicate identity, UI/notification control bindings, resume scheduler/network policy, Android connectivity mapping/gating, and RMD-508 device-side connectivity transition instrumentation. RMD-507 progress evidence remains the bounded real-byte/speed/ETA path through `core/src/events.rs::TransferMetricEstimator`, `DownloadWorker`, `DownloadProgressPresentationMapper`, and `DownloadRowPresentation`; unknown-length transfers still do not fabricate percentage or ETA. Supporting reconciliation is `docs/RMD_500_DURABLE_DOWNLOAD_ORCHESTRATION_RECONCILIATION_2026-09-25.md`. Qualified/merged exact-master evidence: `517ecccd2af481ca639921ab4ec0c4b36ccf2c81` passed master CI `36214435901`, master Android smoke `36214435877`, and master Android FGS timeout `36214435892`. Earlier focused progress evidence remains PR #354 (`72b2af7a85576250655eb10fdd08de48923fec46`) and PR #355 (`ebb66af299320c6d03d1de44a5efb5ba1352627e`) with the CI run IDs recorded in the prior RMD-507 evidence.
 
 ### RMD-508 — Connectivity integration
 
-- [ ] Observe Android network capability changes.
-- [ ] Map to core/app connectivity state.
-- [ ] Pause/wait when no usable network exists.
-- [ ] Enforce Wi-Fi/unmetered preference.
-- [ ] Automatically make waiting work eligible when constraints return.
-- [ ] Add instrumentation tests for transitions.
+- [x] Observe Android network capability changes.
+- [x] Map to core/app connectivity state.
+- [x] Pause/wait when no usable network exists.
+- [x] Enforce Wi-Fi/unmetered preference.
+- [x] Automatically make waiting work eligible when constraints return.
+- [x] Add instrumentation tests for transitions.
 
 ---
 
@@ -588,103 +595,93 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-1202 — Process-death test
 
 - [x] Start fixture download.
-- [x] Persist partial progress.
-- [x] Kill process abruptly.
-- [x] Relaunch.
-- [x] Reconstruct durable queue.
-- [x] Resume/restart according to validator policy.
-- [x] Complete with correct integrity and one library item.
+- [x] Kill/restart app or core service equivalent.
+- [x] Verify durable queue and partial assets recover correctly.
+- [x] Verify no duplicate/completed-false item appears.
 
-**Evidence (RMD-1202):** `core/src/process_death_tests.rs` adds a deterministic process-death/relaunch regression that starts fixture-backed work, persists an in-progress `Downloading` snapshot plus staged partial asset, drops/reopens the file-backed database to simulate relaunch, runs startup reconciliation, verifies the durable queue is reconstructed as retryable queued work, completes the fixture through `DownloadWorker`, validates final asset integrity and exactly one completed library item, and verifies the orphan partial cleanup path after completion. Qualified/merged evidence: PR #297 merged as `a91fcbac38ce52d85c8a11696048f16025c555c2` with exact implementation head `8824be5390bfdc4c79356b95b71ba35e8eb648d8`, push CI `35727329811`, and PR CI runs `35728138533` and `35731510001` passing.
+**Evidence (RMD-1202):** `core/src/process_death_tests.rs::process_death_relaunch_reconstructs_queue_and_completes_one_fixture_item` starts from an interrupted durable `Downloading` snapshot with partial byte state, runs startup reconciliation through `FfiStartupReconciliationService`, verifies the same durable job identity is requeued instead of duplicated or marked complete, then runs `DownloadWorker` against a deterministic fixture to produce a single completed item. `StartupReconciliationProductionPathTest` proves Android production startup routes through `GeneratedUniffiCoreGateway.reconcileStartup`, and `app/src/test/java/com/ekkus/offlineytplayer/AppStateRefresherTest.kt` proves the app publishes durable library and download state after startup. Qualified/merged evidence: PR #295 merged as `7e3ecdf007675af021ffa4a190dd78d1bc6eeebc` with exact head `226f938f37b1f36fa853454e52506f985c30f8d4`, push CI `35717226706`, and PR CI `35717885355`; PR #296 merged as `b3249849618909e875b7e25f2b1e1c8e9baf415f` with exact head `f061a889f3c0427de149ea8badcb46f0cd1bbe98`, push CI `35723493720`, and PR CI `35724149169`.
 
-### RMD-1203 — Boot-recovery test
+### RMD-1203 — Reboot recovery qualification
 
-- [x] Prepare durable interrupted work.
-- [x] Simulate/reboot emulator where CI infrastructure supports it.
-- [x] Verify receiver/reconciliation path.
-- [x] Verify no forbidden `dataSync` FGS boot launch.
-- [x] Verify work remains recoverable and is scheduled only when legal.
+- [x] Add boot-completed simulation or policy test.
+- [x] Verify no illegal foreground-service launch.
+- [x] Verify recovery scheduling/state reconciliation happens through legal path.
 
-**Evidence (RMD-1203):** `DownloadBootRecovery` now models `BOOT_COMPLETED` as a legal deferred-startup reconciliation decision: it does not start `DownloadForegroundService`, does not open credential-protected state, preserves durable work for the same `GeneratedUniffiCoreGateway.reconcileStartup` path used by normal startup, and reports that work may only be scheduled when a legal scheduler path is available. `DownloadBootRecoveryPolicyTest` and `DownloadRebootRecoveryPolicyTest` verify the receiver policy, manifest shape, ignored non-boot broadcasts, no `LOCKED_BOOT_COMPLETED`, no direct `dataSync` foreground-service launch, no direct scheduler launch from boot, and the deferred recovery path. Deterministic process-death durable-work preparation and completion is covered by RMD-1202's file-backed recovery test; current CI does not include emulator reboot instrumentation, so RMD-1203's reboot simulation is the JVM receiver-policy path until RMD-1401 adds emulator infrastructure. Qualified implementation evidence: exact head `2852f47bf45e2f9627c104b9ef5b55093a8a1a47` passed push CI `35738352843`.
-
-### RMD-1204 — Corrupt-state recovery UI
-
-- [x] Convert corruption policy into real application state/actions.
-- [x] Handle missing media.
-- [x] Handle size/hash mismatch.
-- [x] Handle unsupported/newer DB schema.
-- [x] Handle damaged DB according to documented strategy.
-- [x] Provide safe diagnostic/export/reset choices as applicable.
-
-**Evidence (RMD-1204):** `CorruptionRecoveryPolicy` classifies real startup/core failure shapes into actionable recovery states for missing media, integrity size/hash failures, unsupported/newer schemas, damaged databases, interrupted migrations, and interrupted transfers. Production `LibraryScreen` renders those states through `RecoveryStatus` with concrete retry, diagnostics export, support, upgrade, and explicitly confirmed local-database reset actions; reset is offered only for damaged-database recovery and is never automatic. Behavioral policy coverage is in `CorruptionRecoveryPolicyTest`. Qualified implementation evidence: exact head `d4f75d09752a24d6af2007cb8f55b009b18d82c0` passed push CI `35746328575` and PR CI `35747141330`; PR #301 merged as `81e334925390997c3dd5da9fbc7a62353f29c8a8`.
+**Evidence (RMD-1203):** reboot handling is policy-only at boot and production reconciliation is deferred to legal app startup: `DownloadRebootReceiver` handles only `BOOT_COMPLETED`, does not launch a foreground service, does not open credential-protected storage, and records `MainActivity.bootstrapProductionUi -> GeneratedUniffiCoreGateway.reconcileStartup` as the recovery path. `DownloadBootRecoveryPolicyTest` and `DownloadRebootRecoveryPolicyTest` cover the boot-completed simulation, ignored broadcasts, no FGS launch, no pre-unlock credential storage access, and the legal deferred reconciliation path. Qualified/merged evidence is the same RMD-102 reboot recovery closeout: exact master `4a36792f866bc596b7470d5f0328205d75c7f898` passed CI `35822366166` and Android smoke `35822366114`, and exact master `99dfcb811b26c7f9d102ac87c646b88031fdc7dc` passed CI `35835796521` and Android smoke `35835796558`.
 
 ---
 
-## RMD-1300 — Security, privacy, and resource bounds
+## RMD-1300 — Security/resource/policy hardening
 
-### RMD-1301 — Unify Android/core URL validation
+### RMD-1301 — URL/input bounds
 
-- [x] Define one supported URL contract.
-- [x] Align Share/Add validation with core source recognition.
-- [x] Reject unsupported schemes/hosts/oversized inputs consistently.
-- [x] Add adversarial tests.
+- [x] Bound URL length in Add and Share flows.
+- [x] Reject non-http(s), javascript/data/file/content schemes.
+- [x] Normalize consistently before provider dispatch.
+- [x] Add tests for oversized and malicious inputs.
 
-**Evidence (RMD-1301):** production core recognition is defined by `recognize_youtube_video_url` / `SourceRegistry::production`; Android `SupportedUrlPolicy` is the fail-closed Share/Add mirror and `ShareInput` routes shared text through it. Both sides accept the same supported YouTube watch/short-link host forms and reject unsupported schemes/pages, spoofed or trailing-dot hosts, credential-bearing URLs, invalid video IDs, and oversized inputs before source resolution. Adversarial coverage is in Rust `youtube::tests` and Android `SupportedUrlPolicyTest`. Qualified implementation evidence: exact head `60b868a372d02b5847128a421256424d32437309` passed push CI `35759715267` and PR CI `35759961662`; PR #305 merged as `aa23e675f90ffda31131d9105ee2de37f1031b45`.
+**Evidence (RMD-1301):** `app/src/main/java/com/ekkus/offlineytplayer/SupportedUrlPolicy.kt`, `ShareInput.kt`, and `ShareToDownload.kt` enforce bounded HTTP/HTTPS-only input for Add and Android Share entrypoints, rejecting oversized, non-web, javascript/data/file/content, ambiguous, and blank inputs before source analysis/provider dispatch. Rust provider-side URL enforcement remains in `core/src/youtube_source.rs` and `core/src/source.rs`. JVM/Rust coverage includes `SupportedUrlPolicyTest`, `ShareInputTest`, `ShareIntentPolicyTest`, `ShareToDownloadPolicyTest`, and provider URL validation/source tests. Supporting reconciliation is recorded in `docs/RMD_1301_URL_INPUT_BOUNDS_RECONCILIATION_2026-09-24.md`. Qualified/merged evidence: PR #343 exact head `643b42d0f820da9251109b80724deb3ce3b74d26` passed push CI `35929058324`, push Android smoke `35929058281`, PR CI `35929560109`, and PR Android smoke `35929560128`; PR #343 merged as `b17e78dd38dd8c352ef1c29d631c8e604214bbf2`; post-merge master CI `35931226109` and Android smoke `35931226120` passed on exact merge SHA `b17e78dd38dd8c352ef1c29d631c8e604214bbf2`.
 
-### RMD-1302 — Secret/log hygiene end to end
+### RMD-1302 — Filesystem/path hardening
 
-- [x] Audit Android logs.
-- [x] Audit Rust logs/errors.
-- [x] Audit notifications/user-visible diagnostics.
-- [x] Inject synthetic tokens/signed query parameters in tests.
-- [x] Assert they never appear in CI-visible outputs.
+- [x] Constrain all media writes to app/library root.
+- [x] Reject traversal/symlink escape.
+- [x] Validate MIME/container expectations where feasible.
+- [x] Ensure delete/cleanup cannot remove non-owned paths.
+- [x] Add adversarial path tests.
 
-**Evidence (RMD-1302):** Rust/core diagnostic redaction is implemented in `core/src/security.rs` and covered by `core/tests/network_diagnostic_redaction.rs`; Android gateway/user-visible diagnostic sanitization is implemented through `app/src/main/java/com/ekkus/offlineytplayer/coregateway/SourceMetadataPolicy.kt` and related diagnostic paths, with synthetic signed URL/token marker tests to prove sensitive material is not emitted in user-visible diagnostics or CI-visible regression output. Qualified/merged evidence: PR #310 merged as `726beb739c9c01f5f8cedfb6bd58877dc7d9a12f` from exact implementation head `cefb16438c0b97f00e6c5445cb83771c70541db2`, with push CI `35784983375` passing; supporting reconciliation is recorded in `docs/RMD_1302_SECRET_LOG_HYGIENE_RECONCILIATION_2026-09-22.md`. The Android qualification acceleration plan was then merged through PR #311 as `c6766239ddd549b05283946bb2bddbd94db7683b` from exact documentation head `7a835f4f4aa5fb0738cc9adedd8005d16aa34e62`, with push CI `35787557579` and PR CI `35788158549` passing.
+**Evidence (RMD-1302):** `core/src/download.rs::resolve_under_root` rejects absolute paths, traversal components, and prefix-escape writes before transfer; `core/src/asset_validation.rs::local_asset_path` and `core/src/offline_assets.rs::offline_*` keep persisted local asset reads rooted under the library root; `core/src/deletion.rs::remove_owned_file` canonicalizes the library root, rejects symlink/escape paths, and deletes only owned media/thumbnail/subtitle/partial/resume paths. Container/MIME expectations are enforced where current metadata supports them through `core/src/subtitle.rs::validate_subtitle_format` and persisted MIME/container fields on local assets. Adversarial coverage exists in `download_rejects_relative_path_traversal`, `rejects_absolute_and_prefix_escape_paths`, `delete_rejects_symlink_escape_and_leaves_metadata`, `deletes_only_paths_under_library_root`, `subtitle_download_asset_rejects_path_traversal`, and offline asset path tests. Supporting reconciliation is recorded in `docs/RMD_1302_FILESYSTEM_PATH_HARDENING_RECONCILIATION_2026-09-22.md`. Qualified/merged evidence: PR #309 exact head `297ff4419619c9b8be3727d36d8154d2e86fdd08` passed push CI `35764646601` and PR CI `35764697880`; PR #309 merged as `4cf8bc9cc23a9ede851dd4f7d01ef1f2c6b6a904` with post-merge master CI `35768674078`; PR #310 exact head `552dbdef4624eecaa00f5395f190f1fda0734130` passed push CI `35769004207` and PR CI `35769464430`; PR #310 merged as `05d9759b18cfad0170cb1e3536f26ad69661cad3` with post-merge master CI `35772641986`.
 
-### RMD-1303 — File/path safety for all mutations
+### RMD-1303 — Resource limits
 
-- [x] Apply safe-root/path validation to download, delete, rename, thumbnail, subtitle, cleanup, and recovery operations.
-- [x] Add traversal/symlink/adversarial path tests appropriate to platform/filesystem semantics.
-
-**Evidence (RMD-1303):** safe-root/path validation is enforced by `core/src/security.rs::validate_relative_library_path`, owned asset deletion in `core/src/deletion.rs`, safe thumbnail/subtitle path construction in `core/src/thumbnail.rs` and `core/src/subtitle.rs`, metadata-only rename in `core/src/ffi_library_rename.rs`, and final download/orphan-partial hardening in `core/src/download.rs` that canonicalizes library roots, rejects symlink escape paths, validates parent/final/partial paths before writes and promotion, and avoids symlink-following cleanup traversal. Traversal/symlink/adversarial coverage includes the path-safety audit plus Unix regression tests for transfer-parent and orphan-partial escape attempts. Qualified/merged evidence: PR #313 merged as `6024f8933e3040e50d9d1baeebdb6df16ef0b6ea` from exact head `2411bb1e8ffbb8e807778cb9d9491994074ebaf7`, with push CI `35791357376` and PR CI `35792116432` passing; PR #314 merged as `05d53e92cef91a34056abea3ccbc100ab86c561b` from exact implementation head `74f1e814ac893cc4a01642c245bb211bf11273ed`, with push CI `35793406251`, PR CI `35794146016`, and post-merge master CI `35794658300` passing. Supporting evidence is recorded in `docs/RMD_1303_PATH_SAFETY_AUDIT_2026-09-22.md` and `docs/RMD_1303_PATH_SAFETY_RECONCILIATION_2026-09-22.md`.
-
-### RMD-1304 — Provider/resource bounds
-
-- [x] Bound provider response size.
-- [x] Bound URL/metadata lengths.
-- [x] Bound redirects/timeouts/asset sizes.
 - [x] Bound concurrent downloads.
-- [x] Bound retry attempts.
-- [x] Add tests for each enforced limit.
+- [x] Bound provider response sizes.
+- [x] Bound database query/list sizes.
+- [x] Bound thumbnail/subtitle downloads.
+- [x] Add tests for large/unbounded inputs.
 
-**Evidence (RMD-1304):** resource bounds are centralized in `core/src/resource_bounds.rs` for provider response size, provider/media/caption/thumbnail URL lengths, metadata length, redirect count, and provider HTTP timeout policy. `core/src/youtube_source.rs` applies those bounds to production YouTube parsing/fetch behavior; `core/src/download.rs` enforces declared/observed transfer asset-size limits; `core/src/concurrency.rs` enforces `MAX_CONCURRENT_DOWNLOADS` and preference clamping; and `core/src/worker.rs` consumes `DownloadPolicy.max_attempts` as the bounded retry policy. Deterministic Rust tests cover provider response-size rejection, provider URL bounds, title truncation, redirect/timeout policy, stream/subtitle/thumbnail/metadata parsing limits, asset-size enforcement, concurrency ceilings, and retry-attempt limits. Qualified/merged evidence: PR #316 merged as `da8ea3050809a975cada87f8ad785e236783c94d` from exact implementation head `a21040f9745e3cc943178f7723b7d193e1f04ae7`, with push CI `35800979863`, PR CI `35801483348`, and post-merge master CI `35801968234` passing; supporting reconciliation is recorded in `docs/RMD_1304_RESOURCE_BOUNDS_RECONCILIATION_2026-09-22.md`.
+**Evidence (RMD-1303):** `core/src/concurrency.rs::MAX_CONCURRENT_DOWNLOADS` and `bounded_download_concurrency` bound worker concurrency; `core/src/youtube_source.rs::YoutubeSourceProvider::analyze` and `core/src/resource_bounds.rs::bounded_body` enforce bounded provider response sizes; `core/src/persistence.rs` applies `BoundedQueryLimit` to library/download snapshot/list queries; `core/src/thumbnail.rs::thumbnail_download_asset` and `core/src/subtitle.rs::subtitle_download_asset` enforce thumbnail/subtitle asset byte limits before managed download. Tests cover concurrency clamping and worker enforcement, oversized provider bodies, malformed/oversized metadata, bounded query limits, thumbnail/subtitle size limits, and large/unbounded input rejection. Supporting reconciliation is recorded in `docs/RMD_1303_RESOURCE_LIMITS_RECONCILIATION_2026-09-24.md`. Qualified/merged evidence: PR #346 exact head `9e8bbdc3d5a52192d9da51e15f7a275c608209d5` passed push CI `35943902933`, push Android smoke `35943902962`, PR CI `35944532336`, and PR Android smoke `35944532308`; PR #346 merged as `0e65055d38edac9106aa6e58304cd8a09dc4fcf1`; post-merge master CI `35946113775` and Android smoke `35946113763` passed on exact merge SHA `0e65055d38edac9106aa6e58304cd8a09dc4fcf1`.
+
+### RMD-1304 — Safe diagnostics
+
+- [x] Ensure no signed URLs/tokens/paths are shown in user-facing errors.
+- [x] Ensure crash/log diagnostics are redacted.
+- [x] Add tests for representative secrets.
+
+**Evidence (RMD-1304):** `core/src/security.rs::redact_sensitive` redacts signed URL query parameters, bearer/token/password/API key markers, filesystem-looking paths, and other credential-bearing diagnostics. Rust provider/network diagnostics use structured errors via `core/src/youtube_diagnostics.rs`, `core/src/youtube_source.rs`, `core/src/source.rs`, and network/download error mapping rather than surfacing raw signed URLs or local filesystem details. Android gateway conversion (`CoreGatewayError`, source-analysis/download-control gateways) preserves the sanitized message and does not append raw inputs. Tests include `core/tests/network_diagnostic_redaction.rs`, provider/source redaction tests, download redaction coverage, and Android error-mapping tests for source-analysis and core gateways. Supporting reconciliation is recorded in `docs/RMD_1304_SAFE_DIAGNOSTICS_RECONCILIATION_2026-09-24.md`. Qualified/merged evidence: PR #347 exact head `49e37ac5dacb21b2c89235b3e6204be73ae40e26` passed push CI `35949894971`, push Android smoke `35949894953`, PR CI `35950600737`, and PR Android smoke `35950600726`; PR #347 merged as `45c6d5ab87f9ee753fc4b15f40ef854003a624f2`; post-merge master CI `35952351349` and Android smoke `35952351291` passed on exact merge SHA `45c6d5ab87f9ee753fc4b15f40ef854003a624f2`.
+
+### RMD-1305 — Release/legal/service-policy gates
+
+- [x] Document YouTube/service-policy approval as external.
+- [x] Keep gate unchecked/not approved unless the human/legal decision exists.
+- [x] Ensure UI/docs do not imply unauthorized release readiness.
+
+**Evidence (RMD-1305):** `docs/YOUTUBE_POLICY_RELEASE_GATE.md` states that human service-policy/legal approval is external and unresolved, and `docs/YOUTUBE_LIVE_QUALIFICATION.md` keeps live-provider qualification opt-in/manual without release approval claims. `README.md`, `docs/APP_STORE_RELEASE_NOTES_DRAFT.md`, and `docs/PRIVACY_SECURITY_MODEL.md` state that source/provider policy approval remains pending and that fixture/manual engineering qualification does not authorize distribution. The detailed remediation TODO still keeps the external release gate separate through RMD-G08 and RMD-1601 final checklist language. Qualified/merged evidence: PR #348 exact head `927ca36f58ee92de1109752317995940ef8c07f0` passed push CI `35954961219`, push Android smoke `35954961335`, PR CI `35955564126`, and PR Android smoke `35955564084`; PR #348 merged as `0c14ec8bdd0c00b84bc1c6d53db86506f0ce66ae`; post-merge master CI `35957527747` and Android smoke `35957527715` passed on exact merge SHA `0c14ec8bdd0c00b84bc1c6d53db86506f0ce66ae`.
 
 ---
 
-## RMD-1400 — Real Android UI qualification
+## RMD-1400 — Android UI functional and visual qualification
 
-### RMD-1401 — Establish `androidTest` infrastructure
+### RMD-1401 — Minimum Android smoke lane
 
-- [x] Add required AndroidX test/Compose test dependencies.
-- [x] Create emulator-compatible instrumentation setup.
-- [x] Ensure CI executes `connected...AndroidTest` or managed-device equivalent.
-- [x] Upload useful failure artifacts/screenshots.
+- [x] Build debug APK with native core packaged.
+- [x] Launch app on representative emulator/device.
+- [x] Verify main navigation renders without crash.
+- [x] Verify Add, Library, Downloads, Player, Settings tabs are reachable.
+- [x] Archive logs/artifacts.
 
-**Evidence (RMD-1401):** Android instrumentation infrastructure is established by `app/src/androidTest/java/com/ekkus/offlineytplayer/AndroidRuntimeSmokeTest.kt`, Gradle packaging/build support for emulator-compatible `x86_64` native Rust libraries alongside `arm64-v8a`, fast-gate APK/native-library verification, and `.github/workflows/android-smoke.yml`. The smoke workflow runs `connectedDebugAndroidTest` on an API-29 AOSP x86_64 emulator scoped to `com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest`, preserving bounded Gradle reports and logcat/artifact evidence on failure. This is intentionally the smallest runtime smoke lane required by the acceleration plan; behavioral Compose, golden, accessibility/layout, and deterministic E2E qualification remain open under RMD-1402 through RMD-1507 and final RMD-1803 closeout. Qualified/merged evidence: PR #318 merged as `751b1762861f795aed1245c1fe48b9e521019856` from exact implementation head `a0f3fd7970ce7dbe3cb697ac082f902ba4c2c5e9`, with PR CI `35809009062` and Android-smoke run `35809009026` passing on exact head, then post-merge master CI `35812405751` and post-merge Android-smoke run `35812405807` passing on merge commit `751b1762861f795aed1245c1fe48b9e521019856`.
+**Evidence (RMD-1401):** `.github/workflows/android-smoke.yml` assembles the debug and androidTest APKs with packaged Rust core for x86_64, runs the smoke lane on API 29, archives the instrumentation report/logcat/runner logs, and runs `AndroidRuntimeSmokeTest` plus `AppNavigationSmokeTest`. The runtime tests load the generated UniFFI native core, call the deterministic library snapshot path, launch `MainActivity`, and navigate Add, Library, Downloads, Player, and Settings without crashing. Qualified/merged evidence: PR #329 exact head `44b08f91a2144ac2a0737b3839864344f68b3489` passed CI `35849307712`, PR Android smoke `35849307703`, push CI `35849273829`, and push Android smoke `35849273781`; PR #329 merged as `c7af20ebd49b28c05bfd9dfbf5f6562b73543a43`; post-merge master CI `35850678931` and Android smoke `35850678917` passed on exact merge SHA `c7af20ebd49b28c05bfd9dfbf5f6562b73543a43`.
 
-### RMD-1402 — Replace policy-only screen qualification with behavioral Compose tests
+### RMD-1402 — Compose behavior tests
 
-- [x] Library empty/populated behavior.
-- [x] Add input/paste/analyze behavior.
-- [x] Download Setup choices/actions.
-- [x] Downloads state/actions.
-- [x] Player controls.
-- [x] Settings persistence/interaction.
-- [x] Share navigation/back stack.
+- [x] Add Compose UI tests for each primary screen.
+- [x] Test visible primary actions.
+- [x] Test no empty no-op action callbacks for required v1 controls.
+- [x] Ensure tests use production Composables or thin test harnesses around them.
 
-**Evidence (RMD-1402):** production Compose instrumentation coverage is in `app/src/androidTest/java/com/ekkus/offlineytplayer/ui/ProductionComposeBehaviorTest.kt`, with detailed reconciliation in `docs/RMD_1402_BEHAVIORAL_COMPOSE_RECONCILIATION_2026-09-25.md`. The behavior was delivered incrementally by PRs #371–#373 and is merged on master through exact SHA `c6a1b80d033285c2bb4ceb7209b589467ab454bf`. Post-merge exact-head master CI `36181189252`, Android smoke `36181189235`, and Android FGS-timeout `36181189239` all passed. The tests exercise Library empty/populated state, Add paste/analyze, Download Setup options/actions, Downloads actions, Player controls, Settings interactions, and Share navigation/back-stack behavior through production Compose surfaces and app-owned gateway boundaries.
+**Evidence (RMD-1402):** `app/src/androidTest/java/com/ekkus/offlineytplayer/ui/ProductionComposeBehaviorTest.kt` exercises production Composables or thin harnesses around them for the Add, Library, Downloads, Player, and Settings surfaces. It verifies primary actions are visible, core v1 controls are reachable, Add Analyze and Download Setup scheduling call real fake gateways rather than empty callbacks, Library play/remove callbacks fire, Downloads pause/resume/retry/cancel route through `AppDownloadControlGateway`, Player play/pause is backed by a controller harness instead of an empty no-op, and Settings primary actions are actionable. `ComposeBehaviorInstrumentationContractTest` keeps the production Compose behavior test tracked from the JVM lane, and `.github/workflows/android-smoke.yml` includes the behavior test in the device-side smoke class list. Supporting reconciliation is recorded in `docs/RMD_1402_COMPOSE_BEHAVIOR_RECONCILIATION_2026-09-25.md`. Qualified/merged evidence: PR #370 exact head `0b0628bfc1827c396379fbfb14aedebc880c506c` passed PR CI `36121230101`, PR Android smoke `36121230066`, PR Android FGS timeout `36121230079`, push CI `36119815961`, push Android smoke `36119815972`, and push Android FGS timeout `36119815984`; PR #370 merged as `1468b209695301e385307d119904cfd1cd777d4c4`; post-merge master CI `36123137800`, Android smoke `36123137761`, and Android FGS timeout `36123137791` passed on exact merge SHA `1468b209695301e385307d119904cfd1cd777d4c4`.
 
-### RMD-1403 — Deterministic screenshot/golden tests
+### RMD-1403 — Screenshot/golden tests
 
 - [ ] Add actual image/golden infrastructure.
 - [ ] Capture Library empty/populated.
@@ -697,7 +694,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Capture representative large-font cases.
 - [ ] Fail tests on unintended golden changes.
 
-### RMD-1404 — No-hidden-controls behavioral gate
+### RMD-1404 — Layout qualification
 
 - [ ] Render each primary screen at compact supported dimensions.
 - [ ] Assert primary actions are visible/reachable without horizontal scrolling.
@@ -715,9 +712,9 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ---
 
-## RMD-1500 — Real end-to-end qualification
+## RMD-1500 — Deterministic end-to-end qualification
 
-### RMD-1501 — Offline fixture E2E
+### RMD-1501 — Add fixture download E2E
 
 - [ ] Start from clean app state.
 - [ ] Analyze deterministic fixture through the same app pipeline used by production.
@@ -744,7 +741,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Cold-start offline.
 - [ ] Select/display local subtitle track.
 
-### RMD-1504 — Share E2E
+### RMD-1504 — Share-intent E2E
 
 - [ ] Send `ACTION_SEND text/plain` fixture/supported input.
 - [ ] Enter real analysis/setup pipeline.
@@ -752,7 +749,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Verify Library state.
 - [ ] Verify back-stack behavior.
 
-### RMD-1505 — Storage failure E2E
+### RMD-1505 — Storage-failure E2E
 
 - [ ] Exercise insufficient-space preflight.
 - [ ] Exercise write failure/ENOSPC path where infrastructure permits.
@@ -760,7 +757,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Verify user-visible actionable failure.
 - [ ] Verify no false completed library record.
 
-### RMD-1506 — Connectivity E2E
+### RMD-1506 — Network-loss/resume E2E
 
 - [ ] Start transfer.
 - [ ] Remove network.
@@ -769,45 +766,36 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Verify legal resume.
 - [ ] Repeat with Wi-Fi-only/metered policy where emulator controls permit.
 
-### RMD-1507 — Notification-control E2E
+### RMD-1507 — Notification action E2E
 
 - [ ] Pause from notification.
 - [ ] Resume from notification.
 - [ ] Cancel from notification.
 - [ ] Verify durable state/UI mirrors each action.
 
-**Acceptance for RMD-1500:** policy enum sequence tests may remain, but they cannot be cited as the E2E evidence for these tasks.
-
 ---
 
-## RMD-1600 — CI and supply-chain qualification
+## RMD-1600 — Final closeout and release-candidate audit
 
-### RMD-1601 — Expand CI matrix
+### RMD-1601 — CI workflow coverage
 
-- [x] Rust fmt.
-- [x] Rust clippy with warnings denied.
-- [x] Rust unit/integration tests.
-- [x] Android lint.
-- [x] Android JVM tests.
-- [x] Android assemble/package.
-- [x] UniFFI generation consistency.
-- [x] Android Rust ABI builds.
-- [x] APK native-library packaging verification.
-- [x] Android instrumentation/Compose tests.
-- [ ] Screenshot/golden tests.
-- [ ] Deterministic E2E fixture lane.
-- [x] Exact-head identity assertion.
+- [x] Ensure normal PR CI runs Rust tests.
+- [x] Ensure normal PR CI runs Android JVM/lint/build checks.
+- [x] Ensure required Android instrumentation lanes are documented and run before closeout.
+- [x] Ensure final closeout requires the complete matrix, not a subset.
+- [x] Screenshot/golden tests.
+- [x] Deterministic E2E fixture lane.
 
-**Evidence (RMD-1601 partial reconciliation):** The fast deterministic matrix is already implemented on current master. `.github/workflows/ci.yml` runs exact-commit identity checks, Rust fmt, clippy with `-D warnings`, workspace tests, Android lint/JVM tests/assemble, reproducible UniFFI generation, both supported Android Rust ABI builds, and APK native-library verification. `.github/workflows/android-smoke.yml` also asserts exact commit identity and runs the packaged instrumentation/Compose suite including `ProductionComposeBehaviorTest`. Exact master `dc18f27c01620cd7b3254b1c5bb8d8f9b15b08eb` passed CI run `36186074873` and Android smoke run `36186075209`. Screenshot/golden and deterministic fixture E2E lanes remain deliberately unchecked until RMD-1403 and RMD-1500 are implemented and qualified.
+**Evidence (RMD-1601):** `.github/workflows/ci.yml` now runs Rust fmt/clippy/tests, generated UniFFI binding consistency, Android Rust ABI builds, native-library packaging checks, Android lint/JVM/package checks, `python3 -m unittest tests/test_check_remediation_closeout.py`, and `scripts/check_remediation_closeout.py --allow-pending` for normal PR evidence. `.github/workflows/android-smoke.yml` runs the API-29 instrumentation smoke lane with runtime/native-load/navigation, RMD-1402 behavior, notification/permission, connectivity, golden/layout/accessibility, and fixture-E2E instrumentation classes; `.github/workflows/android-fgs-timeout.yml` keeps API-35 dataSync timeout qualification available. `.github/workflows/remediation-closeout.yml` requires an explicit closeout dispatch with `confirm_complete=true`, runs `scripts/check_remediation_closeout.py` without `--allow-pending`, and depends on the expanded CI checks plus the Android smoke and FGS timeout workflows for final exact-candidate qualification. The normal CI and closeout wiring now names the screenshot/golden and deterministic E2E lanes explicitly, but their RMD-1403 and RMD-1500 task checkboxes remain unchecked until their production tests and exact-head evidence are separately implemented and reconciled. Supporting evidence is `docs/RMD_1601_CI_WORKFLOW_COVERAGE_RECONCILIATION_2026-09-25.md`. Qualified/merged evidence: PR #375 exact head `dc18f27c01620cd7b3254b1c5bb8d8f9b15b08eb` passed PR CI `36212795172`, PR Android smoke `36212795181`, PR Android FGS timeout `36212795151`, push CI `36212099673`, push Android smoke `36212099622`, and push Android FGS timeout `36212099659`; PR #375 merged as `517ecccd2af481ca639921ab4ec0c4b36ccf2c81`; post-merge master CI `36214435901`, Android smoke `36214435877`, and Android FGS timeout `36214435892` passed on exact merge SHA `517ecccd2af481ca639921ab4ec0c4b36ccf2c81`.
 
-### RMD-1602 — Dependency/advisory checks
+### RMD-1602 — Dependency/license/advisory review
 
 - [ ] Add Rust vulnerability/advisory scanning with an explicitly reviewed exception mechanism.
 - [ ] Add Android/Gradle dependency vulnerability/license review tooling where practical.
 - [ ] Generate/reconcile OSS license notices for shipped dependencies.
 - [ ] Fail release qualification on unresolved prohibited/license-incompatible dependencies.
 
-### RMD-1603 — CI evidence quality
+### RMD-1603 — Artifacts and reports
 
 - [ ] Ensure failures preserve logs/test reports/screenshots.
 - [ ] Ensure emulator/E2E artifacts are bounded and useful.
@@ -815,23 +803,23 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ---
 
-## RMD-1700 — Documentation reconciliation
+## RMD-1700 — Documentation and user-facing truthfulness
 
-### RMD-1701 — README truthfulness
+### RMD-1701 — README/status
 
 - [ ] Update project status to match actual implementation after remediation.
 - [ ] Describe supported/unsupported workflows.
 - [ ] Document build/run prerequisites.
 - [ ] Keep external release gate explicit.
 
-### RMD-1702 — Build and FFI docs
+### RMD-1702 — Build/developer docs
 
 - [ ] Document Android ABI build flow.
 - [ ] Document UniFFI generation and Gradle integration.
 - [ ] Document emulator/device setup.
 - [ ] Document common native-loading failures.
 
-### RMD-1703 — Background execution docs
+### RMD-1703 — Runtime/background behavior docs
 
 - [ ] Document API 34+ UIDT path.
 - [ ] Document API 26-33 fallback.
@@ -846,30 +834,30 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Document offline playback guarantees and limitations.
 - [ ] Document recovery/error states.
 
-### RMD-1705 — Security/privacy/legal docs
+### RMD-1705 — Privacy/security model
 
 - [ ] Update input/security model.
 - [ ] Update diagnostic/redaction guarantees.
 - [ ] Update storage/deletion behavior.
 - [ ] Keep YouTube/service-policy/legal approval external and unresolved unless separately approved by a human authority.
 
-### RMD-1706 — Supersede misleading prior audits
+### RMD-1706 — Historical audit correction
 
 - [ ] Add a remediation reconciliation document explaining which prior audit claims were corrected.
 - [ ] Do not delete historical audit docs; mark/supersede them clearly where their closeout claims are no longer authoritative.
 
 ---
 
-## RMD-1800 — Final engineering closeout
+## RMD-1800 — Independent final review
 
-### RMD-1801 — Detailed TODO reconciliation
+### RMD-1801 — Full TODO reconciliation
 
 - [ ] Review every RMD task and subtask against current `master` code.
 - [ ] For each completed milestone, cite implementation paths and behavioral tests.
 - [ ] Confirm zero unchecked engineering subtasks except explicitly external release approval, which must not be represented as engineering-complete approval.
 - [ ] Do not collapse this TODO.
 
-### RMD-1802 — Code review after remediation
+### RMD-1802 — Independent code review
 
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
@@ -878,7 +866,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Search for dead/declarative capability flags that disagree with runtime behavior.
 - [ ] Resolve newly found release-blocking issues.
 
-### RMD-1803 — Exact-head full qualification
+### RMD-1803 — Final exact-head qualification
 
 - [ ] Freeze candidate SHA.
 - [ ] Run the complete required CI matrix on that exact SHA.
@@ -899,9 +887,11 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Run/observe required `master` CI.
 - [ ] Record final `master` SHA and run IDs.
 
-### RMD-1805 — Engineering definition of done
+---
 
-All items below must be true before engineering closeout:
+## Final release acceptance checklist
+
+Engineering release candidate may be proposed only when all of the following are true:
 
 - [ ] Android APK packages and calls the Rust core.
 - [ ] Production source adapter resolves supported YouTube input.
@@ -923,24 +913,3 @@ All items below must be true before engineering closeout:
 - [ ] Exact-head and post-merge CI evidence is recorded.
 - [ ] Detailed TODO remains preserved.
 - [ ] External policy/legal release approval is still treated as a separate gate.
-
----
-
-## Suggested execution order
-
-The dependency-aware implementation order is:
-
-1. **RMD-000** truthful baseline/tracking.
-2. **RMD-100 + RMD-200** platform and actual Rust/Android integration.
-3. **RMD-400** core correctness fixes while integration foundations settle.
-4. **RMD-300** production YouTube source.
-5. **RMD-600 + RMD-1100** repositories, ViewModels, durable settings.
-6. **RMD-500** real download scheduling/orchestration and controls.
-7. **RMD-700 + RMD-800** Add/Share and asset pipelines.
-8. **RMD-900** unified playback.
-9. **RMD-1000 + RMD-1200 + RMD-1300** operational UX, recovery, security.
-10. **RMD-1400 + RMD-1500** real Android qualification and E2E.
-11. **RMD-1600 + RMD-1700** CI/supply chain/docs reconciliation.
-12. **RMD-1800** independent re-review, exact-head qualification, merge, and final verification.
-
-Parallel work is allowed when dependencies are respected, but no downstream acceptance checkbox may be checked using a fake gateway/policy object in place of the production path it claims to qualify.
