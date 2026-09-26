@@ -45,6 +45,64 @@ class SchedulingDownloadControlGatewayTest {
         assertEquals(DownloadNetworkPreference.AnyNetwork, scheduler.requests.single().networkPreference)
     }
 
+    @Test
+    fun resumeWaitsWithoutQueueMutationWhenWifiOnlySettingViolatesCurrentConnectivity() {
+        val delegate = FakeDownloadControlGateway()
+        val scheduler = RecordingDownloadExecutionScheduler(accepted = true)
+        val gateway = SchedulingDownloadControlGateway(
+            delegate = delegate,
+            scheduler = scheduler,
+            settingsSnapshot = { AppSettingsSnapshot(wifiOnlyDownloads = true) },
+            connectivitySnapshot = { DownloadConnectivity.Metered },
+        )
+
+        val result = gateway.resume("job-paused")
+
+        assertFalse(result.value ?: true)
+        assertEquals("waiting_for_connectivity", result.error?.kind)
+        assertTrue(result.error?.retryable == true)
+        assertTrue(delegate.resumedJobIds.isEmpty())
+        assertTrue(scheduler.requests.isEmpty())
+    }
+
+    @Test
+    fun resumeTransitionsDurableQueueThenSchedulesWithCurrentSettings() {
+        val delegate = FakeDownloadControlGateway()
+        val scheduler = RecordingDownloadExecutionScheduler(accepted = true)
+        val gateway = SchedulingDownloadControlGateway(
+            delegate = delegate,
+            scheduler = scheduler,
+            settingsSnapshot = { AppSettingsSnapshot(wifiOnlyDownloads = true) },
+            connectivitySnapshot = { DownloadConnectivity.Unmetered },
+        )
+
+        val result = gateway.resume("job-paused")
+
+        assertEquals(CoreGatewayResult(value = true, error = null), result)
+        assertEquals(listOf("job-paused"), delegate.resumedJobIds)
+        assertEquals("job-paused", scheduler.requests.single().queueItemId)
+        assertEquals(DownloadNetworkPreference.WifiOnly, scheduler.requests.single().networkPreference)
+    }
+
+    @Test
+    fun resumeReportsSchedulerRejectionAfterDurableQueueAcceptsWork() {
+        val delegate = FakeDownloadControlGateway()
+        val scheduler = RecordingDownloadExecutionScheduler(accepted = false)
+        val gateway = SchedulingDownloadControlGateway(
+            delegate = delegate,
+            scheduler = scheduler,
+            settingsSnapshot = { AppSettingsSnapshot(wifiOnlyDownloads = false) },
+            connectivitySnapshot = { DownloadConnectivity.Metered },
+        )
+
+        val result = gateway.resume("job-paused")
+
+        assertFalse(result.value ?: true)
+        assertEquals("scheduler_rejected", result.error?.kind)
+        assertEquals(listOf("job-paused"), delegate.resumedJobIds)
+        assertEquals(DownloadNetworkPreference.AnyNetwork, scheduler.requests.single().networkPreference)
+    }
+
     private class RecordingDownloadExecutionScheduler(
         private val accepted: Boolean,
     ) : DownloadExecutionScheduler {
