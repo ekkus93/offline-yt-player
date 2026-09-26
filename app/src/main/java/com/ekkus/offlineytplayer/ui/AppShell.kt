@@ -3,6 +3,7 @@ package com.ekkus.offlineytplayer.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.NavigationBar
@@ -81,5 +84,40 @@ private fun formatSetupBytes(bytes: Long): String = if (bytes >= 1024L * 1024L) 
 private fun optionSummary(options: List<String>, fallback: String): String = options.filter { it.isNotBlank() }.distinct().takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: fallback
 private fun preferredQualityLabel(options: List<String>, configured: String, fallback: String): String = options.firstOrNull { it.equals(configured, ignoreCase = true) } ?: configured.takeIf { it.isNotBlank() && options.isEmpty() } ?: fallback
 private fun downloadSettingsSummary(settings: AppSettingsSnapshot): String = "${if (settings.wifiOnlyDownloads) "Wi-Fi only" else "Any network"} · ${settings.maxConcurrentDownloads} concurrent"
-@Composable private fun DownloadSetupPreview(setup: DownloadSetupState, onOptions: () -> Unit, onDownload: () -> Unit) { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Text("Download setup"); Text(setup.title); Text("Source: ${setup.sourceUrl}"); setup.thumbnailUrl?.takeIf { it.isNotBlank() }?.let { Text("Thumbnail: $it") }; Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}"); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { OutlinedButton(onClick = onOptions, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Options") }; Button(onClick = onDownload, enabled = setup.readyForDownload, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Download") } } } }
+@Composable
+private fun ColumnScope.DownloadSetupPreview(
+    setup: DownloadSetupState,
+    onOptions: () -> Unit,
+    onDownload: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().weight(1f),
+        verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+        ) {
+            Text("Download setup")
+            Text(setup.title)
+            Text("Source: ${setup.sourceUrl}")
+            setup.thumbnailUrl?.takeIf { it.isNotBlank() }?.let { Text("Thumbnail: $it") }
+            Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}")
+        }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+        ) {
+            OutlinedButton(
+                onClick = onOptions,
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Options") }
+            Button(
+                onClick = onDownload,
+                enabled = setup.readyForDownload,
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Download") }
+        }
+    }
+}
 @Composable private fun AdvancedDownloadOptions(padding: PaddingValues, setup: DownloadSetupState, onBack: () -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Download options"); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; SettingValue("Quality choices", optionSummary(setup.qualityOptions, setup.qualityLabel)); SettingValue("Audio choices", optionSummary(setup.audioOptions, "Default track only")); SettingValue("Subtitle tracks", optionSummary(setup.subtitleOptions, "None reported by source")); SettingValue("Container choices", optionSummary(setup.containerOptions, "Best compatible")); Box(Modifier.weight(1f)); Button(onClick = onBack, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Apply options") } } }
