@@ -1,0 +1,65 @@
+name: Supply chain
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  supply-chain:
+    name: Advisory and license notice review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+      - name: Generate Rust lockfile for advisory scan
+        run: cargo generate-lockfile
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Rust advisory scan
+        run: cargo audit --deny warnings
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Android SDK command-line tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: "false"
+      - name: Install pinned Android SDK
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+      - name: Generate Gradle dependency review artifact
+        run: |
+          mkdir -p build/reports/supply-chain
+          ./gradlew --no-daemon :app:dependencies --configuration debugRuntimeClasspath > build/reports/supply-chain/debugRuntimeClasspath.txt
+          ./gradlew --no-daemon :app:dependencies --configuration debugAndroidTestRuntimeClasspath > build/reports/supply-chain/debugAndroidTestRuntimeClasspath.txt
+      - name: Verify third-party notices are reconciled
+        run: python3 scripts/generate_third_party_notices.py --check
+      - name: Upload supply-chain evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supply-chain-evidence-${{ github.run_id }}
+          path: |
+            Cargo.lock
+            build/reports/supply-chain
+            docs/THIRD_PARTY_NOTICES.md
+          if-no-files-found: ignore
+          retention-days: 14
