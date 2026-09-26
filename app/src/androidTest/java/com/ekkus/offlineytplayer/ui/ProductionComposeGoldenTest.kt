@@ -350,6 +350,7 @@ class ProductionComposeGoldenTest {
             "player" to setOf(
                 "bf3575836add842e2d9dae445c77c1194a6247ff26f9adac3a7851c3bd353f77",
                 "9d29c633509966b60823cde060d681cb3dbd7b9849607c5576bb7879797b0ed2",
+                "ac97f999b0b98dac7c76d0098a8c509bb80c5149a6c9a98b3882fa663c2e5f6e",
             ),
             "settings_hub" to setOf("907224d90bc0a87418bed06661427bc4dfc6aa9871a64348fc03ba238fac0052"),
             "smallest_portrait" to setOf("54e27dfa0c00e4ee672d13ac7d80193512406be63a0a015ac1a44fce66fc8498"),
