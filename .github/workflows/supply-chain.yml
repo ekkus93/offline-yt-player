@@ -49,7 +49,7 @@ jobs:
         run: |
           mkdir -p build/reports/supply-chain
           ./gradlew --no-daemon :app:dependencies --configuration debugRuntimeClasspath > build/reports/supply-chain/debugRuntimeClasspath.txt
-          ./gradlew --no-daemon :app:dependencies --configuration androidTestRuntimeClasspath > build/reports/supply-chain/androidTestRuntimeClasspath.txt
+          ./gradlew --no-daemon :app:dependencies --configuration debugAndroidTestRuntimeClasspath > build/reports/supply-chain/debugAndroidTestRuntimeClasspath.txt
       - name: Verify third-party notices are reconciled
         run: python3 scripts/generate_third_party_notices.py --check
       - name: Upload supply-chain evidence
