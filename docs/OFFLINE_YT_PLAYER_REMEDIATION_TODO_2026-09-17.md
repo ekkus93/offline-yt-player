@@ -250,6 +250,7 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-408 — Reconcile concurrency/resource-policy duplication
 
 
+
 - [x] Identify conflicting core/Android concurrency constants.
 - [x] Establish one maximum enforced by core and one user preference bounded by it.
 - [x] Ensure Android cannot request a value above the core bound.
@@ -341,9 +342,11 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-602 — Download repository wiring
 
-- [ ] Replace hard-coded empty Downloads data with durable queue state.
-- [ ] Implement filters against actual states.
-- [ ] Update rows from actual progress/events.
+- [x] Replace hard-coded empty Downloads data with durable queue state.
+- [x] Implement filters against actual states.
+- [x] Update rows from actual progress/events.
+
+**Evidence (RMD-602):** Production Downloads state is repository-backed: `MainActivity.bootstrapProductionUi()` opens `GeneratedUniffiCoreGateway` against the app-private SQLite database and obtains the durable queue through `listDownloadQueue()`; `AppStateRefresher` refreshes that queue off the UI thread and republishes it into Compose state. `DownloadsScreen` applies `DownloadScreenPolicy.matchesFilter` to real mapped `DownloadUiState` values for All, Active, Paused, Failed, and Completed, and row presentation maps durable transferred/total bytes, state, bounded progress, speed/ETA, and sanitized errors without fabricating unknown-length progress. JVM coverage includes `DownloadsOperationalScreenTest` and `DownloadRowPolicyTest`. Detailed reconciliation is recorded in `docs/RMD_602_DOWNLOAD_REPOSITORY_RECONCILIATION_2026-09-27.md`. Exact evidence head `6adf218414e7fff4213aa1c75b64196888fbea85` passed CI runs `36313946270` / `36313962835`, Android smoke `36313946262` / `36313962935`, Android FGS timeout `36313946320` / `36313962832`, and Supply chain `36313946304` / `36313962756`. RMD-601, RMD-603, and RMD-604 remain fail-closed and unchecked.
 
 ### RMD-603 — Source-analysis repository/use case
 
@@ -497,6 +500,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Implement list/grid behavior if both remain advertised.
 - [ ] Preserve selected layout setting.
 - [ ] Provide empty/loading/error states.
+
 
 ### RMD-1002 — Library Play action
 
@@ -748,6 +752,7 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-1503 — Subtitle offline E2E
 
 - [ ] Download fixture subtitle track.
+
 - [ ] Persist language/format.
 - [ ] Cold-start offline.
 - [ ] Select/display local subtitle track.
