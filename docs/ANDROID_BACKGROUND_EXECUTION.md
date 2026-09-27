@@ -1,6 +1,6 @@
 # Android Background Execution Model
 
-This document records the current Offline YT Player Android background-execution contract for the remediation track. It is intentionally explicit about what is implemented today and which later RMD tasks still own durable production execution.
+This document records the current Offline YT Player Android background-execution contract for the remediation track. It is intentionally explicit about the platform boundaries that are implemented today and the remaining end-to-end qualification work that still lives outside this document.
 
 ## API 34+ user-initiated transfer path
 
@@ -14,13 +14,13 @@ Implementation entry points:
 
 The scheduler attaches the durable queue item id as job extras, maps Wi-Fi-only preference to `JobInfo.NETWORK_TYPE_UNMETERED`, supplies estimated network bytes when available, calls `setUserInitiated(true)` on the API 34+ path, and owns the required transfer notification from the job service.
 
-The current job service is the legal launch and notification owner for user-requested work. The long-lived durable worker loop remains owned by RMD-500 and must be connected to this launch point before final download-runtime closeout.
+The job service is the legal launch and notification owner for user-requested work on API 34+. Durable queue state, worker claims, pause/resume/cancel/retry, progress, connectivity integration, and startup repair are implemented through the RMD-500/RMD-508/RMD-1200 production paths and remain the source of truth rather than service-local booleans.
 
 ## API 26-33 fallback path
 
 SDK 26-33 uses `DownloadSchedulerKind.ForegroundServiceFallback` from the same `DownloadExecutionScheduler` abstraction. The fallback starts `DownloadForegroundService` with `ACTION_SCHEDULE_WORK` and passes the same durable queue item id.
 
-The fallback deliberately shares the queue/control contract with the API 34+ path rather than creating a second state model. RMD-500 owns connecting both launch mechanisms to the same production durable worker execution loop.
+The fallback deliberately shares the queue/control contract with the API 34+ path rather than creating a second state model. UI and notification controls route through the same app-owned download-control gateway and durable core queue.
 
 ## Notification behavior
 
@@ -51,14 +51,14 @@ Current boot receiver invariants:
 - `LOCKED_BOOT_COMPLETED` is not declared.
 - The receiver does not open credential-encrypted DB/media state before unlock.
 - The receiver does not call `ContextCompat.startForegroundService(...)`.
-- Future legal scheduling is delegated to the durable scheduler/reconciliation work owned by RMD-103/RMD-500/RMD-1200.
+- Legal future scheduling is delegated to the durable scheduler and startup reconciliation paths rather than performed directly in the receiver.
 
 Relevant tests:
 
 - `DownloadBootRecoveryPolicyTest`
 - `DownloadRebootRecoveryPolicyTest`
 
-Process-death recovery is not closed by this document. Startup reconciliation and interrupted transfer recovery remain owned by RMD-1200, with durable worker repair semantics owned by RMD-500.
+Process-death and startup recovery are implemented through `GeneratedUniffiCoreGateway.reconcileStartup()`, `FfiStartupReconciliationService`, core startup reconciliation, durable queue repair, partial/orphan cleanup, and recovery UI state. The deterministic process-death core regression remains the production-path proof for queue reconstruction and completion after relaunch; full Android fixture E2E remains tracked under RMD-1500.
 
 ## Android 15 foreground-service restrictions
 
@@ -66,17 +66,17 @@ The app must not start a `dataSync` foreground service directly from boot on tar
 
 The retained `DownloadForegroundService` implements `Service.onTimeout(startId, fgsType)`, persists timeout metadata through `DownloadForegroundTimeoutStore`, removes the foreground notification, and stops the timed-out service instance. This prevents Android 15+ foreground-service timeout handling from devolving into an unhandled fatal service timeout path.
 
-Relevant test:
+Relevant tests and workflow coverage:
 
 - `DownloadForegroundTimeoutPolicyTest`
+- `DownloadForegroundTimeoutInstrumentedTest`
+- `DownloadForegroundTimeoutAdbInstrumentedTest`
+- `.github/workflows/android-fgs-timeout.yml`
 
 ## Known limits still owned by remediation tasks
 
 This document does not claim final engineering closeout for background execution. The following work remains required before final release qualification:
 
-- RMD-500: connect scheduler launch points to the real durable worker loop.
-- RMD-501/RMD-502: make durable queue state and worker claims the source of truth.
-- RMD-503 through RMD-507: complete pause/resume/cancel/retry/progress behavior against the durable worker.
-- RMD-508: connect network-change observation to the long-lived production execution owner.
-- RMD-1200: invoke startup reconciliation and prove process-death/reboot recovery end to end.
 - RMD-1500: qualify fixture E2E, connectivity E2E, and notification-control E2E on Android instrumentation infrastructure.
+- RMD-1601: add and qualify the deterministic E2E fixture lane.
+- RMD-1803: freeze a final candidate SHA and run the complete required exact-head qualification matrix.
