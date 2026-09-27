@@ -64,11 +64,11 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
           # Keep this acceleration tier intentionally small while extending it with deterministic
           # Compose goldens. The smoke set proves instrumentation health, packaged Rust/UniFFI
-          # runtime loading, platform runtime paths, behavioral Compose coverage, and RMD-1403
-          # exact-raster screenshot regression coverage.
+          # runtime loading, platform runtime paths, behavioral Compose coverage, RMD-1403
+          # exact-raster screenshot regression coverage, and RMD-508 Android connectivity mapping.
           script: >-
             sh -c 'status=0;
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest || status=$?;
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest || status=$?;
             golden_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest || golden_status=$?;
             mkdir -p app/build/reports/androidGoldens;
