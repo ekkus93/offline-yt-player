@@ -263,48 +263,50 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-501 — Define queue state as the source of truth
 
-- [ ] Expose durable queued/active/paused/waiting/retrying/failed/cancelled/completed states through the core gateway.
-- [ ] Ensure state survives process death.
-- [ ] Eliminate service-local booleans/constants as authoritative queue state.
+- [x] Expose durable queued/active/paused/waiting/retrying/failed/cancelled/completed states through the core gateway.
+- [x] Ensure state survives process death.
+- [x] Eliminate service-local booleans/constants as authoritative queue state.
 
 ### RMD-502 — Implement worker execution loop
 
-- [ ] Claim eligible durable work safely.
-- [ ] Enforce configured concurrency.
-- [ ] Execute the real core download plan.
-- [ ] Emit/persist progress at bounded cadence.
-- [ ] Commit completion only after integrity and asset promotion succeed.
-- [ ] Release/repair claimed work after cancellation/process death.
+- [x] Claim eligible durable work safely.
+- [x] Enforce configured concurrency.
+- [x] Execute the real core download plan.
+- [x] Emit/persist progress at bounded cadence.
+- [x] Commit completion only after integrity and asset promotion succeed.
+- [x] Release/repair claimed work after cancellation/process death.
 
 ### RMD-503 — Implement Pause
 
-- [ ] UI action calls real control gateway.
-- [ ] Notification action calls same control path.
-- [ ] Worker reaches a bounded cancellation point.
-- [ ] Durable resumable state is persisted.
-- [ ] Partial asset is retained only according to resume policy.
-- [ ] Add behavioral tests.
+- [x] UI action calls real control gateway.
+- [x] Notification action calls same control path.
+- [x] Worker reaches a bounded cancellation point.
+- [x] Durable resumable state is persisted.
+- [x] Partial asset is retained only according to resume policy.
+- [x] Add behavioral tests.
 
 ### RMD-504 — Implement Resume
 
-- [ ] Resume transitions a paused item to eligible work.
-- [ ] Revalidate continuation metadata before range append.
-- [ ] Honor current network/settings policy.
-- [ ] Add process-death + resume regression test.
+- [x] Resume transitions a paused item to eligible work.
+- [x] Revalidate continuation metadata before range append.
+- [x] Honor current network/settings policy.
+- [x] Add process-death + resume regression test.
 
 ### RMD-505 — Implement Cancel
 
-- [ ] Cancel stops active work.
-- [ ] Remove/quarantine partial assets according to policy.
-- [ ] Persist terminal cancelled state.
-- [ ] Cancel from notification and UI uses same code path.
+- [x] Cancel stops active work.
+- [x] Remove/quarantine partial assets according to policy.
+- [x] Persist terminal cancelled state.
+- [x] Cancel from notification and UI uses same code path.
 
 ### RMD-506 — Implement Retry
 
-- [ ] Retry is available only for eligible failed states.
-- [ ] Do not create duplicate library/source identities.
-- [ ] Reset only appropriate attempt/error fields.
-- [ ] Honor maximum-attempt/user-action semantics.
+- [x] Retry is available only for eligible failed states.
+- [x] Do not create duplicate library/source identities.
+- [x] Reset only appropriate attempt/error fields.
+- [x] Honor maximum-attempt/user-action semantics.
+
+**Evidence (RMD-501 through RMD-506):** Durable download orchestration evidence is recorded in `docs/RMD_500_DURABLE_DOWNLOAD_RECONCILIATION_2026-09-26.md` and `docs/RMD_500_CANONICAL_TODO_RECONCILIATION_PLAN_2026-09-27.md`. `AppCoreGateway.kt` maps generated durable queue records to `CoreDownloadSnapshot` and `CoreDownloadState` values including `QUEUED`, `RESOLVING`, `DOWNLOADING`, `PAUSED`, `RETRY_WAIT`, `FAILED`, `VERIFYING`, `COMPLETED`, and `CANCELED`; `RETRY_WAIT` is the durable retry/wait state, while connectivity-constrained waiting is handled under RMD-508 by durable `PAUSED`. State survival is covered by file-backed `FfiDownloadControlService` tests and `DownloadWorker.repair_interrupted_claims_at`, with RMD-1202 proving process-death queue reconstruction. `core/src/worker.rs` implements `DownloadWorker.claim_eligible`, `execute_one`, `transfer_with_durable_stop`, `finish_failed_or_retry`, and `repair_interrupted_claims_at`, with tests for fixture transfer, library promotion, bounded concurrency, retry-wait behavior, interrupted-claim repair, durable pause handling, and progress metrics. UI Downloads actions are covered by `ProductionComposeBehaviorTest.downloads_actions_invoke_the_real_control_boundary`; notification actions route through `DownloadForegroundService` and `DownloadForegroundControlDispatcher` to the same `AppDownloadControlGateway`; pause/cancel reach bounded durable stop points in `DownloadWorker.transfer_with_durable_stop`; partial retention/removal follows `DownloadPolicy.retain_partial_on_cancel`; resume transitions paused work to eligible queued work through `FfiDownloadControlService.resume`; range append revalidates continuation metadata with `prepare_partial_reuse`, persisted validator identity, and `Content-Range`; and retry is legal only from failed state, reuses the same durable identity, and resets only appropriate attempt/error fields while automatic attempt limits remain governed by `DownloadPolicy.max_attempts` and `DownloadWorker.finish_failed_or_retry`. Qualified/merged evidence: PR #386 exact head `4e8e821647d09c45043e4fa486857ae16c6c463e` passed push CI `36265626581`, push Android smoke `36265626585`, push Android FGS timeout `36265626644`, push Supply chain `36265626503`, PR CI `36265649176`, PR Android smoke `36265649174`, PR Android FGS timeout `36265649173`, and PR Supply chain `36265649200`; PR #386 merged as `67de1246443626d71a4ad81327dc23c3640d33a4`, whose post-merge master CI `36303602321`, Android smoke `36303602425`, Android FGS timeout `36303602346`, and Supply chain `36303602301` passed. RMD-504's current network/settings-policy subtask is additionally satisfied by the RMD-508 production connectivity coordinator from PR #387, merged as `5e7e90154fb2c57f4533d9d1f8f024b6755b13ee`, whose post-merge master CI `36306527110`, Supply chain `36306527188`, Android FGS timeout `36306527158`, and Android smoke `36306527131` passed. Full transfer-level deterministic E2E remains separate under RMD-1500/RMD-1506 and is not closed by this RMD-500 reconciliation.
 
 ### RMD-507 — Implement real progress/speed/ETA
 
@@ -317,12 +319,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-508 — Connectivity integration
 
-- [ ] Observe Android network capability changes.
-- [ ] Map to core/app connectivity state.
-- [ ] Pause/wait when no usable network exists.
-- [ ] Enforce Wi-Fi/unmetered preference.
-- [ ] Automatically make waiting work eligible when constraints return.
-- [ ] Add instrumentation tests for transitions.
+- [x] Observe Android network capability changes.
+- [x] Map to core/app connectivity state.
+- [x] Pause/wait when no usable network exists.
+- [x] Enforce Wi-Fi/unmetered preference.
+- [x] Automatically make waiting work eligible when constraints return.
+- [x] Add instrumentation tests for transitions.
+
+**Evidence (RMD-508):** Android connectivity observation and queue policy are implemented by `app/src/main/java/com/ekkus/offlineytplayer/downloads/DownloadConnectivityObserver.kt`. `AndroidDownloadConnectivityObserver` registers a default-network callback and emits normalized `DownloadConnectivity` states; `DownloadConnectivityMapper` maps Android `NetworkCapabilities` into `None`, `Metered`, and `Unmetered`; and `DownloadConnectivityCoordinator` applies `DownloadNetworkPolicy` plus the current download preference to the durable queue through the same `AppDownloadControlGateway` pause/resume methods used by UI and notification controls. Active `RESOLVING`, `DOWNLOADING`, and `VERIFYING` jobs are paused when connectivity is unusable or violates Wi-Fi-only policy, while durable `PAUSED` jobs become eligible again through resume when constraints return. JVM coverage is in `DownloadConnectivityCoordinatorTest` and existing network-policy tests; packaged Android framework mapping coverage is in `DownloadConnectivityObserverInstrumentedTest`, which is included in `.github/workflows/android-smoke.yml`. Qualified/merged evidence: PR #387 exact head `22fcaa4287f7739d17e075404b0eec1e1e697def` passed push CI `36304610292`, push Android smoke `36304610289`, push Android FGS timeout `36304610297`, push Supply chain `36304610324`, PR CI `36305482450`, PR Android smoke `36305482422`, PR Android FGS timeout `36305482427`, and PR Supply chain `36305482402`; PR #387 merged as `5e7e90154fb2c57f4533d9d1f8f024b6755b13ee`, whose post-merge master CI `36306527110`, Supply chain `36306527188`, Android FGS timeout `36306527158`, and Android smoke `36306527131` passed. RMD-1506 connectivity E2E remains separate and unchecked; RMD-508 is closed only for production connectivity observation, policy mapping, durable queue pause/resume integration, and JVM/instrumentation transition coverage.
 
 ---
 
