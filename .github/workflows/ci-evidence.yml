@@ -1,0 +1,35 @@
+name: CI evidence
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-evidence-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence-manifest:
+    name: Candidate evidence manifest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Generate evidence manifest
+        run: python3 scripts/write_ci_evidence_manifest.py
+      - name: Upload candidate evidence manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-evidence-manifest-${{ github.run_id }}
+          path: build/reports/ci-evidence/candidate-evidence.md
+          if-no-files-found: error
+          retention-days: 14
