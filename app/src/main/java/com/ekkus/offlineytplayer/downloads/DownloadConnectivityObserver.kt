@@ -18,11 +18,15 @@ import java.io.Closeable
  * qualify policy behavior while instrumentation tests exercise Android framework capability objects.
  */
 internal object DownloadConnectivityMapper {
-    fun fromCapabilities(capabilities: NetworkCapabilities?): DownloadConnectivity = when {
-        capabilities == null -> DownloadConnectivity.None
-        !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) -> DownloadConnectivity.None
-        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) -> DownloadConnectivity.Unmetered
-        else -> DownloadConnectivity.Metered
+    fun fromCapabilities(capabilities: NetworkCapabilities?): DownloadConnectivity =
+        fromCapabilityFlags(
+            hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
+            isUnmetered = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true,
+        )
+
+    fun fromCapabilityFlags(hasInternet: Boolean, isUnmetered: Boolean): DownloadConnectivity {
+        if (!hasInternet) return DownloadConnectivity.None
+        return if (isUnmetered) DownloadConnectivity.Unmetered else DownloadConnectivity.Metered
     }
 }
 
