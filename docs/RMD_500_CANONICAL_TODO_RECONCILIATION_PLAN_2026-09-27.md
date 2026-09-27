@@ -22,6 +22,12 @@ It is intentionally not a replacement TODO. The canonical remediation TODO remai
   - Android smoke `36303602425` passed.
   - Android FGS timeout `36303602346` passed.
   - Supply chain `36303602301` passed.
+- RMD-508 implementation merged by PR #387 as `5e7e90154fb2c57f4533d9d1f8f024b6755b13ee`.
+- Post-merge master qualification on `5e7e90154fb2c57f4533d9d1f8f024b6755b13ee`:
+  - CI `36306527110` passed.
+  - Supply chain `36306527188` passed.
+  - Android FGS timeout `36306527158` passed.
+  - Android smoke `36306527131` passed.
 
 ## Supported canonical TODO checkbox changes
 
@@ -31,7 +37,7 @@ The next canonical TODO edit should mark the following RMD-500 subtasks complete
 
 - `Expose durable queued/active/paused/waiting/retrying/failed/cancelled/completed states through the core gateway.`
   - Evidence: `AppCoreGateway.kt` maps generated `downloadQueue` records to `CoreDownloadSnapshot` and `CoreDownloadState` values: `QUEUED`, `RESOLVING`, `DOWNLOADING`, `PAUSED`, `RETRY_WAIT`, `FAILED`, `VERIFYING`, `COMPLETED`, and `CANCELED`.
-  - Note: `RETRY_WAIT` is the durable retry/wait state. RMD-508 connectivity waiting remains separate and should not be closed from this evidence.
+  - Note: `RETRY_WAIT` is the durable retry/wait state. Connectivity waiting is implemented under RMD-508 using durable `PAUSED` as the constrained waiting state.
 - `Ensure state survives process death.`
   - Evidence: `FfiDownloadControlService` file-backed tests persist and reopen queue state; `DownloadWorker.repair_interrupted_claims_at` repairs interrupted active claims; RMD-1202 separately proves process-death queue reconstruction.
 - `Eliminate service-local booleans/constants as authoritative queue state.`
@@ -63,11 +69,10 @@ Evidence: UI actions are covered by `ProductionComposeBehaviorTest.downloads_act
 
 - `Resume transitions a paused item to eligible work.`
 - `Revalidate continuation metadata before range append.`
+- `Honor current network/settings policy.`
 - `Add process-death + resume regression test.`
 
-Evidence: `FfiDownloadControlService.resume` transitions `Paused` to `Queued`; `core/src/download.rs` reuses partial files only after `prepare_partial_reuse`, matching persisted validator identity, and matching `Content-Range`; tests include `resume_survives_reopen_and_preserves_partial_progress`, `resumes_existing_partial_only_with_matching_persisted_identity`, and `partial_without_identity_restarts_from_zero`.
-
-Keep `Honor current network/settings policy` unchecked until the RMD-508 connectivity branch has post-merge master qualification and canonical reconciliation, because this is the settings/network-policy portion of resume eligibility.
+Evidence: `FfiDownloadControlService.resume` transitions `Paused` to `Queued`; `core/src/download.rs` reuses partial files only after `prepare_partial_reuse`, matching persisted validator identity, and matching `Content-Range`; tests include `resume_survives_reopen_and_preserves_partial_progress`, `resumes_existing_partial_only_with_matching_persisted_identity`, and `partial_without_identity_restarts_from_zero`. The network/settings-policy portion is supported by PR #387: `DownloadConnectivityCoordinator` applies the current download network preference before resuming durable `PAUSED` jobs only when `DownloadNetworkPolicy` returns `Allow`, and exact post-merge master qualification passed on `5e7e90154fb2c57f4533d9d1f8f024b6755b13ee`.
 
 ### RMD-505
 
@@ -89,7 +94,7 @@ Evidence: `FfiDownloadControlService.retry` is legal only from `Failed`, transit
 
 ## Explicitly not closed here
 
-- RMD-508 remains unchecked here. It has a separate implementation branch/PR #387, merged as `5e7e90154fb2c57f4533d9d1f8f024b6755b13ee`, but its canonical TODO checkboxes should be reconciled only after post-merge master Android smoke and Android FGS timeout finish successfully.
 - RMD-1500 deterministic E2E remains unchecked. Unit/JVM/policy tests and control-boundary Compose tests do not replace the required full E2E fixture lane.
+- RMD-1506 connectivity E2E remains unchecked. RMD-508 production connectivity observation/control is qualified, but full transfer-level network removal/restoration is still its own E2E task.
 - RMD-1601 deterministic E2E fixture lane remains unchecked.
 - RMD-1803 final full qualification remains unchecked.
