@@ -112,6 +112,20 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun paste_button_handles_missing_clipboard_text_gracefully() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(ClipData.newPlainText("empty", ""))
+
+        compose.setContent { OfflineYTPlayerApp() }
+
+        compose.onNodeWithText("Add").performClick()
+        compose.onNodeWithText("Paste").performClick()
+
+        compose.onNodeWithText("Clipboard does not contain a video URL.").assertIsDisplayed()
+    }
+
+    @Test
     fun add_analyze_setup_and_download_use_gateway_boundaries() {
         val source = FakeSourceAnalysisGateway()
         val controls = FakeDownloadControlGateway()
