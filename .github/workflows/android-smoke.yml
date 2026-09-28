@@ -69,6 +69,7 @@ jobs:
           script: >-
             sh -c 'status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest || status=$?;
+            if [ "$status" -ne 0 ]; then echo "Base smoke test XML:"; find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; fi;
             golden_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest || golden_status=$?;
             mkdir -p app/build/reports/androidGoldens;
