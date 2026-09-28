@@ -367,10 +367,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-701 — Make Paste operational
 
-- [ ] Read bounded clipboard text.
-- [ ] Put text into URL field.
-- [ ] Handle missing/nontext clipboard gracefully.
-- [ ] Add Compose/instrumentation coverage.
+- [x] Read bounded clipboard text.
+- [x] Put text into URL field.
+- [x] Handle missing/nontext clipboard gracefully.
+- [x] Add Compose/instrumentation coverage.
+
+**Evidence (RMD-701):** the production Add-screen Paste action reads Android clipboard text, bounds it through `AddWorkflowPolicy.MaxClipboardChars`, places the bounded value into the URL field, and reports a defined missing/nontext status instead of failing. Behavioral Compose instrumentation in `app/src/androidTest/java/com/ekkus/offlineytplayer/ui/AddPasteComposeTest.kt` drives `OfflineYTPlayerApp` through the real Paste button and proves both bounded insertion and graceful blank/missing-text handling. Exact master `08f4137f81af0d5796a5edcb84b98affc33d59f2` passed CI `36390464189`, Android smoke `36390464079`, Android FGS timeout `36390464063`, Supply chain `36390464029`, and CI evidence `36390464037`.
 
 ### RMD-702 — Make Analyze use the production source pipeline
 
