@@ -124,6 +124,13 @@ class DownloadForegroundService : Service() {
             -> Unit
         }
         startForeground(DownloadServicePolicy.NotificationId, activeNotification(queueItemId))
+        if (intent?.action == ACTION_SCHEDULE_WORK && !queueItemId.isNullOrBlank()) {
+            Thread {
+                DownloadWorkerExecutor.execute(this, queueItemId)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf(startId)
+            }.start()
+        }
         return START_STICKY
     }
 

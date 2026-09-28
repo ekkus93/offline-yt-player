@@ -143,10 +143,16 @@ class DownloadUserInitiatedJobService : JobService() {
                 JOB_END_NOTIFICATION_POLICY_REMOVE,
             )
         }
-        // RMD-500 attaches the durable worker loop. This job is now the legal
-        // API 34+ launch point and notification owner for user-requested work.
-        jobFinished(params, false)
-        return false
+        val queueItemId = params.extras.getString(ExtraQueueItemId)
+        if (queueItemId.isNullOrBlank()) {
+            jobFinished(params, false)
+            return false
+        }
+        Thread {
+            DownloadWorkerExecutor.execute(this, queueItemId)
+            jobFinished(params, false)
+        }.start()
+        return true
     }
 
     override fun onStopJob(params: JobParameters): Boolean = true
