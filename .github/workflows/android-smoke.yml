@@ -66,21 +66,53 @@ jobs:
           # Compose goldens. The smoke set proves instrumentation health, packaged Rust/UniFFI
           # runtime loading, platform runtime paths, behavioral Compose coverage, RMD-1403
           # exact-raster screenshot regression coverage, and RMD-508 Android connectivity mapping.
-          script: >-
-            sh -c 'status=0;
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest || status=$?;
-            if [ "$status" -ne 0 ]; then echo "Base smoke test XML:"; find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; fi;
-            golden_status=0;
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest || golden_status=$?;
-            mkdir -p app/build/reports/androidGoldens;
-            adb pull /sdcard/Download/offline-yt-player-goldens/. app/build/reports/androidGoldens/ || true;
-            echo "Golden raster SHA-256 manifest:";
-            cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true;
-            if [ "$golden_status" -ne 0 ]; then echo "Golden test XML:"; find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; status=$golden_status; fi;
-            layout_status=0;
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest || layout_status=$?;
-            if [ "$layout_status" -ne 0 ]; then echo "Layout/accessibility test XML:"; find app/build/outputs/androidTest-results -type f -name "*.xml" -print -exec cat {} \; || true; status=$layout_status; fi;
-            exit $status'
+          script: |
+            set +e
+            print_android_test_failures() {
+              python3 - <<'PY'
+            from pathlib import Path
+            import re
+            import xml.etree.ElementTree as ET
+
+            root = Path("app/build/outputs/androidTest-results")
+            url_pattern = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+|https?://\S+")
+            printed = False
+            for path in sorted(root.rglob("*.xml")):
+                try:
+                    document = ET.parse(path)
+                except Exception as exc:
+                    print(f"ANDROID_TEST_XML_UNREADABLE {path}: {exc.__class__.__name__}")
+                    continue
+                for testcase in document.findall(".//testcase"):
+                    failures = list(testcase.findall("failure")) + list(testcase.findall("error"))
+                    if not failures:
+                        continue
+                    printed = True
+                    classname = testcase.get("classname") or "unknown-class"
+                    name = testcase.get("name") or "unknown-test"
+                    print(f"ANDROID_TEST_FAILURE {classname}.{name}")
+                    for failure in failures:
+                        message = (failure.get("message") or failure.text or "").strip()
+                        message = url_pattern.sub("[URL]", message).replace("\n", " ")[:1200]
+                        print(f"  {failure.tag}: {message}")
+            if not printed:
+                print(f"ANDROID_TEST_FAILURE_SUMMARY none_found root={root}")
+            PY
+            }
+            status=0
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest || status=$?
+            if [ "$status" -ne 0 ]; then echo "Base smoke failure summary:"; print_android_test_failures || true; fi
+            golden_status=0
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest || golden_status=$?
+            mkdir -p app/build/reports/androidGoldens
+            adb pull /sdcard/Download/offline-yt-player-goldens/. app/build/reports/androidGoldens/ || true
+            echo "Golden raster SHA-256 manifest:"
+            cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true
+            if [ "$golden_status" -ne 0 ]; then echo "Golden failure summary:"; print_android_test_failures || true; status=$golden_status; fi
+            layout_status=0
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest || layout_status=$?
+            if [ "$layout_status" -ne 0 ]; then echo "Layout/accessibility failure summary:"; print_android_test_failures || true; status=$layout_status; fi
+            exit $status
       - name: Upload instrumentation evidence
         if: always()
         uses: actions/upload-artifact@v4
