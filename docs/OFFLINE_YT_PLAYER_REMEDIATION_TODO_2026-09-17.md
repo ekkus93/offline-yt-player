@@ -837,44 +837,46 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1701 — README truthfulness
 
-- [ ] Update project status to match actual implementation after remediation.
-- [ ] Describe supported/unsupported workflows.
-- [ ] Document build/run prerequisites.
-- [ ] Keep external release gate explicit.
+- [x] Update project status to match actual implementation after remediation.
+- [x] Describe supported/unsupported workflows.
+- [x] Document build/run prerequisites.
+- [x] Keep external release gate explicit.
 
 ### RMD-1702 — Build and FFI docs
 
-- [ ] Document Android ABI build flow.
-- [ ] Document UniFFI generation and Gradle integration.
-- [ ] Document emulator/device setup.
-- [ ] Document common native-loading failures.
+- [x] Document Android ABI build flow.
+- [x] Document UniFFI generation and Gradle integration.
+- [x] Document emulator/device setup.
+- [x] Document common native-loading failures.
 
 ### RMD-1703 — Background execution docs
 
-- [ ] Document API 34+ UIDT path.
-- [ ] Document API 26-33 fallback.
-- [ ] Document notification behavior.
-- [ ] Document reboot/process-death recovery.
-- [ ] Document Android 15+ restrictions relevant to this app.
+- [x] Document API 34+ UIDT path.
+- [x] Document API 26-33 fallback.
+- [x] Document notification behavior.
+- [x] Document reboot/process-death recovery.
+- [x] Document Android 15+ restrictions relevant to this app.
 
 ### RMD-1704 — User guide
 
-- [ ] Rewrite workflow steps against operational UI.
-- [ ] Remove descriptions of controls that remain unimplemented/removed.
-- [ ] Document offline playback guarantees and limitations.
-- [ ] Document recovery/error states.
+- [x] Rewrite workflow steps against operational UI.
+- [x] Remove descriptions of controls that remain unimplemented/removed.
+- [x] Document offline playback guarantees and limitations.
+- [x] Document recovery/error states.
 
 ### RMD-1705 — Security/privacy/legal docs
 
-- [ ] Update input/security model.
-- [ ] Update diagnostic/redaction guarantees.
-- [ ] Update storage/deletion behavior.
-- [ ] Keep YouTube/service-policy/legal approval external and unresolved unless separately approved by a human authority.
+- [x] Update input/security model.
+- [x] Update diagnostic/redaction guarantees.
+- [x] Update storage/deletion behavior.
+- [x] Keep YouTube/service-policy/legal approval external and unresolved unless separately approved by a human authority.
 
 ### RMD-1706 — Supersede misleading prior audits
 
-- [ ] Add a remediation reconciliation document explaining which prior audit claims were corrected.
-- [ ] Do not delete historical audit docs; mark/supersede them clearly where their closeout claims are no longer authoritative.
+- [x] Add a remediation reconciliation document explaining which prior audit claims were corrected.
+- [x] Do not delete historical audit docs; mark/supersede them clearly where their closeout claims are no longer authoritative.
+
+**Evidence (RMD-1700):** Documentation reconciliation is implemented on current `master`: `README.md` truthfully describes remediation status, supported/unsupported workflows, build/run prerequisites, and the unresolved external release gate; `docs/ANDROID_RUST_FFI_BUILD.md` documents supported ABIs, Rust/UniFFI generation and Gradle integration, emulator/device setup, and native-loading troubleshooting; `docs/ANDROID_BACKGROUND_EXECUTION.md` documents API 34+ UIDT, API 26-33 fallback, notification behavior, reboot/process-death recovery, and Android 15+ foreground-service restrictions; `docs/USER_GUIDE.md` documents the operational UI, offline guarantees/limits, and recovery/error states; `docs/SECURITY_PRIVACY_LEGAL.md` documents input security, diagnostic redaction, storage/deletion behavior, privacy, and keeps source-service/legal approval explicitly external; and `docs/REMEDIATION_RECONCILIATION.md` preserves historical audits while superseding misleading closeout claims. These documents explicitly retain RMD-1500/RMD-1800 limitations rather than claiming engineering closeout.
 
 ---
 
