@@ -42,6 +42,8 @@ pub mod youtube_source;
 #[cfg(test)]
 mod process_death_tests;
 #[cfg(test)]
+mod rmd_1500_e2e_tests;
+#[cfg(test)]
 mod rmd_401_retry_authority_tests;
 #[cfg(test)]
 mod rmd_402_retry_policy_tests;
