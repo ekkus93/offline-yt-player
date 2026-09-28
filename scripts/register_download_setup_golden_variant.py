@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Register a reviewed Download Setup golden raster hash before smoke CI.
+"""Prepare deterministic Download Setup golden capture before smoke CI.
 
-This is intentionally narrow: it only adds the single reviewed raster variant
-observed for the production Download Setup golden. Future unexpected raster
-changes still fail the golden test.
+The API 29 smoke runner intentionally exercises Compose on a software-rendered
+emulator. Disable platform window/transition/animator scales before exact-raster
+capture so interaction-driven goldens are not sampled at timing-dependent
+animation frames. The narrow reviewed Download Setup raster variant remains
+registered; all other unexpected raster changes still fail closed.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 TARGET = Path("app/src/androidTest/java/com/ekkus/offlineytplayer/ui/ProductionComposeGoldenTest.kt")
 REVIEWED_HASH = "9cfd346c4254a4510e5a363212d9e8d0992813e45c2c749007c6cd62b0facd72"
@@ -17,7 +20,16 @@ INSERT_AFTER = '                "afb9a1a883beadc48b61658c6d43f7cc96819db7bb07054
 INSERTION = f'                "{REVIEWED_HASH}",\n'
 
 
+def disable_platform_animations() -> None:
+    for setting in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
+        subprocess.run(
+            ["adb", "shell", "settings", "put", "global", setting, "0"],
+            check=True,
+        )
+
+
 def main() -> int:
+    disable_platform_animations()
     content = TARGET.read_text(encoding="utf-8")
     if REVIEWED_HASH in content:
         return 0
