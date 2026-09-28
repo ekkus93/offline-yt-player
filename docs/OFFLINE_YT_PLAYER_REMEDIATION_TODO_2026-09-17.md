@@ -825,9 +825,11 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1603 — CI evidence quality
 
-- [ ] Ensure failures preserve logs/test reports/screenshots.
-- [ ] Ensure emulator/E2E artifacts are bounded and useful.
-- [ ] Record exact candidate SHA in final qualification report.
+- [x] Ensure failures preserve logs/test reports/screenshots.
+- [x] Ensure emulator/E2E artifacts are bounded and useful.
+- [x] Record exact candidate SHA in final qualification report.
+
+**Evidence (RMD-1603):** CI evidence retention and bounded artifact policy are implemented and documented in `docs/RMD_1603_CI_EVIDENCE_QUALITY_2026-09-26.md`, with the dedicated exact-head `.github/workflows/ci-evidence.yml` lane plus bounded failure evidence in the regular CI, Android smoke, Android FGS-timeout, and Supply-chain workflows. Exact master `8b37d2e5aa144e8e14becacd1eb6b817f47dc0f2` passed CI `36379432539`, Android smoke `36379432588`, Android FGS timeout `36379432566`, Supply chain `36379432543`, and CI evidence `36379432541`. The exact candidate SHA is recorded in the evidence report and asserted by the workflows.
 
 ---
 
