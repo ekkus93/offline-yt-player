@@ -797,6 +797,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **Acceptance for RMD-1500:** policy enum sequence tests may remain, but they cannot be cited as the E2E evidence for these tasks.
 
+**Evidence (RMD-1500 incremental qualification):** Exact master `43847bddef7e710854bb8ff248fb4f7227ba1696` adds `Rmd1500AppPipelineFixtureTest`, which drives `OfflineYTPlayerApp(initialSharedUrl=...)` with a deterministic fixture source through the production Compose Add/Share → Analyze → Download Setup surface and app-owned gateway boundary without live-provider access. The same exact head passed CI `36473005897`, Android smoke `36473005880`, Android FGS timeout `36473005836`, Supply chain `36473005927`, CI evidence `36473005988`, and Deterministic E2E fixture `36473005955`. The existing deterministic core fixture lane separately proves real fixture download, durable Library persistence, cold-start reopen, playback-asset export, and no post-download network dependency. RMD-1501 through RMD-1507 remain unchecked until the required Android production-path scheduler/runtime, MediaSession playback, split A/V, subtitle, share, failure, connectivity, and notification-control flows are proven end-to-end.
+
 ---
 
 ## RMD-1600 — CI and supply-chain qualification
@@ -814,10 +816,10 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] APK native-library packaging verification.
 - [x] Android instrumentation/Compose tests.
 - [x] Screenshot/golden tests.
-- [ ] Deterministic E2E fixture lane.
+- [x] Deterministic E2E fixture lane.
 - [x] Exact-head identity assertion.
 
-**Evidence (RMD-1601 partial reconciliation):** The fast deterministic matrix is already implemented on current master. `.github/workflows/ci.yml` runs exact-commit identity checks, Rust fmt, clippy with `-D warnings`, workspace tests, Android lint/JVM tests/assemble, reproducible UniFFI generation, both supported Android Rust ABI builds, and APK native-library verification. `.github/workflows/android-smoke.yml` also asserts exact commit identity and runs the packaged instrumentation/Compose suite including `ProductionComposeBehaviorTest`. Exact master `dc18f27c01620cd7b3254b1c5bb8d8f9b15b08eb` passed CI run `36186074873` and Android smoke run `36186075209`. Screenshot/golden qualification is now implemented and qualified under RMD-1403 through RMD-1405 and `.github/workflows/android-smoke.yml`; deterministic fixture E2E remains deliberately unchecked until RMD-1500 is implemented and qualified.
+**Evidence (RMD-1601 partial reconciliation):** The fast deterministic matrix is already implemented on current master. `.github/workflows/ci.yml` runs exact-commit identity checks, Rust fmt, clippy with `-D warnings`, workspace tests, Android lint/JVM tests/assemble, reproducible UniFFI generation, both supported Android Rust ABI builds, and APK native-library verification. `.github/workflows/android-smoke.yml` also asserts exact commit identity and runs the packaged instrumentation/Compose suite including `ProductionComposeBehaviorTest`. Exact master `dc18f27c01620cd7b3254b1c5bb8d8f9b15b08eb` passed CI run `36186074873` and Android smoke run `36186075209`. Screenshot/golden qualification is implemented and qualified under RMD-1403 through RMD-1405 and `.github/workflows/android-smoke.yml`. The deterministic fixture CI lane is now implemented by `.github/workflows/deterministic-e2e.yml` and qualified independently of full RMD-1500 closeout: exact master `43847bddef7e710854bb8ff248fb4f7227ba1696` passed Deterministic E2E fixture run `36473005955` together with CI `36473005897`, Android smoke `36473005880`, Android FGS timeout `36473005836`, Supply chain `36473005927`, and CI evidence `36473005988`. This checks the RMD-1601 lane requirement only; it does not mark any RMD-1500 end-to-end behavior complete.
 
 ### RMD-1602 — Dependency/advisory checks
 
