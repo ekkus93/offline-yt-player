@@ -374,10 +374,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-702 — Make Analyze use the production source pipeline
 
-- [ ] Remove fabricated preview metadata from production path.
-- [ ] Validate via shared hardened policy.
-- [ ] Call production source-analysis gateway.
-- [ ] Show real metadata/quality/error state.
+- [x] Remove fabricated preview metadata from production path.
+- [x] Validate via shared hardened policy.
+- [x] Call production source-analysis gateway.
+- [x] Show real metadata/quality/error state.
+
+**Evidence (RMD-702):** production `MainActivity.bootstrapProductionUi()` opens `GeneratedUniffiSourceAnalysisGateway` and passes it into `OfflineYTPlayerApp`; `AddScreen` executes `gateway.analyze(requestUrl)` on `Dispatchers.IO`, cancels/suppresses superseded requests, and renders the returned source URL, bounded title, duration, thumbnail, quality choices, estimated bytes, and structured error state. `GeneratedUniffiSourceAnalysisGateway.analyze` normalizes input through the shared `SupportedUrlPolicy`, calls the generated `FfiYouTubeSourceService.resolve/listChoices` boundary, and maps provider output through `SourceMetadataPolicy` rather than fixture/preview data. JVM coverage includes the source-analysis gateway/policy tests and `AddWorkflowPolicyTest`; production consumption is guarded by source-shape/runtime-consumption tests. Qualified exact master `a9564e7eac154d0ba7383308bc949063fa33c792` passed CI `36387320305`, Android smoke `36387320281`, Android FGS timeout `36387320226`, Supply chain `36387320273`, and CI evidence `36387320255`. RMD-703/RMD-704 remain unchecked because setup option persistence/selection and advanced-option mutation are not yet complete.
 
 ### RMD-703 — Make Download Setup operational
 
@@ -498,6 +500,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Render real repository items.
 - [ ] Search actual persisted records.
 - [ ] Implement list/grid behavior if both remain advertised.
+
 - [ ] Preserve selected layout setting.
 - [ ] Provide empty/loading/error states.
 
