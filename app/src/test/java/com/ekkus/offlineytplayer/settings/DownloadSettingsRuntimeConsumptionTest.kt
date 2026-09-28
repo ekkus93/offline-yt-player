@@ -17,12 +17,15 @@ class DownloadSettingsRuntimeConsumptionTest {
     @Test
     fun addAndSettingsScreensConsumeDownloadSettings() {
         val source = File("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt").readText()
+        val policy = File("src/main/java/com/ekkus/offlineytplayer/ui/AddWorkflowPolicy.kt").readText()
         assertTrue(source.contains("settings.defaultQuality"))
         assertTrue(source.contains("settings.wifiOnlyDownloads"))
         assertTrue(source.contains("settings.maxConcurrentDownloads"))
         assertTrue(source.contains("settings.subtitleDefault"))
-        assertTrue(source.contains("downloadSettingsSummary(settings)"))
-        assertTrue(source.contains("preferredQualityLabel(qualityLabels, settings.defaultQuality, analysis.qualityLabel)"))
+        assertTrue(source.contains("AddWorkflowPolicy.downloadSettingsSummary"))
+        assertTrue(source.contains("AddWorkflowPolicy.preferredQualityLabel"))
+        assertTrue(policy.contains("fun downloadSettingsSummary"))
+        assertTrue(policy.contains("fun preferredQualityLabel"))
     }
 
     @Test
