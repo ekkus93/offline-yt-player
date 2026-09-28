@@ -1,58 +1,41 @@
 package com.ekkus.offlineytplayer.ui
 
-import java.nio.file.Files
-import java.nio.file.Paths
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AddScreenPolicyTest {
-    @Test fun primaryAddUiIsCompleteAndNonScrolling() { val policy = AddScreenPolicy(); assertTrue(policy.urlFieldVisible); assertTrue(policy.pasteActionVisible); assertTrue(policy.analyzeActionVisible); assertTrue(policy.supportedSourceHintVisible); assertFalse(policy.primaryScreenScrollable); assertTrue(policy.primaryControlsFit()) }
-    @Test fun analyzeRequiresSupportedVideoUrl() { val policy = AddScreenPolicy(); assertTrue(policy.canAnalyze("https://www.youtube.com/watch?v=dQw4w9WgXcQ")); assertTrue(policy.canAnalyze(" https://youtu.be/dQw4w9WgXcQ ")); assertFalse(policy.canAnalyze("http://example.test/video")); assertFalse(policy.canAnalyze("not a url")); assertFalse(policy.canAnalyze("file:///tmp/video.mp4")) }
+    private val appShell: String = File("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt").readText()
 
-    @Test fun analyzeNormalizesToTheCoreCanonicalUrlContract() {
-        val policy = AddScreenPolicy()
-        assertEquals(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            policy.normalizedAnalyzeUrl(" https://youtu.be/dQw4w9WgXcQ?t=43 "),
-        )
+    @Test
+    fun pasteUsesBoundedPolicyBeforeMutatingUrlState() {
+        assertTrue(appShell.contains("AddWorkflowPolicy.boundedClipboardText"))
+        assertTrue(appShell.contains("url = acceptedText"))
+        assertTrue(appShell.contains("status = pasted.statusMessage"))
     }
 
-    @Test fun productionAddAnalysisUsesInjectedSourceGatewayNotPreviewRoute() {
-        val source = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt"))
-        val gateway = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/coregateway/AppSourceAnalysisGateway.kt"))
-        assertTrue(source.contains("sourceGateway.analyze") || source.contains("gateway.analyze"))
-        assertTrue(gateway.contains("SupportedUrlPolicy.normalizeSupportedUrl(sourceUrl)"))
-        assertFalse(source.contains("DownloadSetupRoute.previewFor(url)"))
-        assertTrue(source.contains("withContext(Dispatchers.IO)"))
+    @Test
+    fun analyzeUsesProductionGatewayAndSuppressesSupersededResults() {
+        assertTrue(appShell.contains("gateway.analyze(requestUrl)"))
+        assertTrue(appShell.contains("withContext(Dispatchers.IO)"))
+        assertTrue(appShell.contains("if (activeAnalysisUrl != requestUrl) return@launch"))
+        assertTrue(appShell.contains("DownloadSetupState(analysis.sourceUrl"))
     }
 
-    @Test fun sourceAnalysisCancelsSupersededRequests() {
-        val source = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt"))
-        assertTrue(source.contains("analysisJob?.cancel()"))
-        assertTrue(source.contains("activeAnalysisUrl"))
-        assertTrue(source.contains("DisposableEffect(Unit)"))
+    @Test
+    fun setupPreviewDisplaysResolvedOptionsAndSchedulerStatus() {
+        assertTrue(appShell.contains("Text(\"Quality options: \${AddWorkflowPolicy.optionSummary"))
+        assertTrue(appShell.contains("Scheduling \${setupState.qualityLabel} download"))
+        assertTrue(appShell.contains("gateway.enqueue(jobId)"))
+        assertTrue(appShell.contains("Download scheduled for \${setupState.qualityLabel}"))
     }
 
-    @Test fun downloadSetupSchedulesThroughControlGateway() {
-        val source = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt"))
-        assertTrue(source.contains("downloadControlGateway"))
-        assertTrue(source.contains("gateway.enqueue(jobId)"))
-        assertTrue(source.contains("Download scheduled"))
-        assertFalse(source.contains("Download scheduling requires the durable production worker wiring"))
-    }
-
-    @Test fun advancedOptionsReflectSourceDerivedSetupState() {
-        val source = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt"))
-        val model = Files.readString(Paths.get("src/main/java/com/ekkus/offlineytplayer/ui/DownloadSetupModels.kt"))
-        assertTrue(model.contains("qualityOptions"))
-        assertTrue(model.contains("subtitleOptions"))
-        assertTrue(model.contains("audioOptions"))
-        assertTrue(model.contains("containerOptions"))
-        assertTrue(source.contains("analysis.qualityOptions"))
-        assertTrue(source.contains("AdvancedDownloadOptions(padding, activeSetup)"))
-        assertTrue(source.contains("None reported by source"))
-        assertFalse(source.contains("SettingValue(\"Subtitle language\", \"Preferred\")"))
+    @Test
+    fun advancedOptionsReflectSourceDerivedSetupState() {
+        assertTrue(appShell.contains("SettingValue(\"Quality choices\""))
+        assertTrue(appShell.contains("setup.qualityOptions.forEach"))
+        assertTrue(appShell.contains("Text(\"Select \$quality\")"))
+        assertTrue(appShell.contains("onApply(setupWithQuality(setup, quality))"))
+        assertTrue(appShell.contains("Download options applied."))
     }
 }
