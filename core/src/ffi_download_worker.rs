@@ -1,6 +1,6 @@
 use crate::{
-    DownloadPolicy, DownloadWorkItem, DownloadWorker, DurableDownloadWorkStore, FfiCoreServiceOpenError,
-    FfiError, LibraryStore,
+    DownloadPolicy, DownloadWorkItem, DownloadWorker, DurableDownloadWorkStore,
+    FfiCoreServiceOpenError, FfiError, LibraryStore,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,8 +28,10 @@ impl FfiDownloadWorkerService {
     #[uniffi::constructor]
     pub fn open(database_path: String) -> Result<Arc<Self>, FfiCoreServiceOpenError> {
         let database_path = PathBuf::from(database_path);
-        LibraryStore::open(&database_path).map_err(|error| FfiCoreServiceOpenError::Persistence {
-            message: error.message,
+        LibraryStore::open(&database_path).map_err(|error| {
+            FfiCoreServiceOpenError::Persistence {
+                message: error.message,
+            }
         })?;
         DurableDownloadWorkStore::open(&database_path).map_err(|error| {
             FfiCoreServiceOpenError::Persistence {
