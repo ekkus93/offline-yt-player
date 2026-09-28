@@ -46,7 +46,12 @@ fn offline_fixture_e2e_downloads_reopens_and_exports_local_playback_asset() {
 
     let store = LibraryStore::open(&database_path).expect("open clean durable store");
     assert!(store.list(None).expect("list clean library").is_empty());
-    assert!(store.load_download_snapshots().expect("list clean queue").is_empty());
+    assert!(
+        store
+            .load_download_snapshots()
+            .expect("list clean queue")
+            .is_empty()
+    );
 
     let job_id = "rmd-1500-offline-fixture-job".to_string();
     store
@@ -75,12 +80,19 @@ fn offline_fixture_e2e_downloads_reopens_and_exports_local_playback_asset() {
         )
         .expect("worker completes deterministic fixture download");
     assert_eq!(report.completed, vec![job_id.clone()]);
-    assert!(report.failed.is_empty(), "fixture work must not fail: {report:?}");
+    assert!(
+        report.failed.is_empty(),
+        "fixture work must not fail: {report:?}"
+    );
 
-    server_handle.join().expect("fixture server handled exactly one media request");
+    server_handle
+        .join()
+        .expect("fixture server handled exactly one media request");
 
     let reopened = LibraryStore::open(&database_path).expect("reopen durable store after cold start");
-    let queue = reopened.load_download_snapshots().expect("reload durable queue");
+    let queue = reopened
+        .load_download_snapshots()
+        .expect("reload durable queue");
     assert_eq!(queue.len(), 1);
     assert_eq!(queue[0].state, DownloadState::Completed);
     assert_eq!(queue[0].bytes_downloaded, expected_bytes);
@@ -100,14 +112,18 @@ fn offline_fixture_e2e_downloads_reopens_and_exports_local_playback_asset() {
         .validate_item_assets(&library_root, &item.item_id)
         .expect("completed fixture asset exists locally with the expected size");
 
-    let playback_service = FfiLibraryPlaybackService::open(database_path.to_string_lossy().into_owned())
-        .expect("open playback service from cold durable state");
+    let playback_service =
+        FfiLibraryPlaybackService::open(database_path.to_string_lossy().into_owned())
+            .expect("open playback service from cold durable state");
     let playback_assets = playback_service.library_playback_assets();
     assert_eq!(playback_assets.error_message, None);
     assert_eq!(playback_assets.assets.len(), 1);
     let playback = &playback_assets.assets[0];
     assert_eq!(playback.item_id, item.item_id);
-    assert!(playback.playable, "completed fixture must be locally playable: {playback:?}");
+    assert!(
+        playback.playable,
+        "completed fixture must be locally playable: {playback:?}"
+    );
     assert_eq!(
         playback.video_relative_path.as_deref(),
         Some(item.assets[0].relative_path.as_str()),
