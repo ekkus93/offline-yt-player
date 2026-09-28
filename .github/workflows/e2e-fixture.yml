@@ -1,0 +1,50 @@
+name: Deterministic E2E fixture
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-fixture-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-fixture-e2e:
+    name: Core deterministic fixture E2E
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: e2e-fixture-rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: e2e-fixture-rust-${{ runner.os }}-
+      - name: Run deterministic fixture E2E
+        run: cargo test -p offline-yt-core rmd_1500_e2e_tests -- --nocapture
+      - name: Upload deterministic fixture E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-e2e-fixture-evidence-${{ github.run_id }}
+          path: |
+            target/debug/deps
+            target/debug/.fingerprint/offline-yt-core-*
+          if-no-files-found: ignore
+          retention-days: 7
