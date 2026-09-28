@@ -39,8 +39,11 @@ fn offline_fixture_e2e_downloads_reopens_and_exports_local_playback_asset() {
         .select(&source_url)
         .expect("registered fixture source is selected");
     let media = block_on(selected_source.resolve(&source_url)).expect("fixture source resolves");
-    let choices = block_on(selected_source.choices(&media)).expect("fixture quality choices resolve");
-    let chosen = choices.first().expect("fixture exposes a curated quality choice");
+    let choices =
+        block_on(selected_source.choices(&media)).expect("fixture quality choices resolve");
+    let chosen = choices
+        .first()
+        .expect("fixture exposes a curated quality choice");
     let plan = block_on(selected_source.download_plan(&media, &chosen.choice_id))
         .expect("fixture download plan resolves through source abstraction");
 
@@ -89,7 +92,8 @@ fn offline_fixture_e2e_downloads_reopens_and_exports_local_playback_asset() {
         .join()
         .expect("fixture server handled exactly one media request");
 
-    let reopened = LibraryStore::open(&database_path).expect("reopen durable store after cold start");
+    let reopened =
+        LibraryStore::open(&database_path).expect("reopen durable store after cold start");
     let queue = reopened
         .load_download_snapshots()
         .expect("reload durable queue");
