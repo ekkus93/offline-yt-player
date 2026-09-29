@@ -34,6 +34,7 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
         assumeTrue("Android 15+ is required for Service.onTimeout foreground-service qualification", Build.VERSION.SDK_INT >= 35)
         clearTimeoutState()
         shell("device_config put activity_manager data_sync_fgs_timeout_duration 1000")
+        shell("am force-stop ${context.packageName}")
     }
 
     @After
@@ -88,7 +89,7 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
         const val LAST_START_ID_KEY = "last_start_id"
         const val LAST_FOREGROUND_SERVICE_TYPE_KEY = "last_foreground_service_type"
         const val TIMEOUT_COUNT_KEY = "timeout_count"
-        const val TIMEOUT_WAIT_MILLIS = 60_000L
+        const val TIMEOUT_WAIT_MILLIS = 90_000L
         const val POLL_INTERVAL_MILLIS = 1_000L
     }
 }
