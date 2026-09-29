@@ -63,3 +63,43 @@ fn current_epoch_ms() -> Result<u64, CoreError> {
         )
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DirectFixtureSource, FixtureMedia};
+
+    fn local_url(path: &str) -> String {
+        ["http", "://", "127.0.0.1", path].concat()
+    }
+
+    #[test]
+    fn unsupported_job_id_does_not_fabricate_executable_work() {
+        assert!(build_download_work_if_supported_source_url("job-id-only")
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn fixture_source_builds_provider_neutral_executable_work() {
+        let source_url = local_url("/source/fixture-video");
+        let media_url = local_url("/media/fixture-video.mp4");
+        let source = DirectFixtureSource::with_entries([(source_url.clone(), FixtureMedia {
+            media_id: "fixture-video".into(),
+            title: "Fixture Video".into(),
+            duration_ms: 42_000,
+            media_url,
+            thumbnail_url: None,
+            bytes: Some(1_024),
+        })]);
+
+        let work = build_download_work_with_source(&source_url, &source).unwrap();
+        assert_eq!(work.job_id, source_url);
+        assert_eq!(work.plan.source.provider, "direct-fixture");
+        assert_eq!(work.plan.source.media_id, "fixture-video");
+        assert_eq!(work.plan.quality.estimated_bytes, Some(1_024));
+        assert_eq!(work.plan.assets.len(), 1);
+        assert_eq!(work.plan.assets[0].expected_bytes, Some(1_024));
+        assert!(work.created_at_epoch_ms > 0);
+    }
+}
