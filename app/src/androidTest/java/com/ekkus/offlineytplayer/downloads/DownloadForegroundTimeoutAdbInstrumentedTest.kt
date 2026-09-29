@@ -1,7 +1,6 @@
 package com.ekkus.offlineytplayer.downloads
 
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
@@ -41,18 +40,21 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
     fun restoreDeviceConfigAndStopService() {
         if (Build.VERSION.SDK_INT >= 35) {
             shell("device_config delete activity_manager data_sync_fgs_timeout_duration")
-            context.stopService(Intent(context, DownloadForegroundService::class.java))
+            shell("am force-stop ${context.packageName}")
         }
         clearTimeoutState()
     }
 
     @Test
     fun shortenedDataSyncTimeoutInvokesOnTimeoutAndPersistsBeforeStop() {
-        val intent = Intent(context, DownloadForegroundService::class.java)
-            .setAction(DownloadForegroundService.ACTION_RECONCILE_AFTER_REBOOT)
-
-        context.startForegroundService(intent)
-        shell("input keyevent KEYCODE_HOME")
+        // Launch from the shell rather than the instrumentation process. This keeps the
+        // production app process independently backgroundable and avoids force-stop/context
+        // lifecycle coupling in the test runner itself.
+        shell(
+            "am start-foreground-service -n ${context.packageName}/.downloads.DownloadForegroundService " +
+                "-a ${DownloadForegroundService.ACTION_RECONCILE_AFTER_REBOOT}",
+        )
+        shell("am make-uid-idle ${context.packageName}")
 
         val deadline = SystemClock.uptimeMillis() + TIMEOUT_WAIT_MILLIS
         while (SystemClock.uptimeMillis() < deadline && preferences.getInt(TIMEOUT_COUNT_KEY, 0) == 0) {
