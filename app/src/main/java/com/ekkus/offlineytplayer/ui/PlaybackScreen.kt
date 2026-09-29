@@ -131,7 +131,7 @@ private fun MediaController.applySubtitleSelection(asset: LocalPlaybackAsset, se
     trackSelectionParameters = builder.build()
 }
 private fun MediaController.applyAudioSelection(asset: LocalPlaybackAsset, selectedIndex: Int) {
-    val language = asset.audioTracks.getOrNull(selectedIndex)?.language?.takeIf(String::isNotBlank) ?: return
+    val language = asset.audioTracks.getOrNull(selectedIndex)?.language?.takeIf { it.isNotBlank() } ?: return
     trackSelectionParameters = trackSelectionParameters.buildUpon()
         .setPreferredAudioLanguage(language)
         .build()
