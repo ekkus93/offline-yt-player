@@ -48,8 +48,7 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
     @Test
     fun shortenedDataSyncTimeoutInvokesOnTimeoutAndPersistsBeforeStop() {
         val intent = Intent(context, DownloadForegroundService::class.java)
-            .setAction(DownloadForegroundService.ACTION_SCHEDULE_WORK)
-            .putExtra(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, "api35-timeout-qualification")
+            .setAction(DownloadForegroundService.ACTION_RECONCILE_AFTER_REBOOT)
 
         context.startForegroundService(intent)
         shell("input keyevent KEYCODE_HOME")
