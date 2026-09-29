@@ -1,6 +1,4 @@
-use crate::{
-    CoreError, DurableDownloadWorkItem, ErrorKind, MediaSource, SourceRegistry,
-};
+use crate::{CoreError, DurableDownloadWorkItem, ErrorKind, MediaSource, SourceRegistry};
 use futures::executor::block_on;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -84,14 +82,17 @@ mod tests {
     fn fixture_source_builds_provider_neutral_executable_work() {
         let source_url = local_url("/source/fixture-video");
         let media_url = local_url("/media/fixture-video.mp4");
-        let source = DirectFixtureSource::with_entries([(source_url.clone(), FixtureMedia {
-            media_id: "fixture-video".into(),
-            title: "Fixture Video".into(),
-            duration_ms: 42_000,
-            media_url,
-            thumbnail_url: None,
-            bytes: Some(1_024),
-        })]);
+        let source = DirectFixtureSource::with_entries([(
+            source_url.clone(),
+            FixtureMedia {
+                media_id: "fixture-video".into(),
+                title: "Fixture Video".into(),
+                duration_ms: 42_000,
+                media_url,
+                thumbnail_url: None,
+                bytes: Some(1_024),
+            },
+        )]);
 
         let work = build_download_work_with_source(&source_url, &source).unwrap();
         assert_eq!(work.job_id, source_url);
