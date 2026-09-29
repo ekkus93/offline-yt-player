@@ -100,19 +100,19 @@ impl FfiDownloadControlService {
         if let (Some(store), Some(work)) = (&work_store, &executable_work) {
             store.save(work)?;
         }
-        let save_result =
-            self.library
-                .save_download_snapshot(&DurableDownloadSnapshot {
-                    job_id: job_id.into(),
-                    state: DownloadState::Queued,
-                    bytes_downloaded: 0,
-                    total_bytes: executable_work
-                        .as_ref()
-                        .and_then(|work| work.plan.quality.estimated_bytes),
-                    attempt: 0,
-                    retry_at_epoch_ms: None,
-                    last_error: None,
-                });
+        let save_result = self
+            .library
+            .save_download_snapshot(&DurableDownloadSnapshot {
+                job_id: job_id.into(),
+                state: DownloadState::Queued,
+                bytes_downloaded: 0,
+                total_bytes: executable_work
+                    .as_ref()
+                    .and_then(|work| work.plan.quality.estimated_bytes),
+                attempt: 0,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            });
         if let Err(error) = save_result {
             if let Some(store) = work_store {
                 let _ = store.delete(job_id);
