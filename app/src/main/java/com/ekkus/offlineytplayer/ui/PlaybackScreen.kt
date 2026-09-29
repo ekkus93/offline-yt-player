@@ -103,15 +103,29 @@ internal fun PortraitPlayerScreen(
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             SecondaryControl("Speed ${settings.playbackSpeed}×", enabled = controller != null) { val speed = nextSpeed(settings.playbackSpeed); controller?.setPlaybackSpeed(speed); onUpdateSettings { playbackSpeed = speed } }
-            SecondaryControl(subtitleControlLabel(subtitleLabels, selectedSubtitleIndex), controller != null && subtitleLabels.isNotEmpty()) { selectedSubtitleIndex = (selectedSubtitleIndex + 1) % subtitleLabels.size }
+            SecondaryControl(subtitleControlLabel(subtitleLabels, selectedSubtitleIndex), controller != null && subtitleLabels.isNotEmpty()) {
+                selectedSubtitleIndex = nextSubtitleSelection(selectedSubtitleIndex, subtitleLabels.size)
+                controller?.applySubtitleSelection(validated, selectedSubtitleIndex)
+            }
             SecondaryControl(audioControlLabel(audioLabels, selectedAudioIndex), controller != null && LocalPlaybackPolicy.shouldEnableAudioSelection(validated)) { selectedAudioIndex = (selectedAudioIndex + 1) % audioLabels.size }
         }
     }
 }
 
 @Composable private fun androidx.compose.foundation.layout.RowScope.SecondaryControl(label: String, enabled: Boolean = true, onClick: () -> Unit) { OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(label) } }
-private fun subtitleControlLabel(labels: List<String>, selectedIndex: Int): String = when { labels.isEmpty() -> "Subtitles"; selectedIndex in labels.indices -> "Subtitles: ${labels[selectedIndex]}"; else -> "Subtitles" }
+private fun subtitleControlLabel(labels: List<String>, selectedIndex: Int): String = when { labels.isEmpty() -> "Subtitles"; selectedIndex in labels.indices -> "Subtitles: ${labels[selectedIndex]}"; else -> "Subtitles: Off" }
 private fun audioControlLabel(labels: List<String>, selectedIndex: Int): String = when { labels.isEmpty() -> "Audio"; selectedIndex in labels.indices -> "Audio: ${labels[selectedIndex]}"; else -> "Audio" }
+private fun nextSubtitleSelection(current: Int, trackCount: Int): Int = when { trackCount <= 0 -> -1; current < 0 -> 0; current + 1 < trackCount -> current + 1; else -> -1 }
+private fun MediaController.applySubtitleSelection(asset: LocalPlaybackAsset, selectedIndex: Int) {
+    val builder = trackSelectionParameters.buildUpon()
+    if (selectedIndex !in asset.subtitleTracks.indices) {
+        builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+    } else {
+        builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+        builder.setPreferredTextLanguage(asset.subtitleTracks[selectedIndex].language)
+    }
+    trackSelectionParameters = builder.build()
+}
 private fun nextSpeed(current: Float): Float = when { current < 1f -> 1f; current < 1.25f -> 1.25f; current < 1.5f -> 1.5f; current < 2f -> 2f; else -> 0.75f }
 private fun playbackPersistenceExecutor(): ExecutorService = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "offline-yt-playback-position").apply { isDaemon = true } }
 private fun MediaController.knownPositionMs(): Long = currentPosition.coerceAtLeast(0L)
