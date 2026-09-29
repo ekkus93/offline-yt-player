@@ -5,10 +5,12 @@ import java.io.File
 import java.lang.reflect.Method
 
 internal object DownloadWorkerExecutor {
+    private const val ProductionDatabaseName = "offline-yt-player.sqlite3"
+
     fun execute(context: Context, queueItemId: String): Boolean = try {
         val service = openGeneratedService(
             className = "com.ekkus.offlineytplayer.core.FfiDownloadWorkerService",
-            databasePath = File(context.filesDir, "library.sqlite3").absolutePath,
+            databasePath = File(context.filesDir, ProductionDatabaseName).absolutePath,
         )
         try {
             val execute = service.javaClass.methods.firstOrNull { method ->
