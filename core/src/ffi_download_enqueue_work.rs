@@ -12,15 +12,10 @@ pub fn build_download_work_if_supported_source_url(
     let registry = SourceRegistry::production();
     match registry.select(job_id) {
         Ok(source) => build_download_work_with_source(job_id, source.as_ref()).map(Some),
-        Err(error)
-            if matches!(
-                error.kind,
-                ErrorKind::InvalidInput | ErrorKind::UnsupportedSource
-            ) =>
-        {
-            Ok(None)
-        }
-        Err(error) => Err(error),
+        Err(error) => match error.kind {
+            ErrorKind::InvalidInput | ErrorKind::UnsupportedSource => Ok(None),
+            _ => Err(error),
+        },
     }
 }
 
