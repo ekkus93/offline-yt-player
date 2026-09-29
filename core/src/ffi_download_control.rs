@@ -1,6 +1,6 @@
 use crate::{
-    build_download_work_if_supported_source_url, CoreError, DownloadState, DownloadStateMachine,
-    DurableDownloadSnapshot, DurableDownloadWorkStore, ErrorKind, LibraryStore,
+    CoreError, DownloadState, DownloadStateMachine, DurableDownloadSnapshot,
+    DurableDownloadWorkStore, ErrorKind, LibraryStore, build_download_work_if_supported_source_url,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
