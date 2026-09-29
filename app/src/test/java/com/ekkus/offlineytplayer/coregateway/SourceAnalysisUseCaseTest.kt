@@ -85,7 +85,15 @@ class SourceAnalysisUseCaseTest {
 
     private class RecordingSourceGateway(
         private val result: CoreGatewayResult<CoreSourceAnalysis> = CoreGatewayResult(
-            value = analysis("default"),
+            value = CoreSourceAnalysis(
+                sourceUrl = "fixture-source",
+                title = "default",
+                durationMs = 61_000,
+                thumbnailUrl = null,
+                qualityLabel = "720p",
+                estimatedBytes = 1_000_000,
+                qualityOptions = listOf(CoreSourceQualityChoice("720p", 1_000_000)),
+            ),
             error = null,
         ),
     ) : AppSourceAnalysisGateway {

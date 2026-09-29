@@ -78,7 +78,7 @@ data class SourceAnalysisTicket(
 )
 
 sealed class SourceAnalysisState {
-    data object Idle : SourceAnalysisState()
+    object Idle : SourceAnalysisState()
     data class Loading(val ticket: SourceAnalysisTicket) : SourceAnalysisState()
     data class Resolved(val analysis: CoreSourceAnalysis) : SourceAnalysisState()
     data class Unsupported(val message: String) : SourceAnalysisState()
