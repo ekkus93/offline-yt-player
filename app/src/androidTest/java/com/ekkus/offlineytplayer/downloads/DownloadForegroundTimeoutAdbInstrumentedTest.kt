@@ -32,9 +32,9 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
     @Before
     fun configureShortDataSyncTimeout() {
         assumeTrue("Android 15+ is required for Service.onTimeout foreground-service qualification", Build.VERSION.SDK_INT >= 35)
+        shell("am force-stop ${context.packageName}")
         clearTimeoutState()
         shell("device_config put activity_manager data_sync_fgs_timeout_duration 1000")
-        shell("am force-stop ${context.packageName}")
     }
 
     @After
