@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- This instrumentation test intentionally calls API-35 Service timeout behavior and is
+         executed only by the dedicated API-35 qualification workflow. -->
+    <issue id="NewApi">
+        <ignore path="src/androidTest/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundTimeoutAdbInstrumentedTest.kt" />
+    </issue>
+</lint>
