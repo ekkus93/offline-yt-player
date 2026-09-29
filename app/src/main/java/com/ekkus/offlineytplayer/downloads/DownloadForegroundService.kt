@@ -158,7 +158,7 @@ class DownloadForegroundService : Service() {
         false
     }
 
-    private fun downloadDatabasePath(): String = File(filesDir, "library.sqlite3").absolutePath
+    private fun downloadDatabasePath(): String = File(filesDir, PRODUCTION_DATABASE_NAME).absolutePath
 
     private fun activeNotification(queueItemId: String?): Notification {
         val openApp = PendingIntent.getActivity(
@@ -208,6 +208,7 @@ class DownloadForegroundService : Service() {
     }
 
     companion object {
+        private const val PRODUCTION_DATABASE_NAME = "offline-yt-player.sqlite3"
         const val ACTION_PAUSE = "com.ekkus.offlineytplayer.download.PAUSE"
         const val ACTION_RESUME = "com.ekkus.offlineytplayer.download.RESUME"
         const val ACTION_CANCEL = "com.ekkus.offlineytplayer.download.CANCEL"
