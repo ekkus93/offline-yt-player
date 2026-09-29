@@ -31,7 +31,6 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
     @Before
     fun configureShortDataSyncTimeout() {
         assumeTrue("Android 15+ is required for Service.onTimeout foreground-service qualification", Build.VERSION.SDK_INT >= 35)
-        shell("am force-stop ${context.packageName}")
         clearTimeoutState()
         shell("device_config put activity_manager data_sync_fgs_timeout_duration 1000")
     }
@@ -47,9 +46,9 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
 
     @Test
     fun shortenedDataSyncTimeoutInvokesOnTimeoutAndPersistsBeforeStop() {
-        // Launch from the shell rather than the instrumentation process. This keeps the
-        // production app process independently backgroundable and avoids force-stop/context
-        // lifecycle coupling in the test runner itself.
+        // Start the production service in the target app process, then background that process.
+        // Do not force-stop the package before launch: instrumentation shares the target package,
+        // so force-stop also kills the test runner before it can observe the timeout callback.
         shell(
             "am start-foreground-service -n ${context.packageName}/.downloads.DownloadForegroundService " +
                 "-a ${DownloadForegroundService.ACTION_RECONCILE_AFTER_REBOOT}",
