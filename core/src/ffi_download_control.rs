@@ -1,7 +1,8 @@
 use crate::{
-    CoreError, DownloadState, DownloadStateMachine, DurableDownloadSnapshot, ErrorKind,
-    LibraryStore,
+    build_download_work_if_supported_source_url, CoreError, DownloadState, DownloadStateMachine,
+    DurableDownloadSnapshot, DurableDownloadWorkStore, ErrorKind, LibraryStore,
 };
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -18,6 +19,7 @@ pub struct FfiDownloadControlResult {
 
 #[derive(Debug, uniffi::Object)]
 pub struct FfiDownloadControlService {
+    database_path: PathBuf,
     library: LibraryStore,
 }
 
@@ -25,8 +27,14 @@ pub struct FfiDownloadControlService {
 impl FfiDownloadControlService {
     #[uniffi::constructor]
     pub fn open(database_path: String) -> Result<Arc<Self>, FfiDownloadControlOpenError> {
+        let database_path = PathBuf::from(database_path);
         LibraryStore::open(&database_path)
-            .map(|library| Arc::new(Self { library }))
+            .map(|library| {
+                Arc::new(Self {
+                    database_path,
+                    library,
+                })
+            })
             .map_err(|error| FfiDownloadControlOpenError::Persistence {
                 message: error.message,
             })
@@ -92,16 +100,31 @@ impl FfiDownloadControlService {
         if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) {
             return Ok(false);
         }
-        self.library
-            .save_download_snapshot(&DurableDownloadSnapshot {
-                job_id: job_id.into(),
-                state: DownloadState::Queued,
-                bytes_downloaded: 0,
-                total_bytes: None,
-                attempt: 0,
-                retry_at_epoch_ms: None,
-                last_error: None,
-            })?;
+        let executable_work = build_download_work_if_supported_source_url(job_id)?;
+        let work_store = match &executable_work {
+            Some(_) => Some(DurableDownloadWorkStore::open(&self.database_path)?),
+            None => None,
+        };
+        if let (Some(store), Some(work)) = (&work_store, &executable_work) {
+            store.save(work)?;
+        }
+        let save_result = self.library.save_download_snapshot(&DurableDownloadSnapshot {
+            job_id: job_id.into(),
+            state: DownloadState::Queued,
+            bytes_downloaded: 0,
+            total_bytes: executable_work
+                .as_ref()
+                .and_then(|work| work.plan.quality.estimated_bytes),
+            attempt: 0,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        });
+        if let Err(error) = save_result {
+            if let Some(store) = work_store {
+                let _ = store.delete(job_id);
+            }
+            return Err(error);
+        }
         Ok(true)
     }
 
