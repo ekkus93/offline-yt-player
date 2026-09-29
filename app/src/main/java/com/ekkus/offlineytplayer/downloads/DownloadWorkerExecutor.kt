@@ -1,16 +1,62 @@
 package com.ekkus.offlineytplayer.downloads
 
 import android.content.Context
-import com.ekkus.offlineytplayer.core.FfiDownloadWorkerService
 import java.io.File
+import java.lang.reflect.Method
 
 internal object DownloadWorkerExecutor {
     fun execute(context: Context, queueItemId: String): Boolean = try {
-        FfiDownloadWorkerService(File(context.filesDir, "library.sqlite3").absolutePath).use { worker ->
-            val result = worker.executeJob(queueItemId, System.currentTimeMillis().toULong())
-            result.error == null && result.executed
+        val service = openGeneratedService(
+            className = "com.ekkus.offlineytplayer.core.FfiDownloadWorkerService",
+            databasePath = File(context.filesDir, "library.sqlite3").absolutePath,
+        )
+        try {
+            val execute = service.javaClass.methods.firstOrNull { method ->
+                method.name == "executeJob" && method.parameterTypes.size == 2
+            } ?: error("Generated FfiDownloadWorkerService does not expose executeJob/2")
+            val result = execute.invoke(service, queueItemId, System.currentTimeMillis().toULong())
+                ?: error("Generated FfiDownloadWorkerService.executeJob returned null")
+            readNullable(result, "error") == null && readBoolean(result, "executed")
+        } finally {
+            (service as? AutoCloseable)?.close()
         }
+    } catch (_: ReflectiveOperationException) {
+        false
     } catch (_: RuntimeException) {
         false
+    }
+
+    private fun openGeneratedService(className: String, databasePath: String): Any {
+        val serviceClass = Class.forName(className)
+        serviceClass.methods.firstOrNull { method ->
+            method.name == "open" && method.parameterTypes.contentEquals(arrayOf(String::class.java))
+        }?.let { method -> return method.invoke(null, databasePath) }
+
+        val companion = serviceClass.declaredClasses.firstOrNull { it.simpleName == "Companion" }
+            ?: error("Generated $className has no static or companion open(databasePath)")
+        val companionInstance = serviceClass.getDeclaredField("Companion").get(null)
+        val open: Method = companion.methods.firstOrNull { method ->
+            method.name == "open" && method.parameterTypes.contentEquals(arrayOf(String::class.java))
+        } ?: error("Generated $className.Companion has no open(databasePath)")
+        return open.invoke(companionInstance, databasePath)
+            ?: error("Generated $className.open returned null")
+    }
+
+    private fun readBoolean(target: Any, vararg names: String): Boolean =
+        readNullable(target, *names) as? Boolean
+            ?: error("Missing generated Boolean property ${names.joinToString("/")}")
+
+    private fun readNullable(target: Any, vararg names: String): Any? {
+        for (name in names) {
+            target.javaClass.methods.firstOrNull {
+                it.parameterTypes.isEmpty() &&
+                    (it.name == name || it.name == "get${name.replaceFirstChar(Char::uppercase)}")
+            }?.let { return it.invoke(target) }
+            target.javaClass.declaredFields.firstOrNull { it.name == name }?.let { field ->
+                field.isAccessible = true
+                return field.get(target)
+            }
+        }
+        return null
     }
 }
