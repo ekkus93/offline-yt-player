@@ -107,7 +107,10 @@ internal fun PortraitPlayerScreen(
                 selectedSubtitleIndex = nextSubtitleSelection(selectedSubtitleIndex, subtitleLabels.size)
                 controller?.applySubtitleSelection(validated, selectedSubtitleIndex)
             }
-            SecondaryControl(audioControlLabel(audioLabels, selectedAudioIndex), controller != null && LocalPlaybackPolicy.shouldEnableAudioSelection(validated)) { selectedAudioIndex = (selectedAudioIndex + 1) % audioLabels.size }
+            SecondaryControl(audioControlLabel(audioLabels, selectedAudioIndex), controller != null && LocalPlaybackPolicy.shouldEnableAudioSelection(validated)) {
+                selectedAudioIndex = nextAudioSelection(selectedAudioIndex, audioLabels.size)
+                controller?.applyAudioSelection(validated, selectedAudioIndex)
+            }
         }
     }
 }
@@ -116,6 +119,7 @@ internal fun PortraitPlayerScreen(
 private fun subtitleControlLabel(labels: List<String>, selectedIndex: Int): String = when { labels.isEmpty() -> "Subtitles"; selectedIndex in labels.indices -> "Subtitles: ${labels[selectedIndex]}"; else -> "Subtitles: Off" }
 private fun audioControlLabel(labels: List<String>, selectedIndex: Int): String = when { labels.isEmpty() -> "Audio"; selectedIndex in labels.indices -> "Audio: ${labels[selectedIndex]}"; else -> "Audio" }
 private fun nextSubtitleSelection(current: Int, trackCount: Int): Int = when { trackCount <= 0 -> -1; current < 0 -> 0; current + 1 < trackCount -> current + 1; else -> -1 }
+private fun nextAudioSelection(current: Int, trackCount: Int): Int = when { trackCount <= 0 -> -1; current < 0 -> 0; current + 1 < trackCount -> current + 1; else -> 0 }
 private fun MediaController.applySubtitleSelection(asset: LocalPlaybackAsset, selectedIndex: Int) {
     val builder = trackSelectionParameters.buildUpon()
     if (selectedIndex !in asset.subtitleTracks.indices) {
@@ -125,6 +129,12 @@ private fun MediaController.applySubtitleSelection(asset: LocalPlaybackAsset, se
         builder.setPreferredTextLanguage(asset.subtitleTracks[selectedIndex].language)
     }
     trackSelectionParameters = builder.build()
+}
+private fun MediaController.applyAudioSelection(asset: LocalPlaybackAsset, selectedIndex: Int) {
+    val language = asset.audioTracks.getOrNull(selectedIndex)?.language?.takeIf(String::isNotBlank) ?: return
+    trackSelectionParameters = trackSelectionParameters.buildUpon()
+        .setPreferredAudioLanguage(language)
+        .build()
 }
 private fun nextSpeed(current: Float): Float = when { current < 1f -> 1f; current < 1.25f -> 1.25f; current < 1.5f -> 1.5f; current < 2f -> 2f; else -> 0.75f }
 private fun playbackPersistenceExecutor(): ExecutorService = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "offline-yt-playback-position").apply { isDaemon = true } }
