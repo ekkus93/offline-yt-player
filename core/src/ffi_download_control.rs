@@ -29,7 +29,12 @@ impl FfiDownloadControlService {
     pub fn open(database_path: String) -> Result<Arc<Self>, FfiDownloadControlOpenError> {
         let database_path = PathBuf::from(database_path);
         LibraryStore::open(&database_path)
-            .map(|library| Arc::new(Self { database_path, library }))
+            .map(|library| {
+                Arc::new(Self {
+                    database_path,
+                    library,
+                })
+            })
             .map_err(|error| FfiDownloadControlOpenError::Persistence {
                 message: error.message,
             })
@@ -37,7 +42,10 @@ impl FfiDownloadControlService {
 
     pub fn enqueue(&self, job_id: String) -> FfiDownloadControlResult {
         match self.enqueue_inner(&job_id) {
-            Ok(updated) => FfiDownloadControlResult { updated, error: None },
+            Ok(updated) => FfiDownloadControlResult {
+                updated,
+                error: None,
+            },
             Err(error) => FfiDownloadControlResult {
                 updated: false,
                 error: Some(crate::ffi::FfiError::from(&error)),
@@ -45,13 +53,24 @@ impl FfiDownloadControlService {
         }
     }
 
-    pub fn pause(&self, job_id: String) -> FfiDownloadControlResult { self.transition(&job_id, DownloadState::Paused) }
-    pub fn resume(&self, job_id: String) -> FfiDownloadControlResult { self.transition(&job_id, DownloadState::Queued) }
-    pub fn cancel(&self, job_id: String) -> FfiDownloadControlResult { self.transition(&job_id, DownloadState::Canceled) }
+    pub fn pause(&self, job_id: String) -> FfiDownloadControlResult {
+        self.transition(&job_id, DownloadState::Paused)
+    }
+
+    pub fn resume(&self, job_id: String) -> FfiDownloadControlResult {
+        self.transition(&job_id, DownloadState::Queued)
+    }
+
+    pub fn cancel(&self, job_id: String) -> FfiDownloadControlResult {
+        self.transition(&job_id, DownloadState::Canceled)
+    }
 
     pub fn retry(&self, job_id: String) -> FfiDownloadControlResult {
         match self.retry_inner(&job_id) {
-            Ok(updated) => FfiDownloadControlResult { updated, error: None },
+            Ok(updated) => FfiDownloadControlResult {
+                updated,
+                error: None,
+            },
             Err(error) => FfiDownloadControlResult {
                 updated: false,
                 error: Some(crate::ffi::FfiError::from(&error)),
@@ -62,19 +81,42 @@ impl FfiDownloadControlService {
 
 impl FfiDownloadControlService {
     fn enqueue_inner(&self, job_id: &str) -> Result<bool, CoreError> {
-        if job_id.trim().is_empty() { return Err(CoreError::new(ErrorKind::InvalidInput, "download job id must not be empty", false)); }
+        if job_id.trim().is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "download job id must not be empty",
+                false,
+            ));
+        }
         let snapshots = self.library.load_download_snapshots()?;
-        if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) { return Ok(false); }
+        if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) {
+            return Ok(false);
+        }
         let executable_work = build_download_work_if_supported_source_url(job_id)?;
-        let work_store = match &executable_work { Some(_) => Some(DurableDownloadWorkStore::open(&self.database_path)?), None => None };
-        if let (Some(store), Some(work)) = (&work_store, &executable_work) { store.save(work)?; }
-        let save_result = self.library.save_download_snapshot(&DurableDownloadSnapshot {
-            job_id: job_id.into(), state: DownloadState::Queued, bytes_downloaded: 0,
-            total_bytes: executable_work.as_ref().and_then(|work| work.plan.quality.estimated_bytes),
-            attempt: 0, retry_at_epoch_ms: None, last_error: None,
-        });
+        let work_store = match &executable_work {
+            Some(_) => Some(DurableDownloadWorkStore::open(&self.database_path)?),
+            None => None,
+        };
+        if let (Some(store), Some(work)) = (&work_store, &executable_work) {
+            store.save(work)?;
+        }
+        let save_result =
+            self.library
+                .save_download_snapshot(&DurableDownloadSnapshot {
+                    job_id: job_id.into(),
+                    state: DownloadState::Queued,
+                    bytes_downloaded: 0,
+                    total_bytes: executable_work
+                        .as_ref()
+                        .and_then(|work| work.plan.quality.estimated_bytes),
+                    attempt: 0,
+                    retry_at_epoch_ms: None,
+                    last_error: None,
+                });
         if let Err(error) = save_result {
-            if let Some(store) = work_store { let _ = store.delete(job_id); }
+            if let Some(store) = work_store {
+                let _ = store.delete(job_id);
+            }
             return Err(error);
         }
         Ok(true)
@@ -82,15 +124,32 @@ impl FfiDownloadControlService {
 
     fn transition(&self, job_id: &str, next: DownloadState) -> FfiDownloadControlResult {
         match self.transition_inner(job_id, next) {
-            Ok(updated) => FfiDownloadControlResult { updated, error: None },
-            Err(error) => FfiDownloadControlResult { updated: false, error: Some(crate::ffi::FfiError::from(&error)) },
+            Ok(updated) => FfiDownloadControlResult {
+                updated,
+                error: None,
+            },
+            Err(error) => FfiDownloadControlResult {
+                updated: false,
+                error: Some(crate::ffi::FfiError::from(&error)),
+            },
         }
     }
 
     fn transition_inner(&self, job_id: &str, next: DownloadState) -> Result<bool, CoreError> {
         let mut snapshots = self.library.load_download_snapshots()?;
-        let snapshot = snapshots.iter_mut().find(|snapshot| snapshot.job_id == job_id).ok_or_else(|| CoreError::new(ErrorKind::InvalidInput, "download job does not exist", false))?;
-        if snapshot.state == next { return Ok(false); }
+        let snapshot = snapshots
+            .iter_mut()
+            .find(|snapshot| snapshot.job_id == job_id)
+            .ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "download job does not exist",
+                    false,
+                )
+            })?;
+        if snapshot.state == next {
+            return Ok(false);
+        }
         let mut machine = DownloadStateMachine::new(snapshot.state);
         machine.transition(next)?;
         snapshot.state = machine.state();
@@ -100,8 +159,23 @@ impl FfiDownloadControlService {
 
     fn retry_inner(&self, job_id: &str) -> Result<bool, CoreError> {
         let mut snapshots = self.library.load_download_snapshots()?;
-        let snapshot = snapshots.iter_mut().find(|snapshot| snapshot.job_id == job_id).ok_or_else(|| CoreError::new(ErrorKind::InvalidInput, "download job does not exist", false))?;
-        if snapshot.state != DownloadState::Failed { return Err(CoreError::new(ErrorKind::InvalidInput, "download is not eligible for explicit retry", false)); }
+        let snapshot = snapshots
+            .iter_mut()
+            .find(|snapshot| snapshot.job_id == job_id)
+            .ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "download job does not exist",
+                    false,
+                )
+            })?;
+        if snapshot.state != DownloadState::Failed {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "download is not eligible for explicit retry",
+                false,
+            ));
+        }
         let mut machine = DownloadStateMachine::new(snapshot.state);
         machine.transition(DownloadState::Queued)?;
         snapshot.state = machine.state();
