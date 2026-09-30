@@ -200,6 +200,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Add regression test: source-change/nonretryable provider failure does not enter generic retry loop.
 
 
+
 - [x] Add regression tests for retryable transient statuses/network errors.
 
 ### RMD-402 — Unify retry policy with production scheduler
@@ -399,6 +400,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-704 — Make Advanced Options operational
 
+
 - [ ] Populate actual subtitle languages/tracks.
 - [ ] Populate audio choices where multiple tracks are supported.
 - [ ] Limit container/format choices to real supported paths.
@@ -563,45 +565,49 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1101 — Add settings persistence
 
-- [ ] Add DataStore or another documented durable settings store.
-- [ ] Expose observable typed settings.
-- [ ] Add migration/default strategy.
-- [ ] Add persistence tests.
+- [x] Add DataStore or another documented durable settings store.
+- [x] Expose observable typed settings.
+- [x] Add migration/default strategy.
+- [x] Add persistence tests.
 
 ### RMD-1102 — Download settings
 
-- [ ] Persist default quality.
-- [ ] Persist network/Wi-Fi-only preference.
-- [ ] Persist concurrency within core bounds.
-- [ ] Persist subtitle default where applicable.
-- [ ] Persist only retry controls that truly affect runtime.
-- [ ] Prove runtime consumes each setting.
+- [x] Persist default quality.
+- [x] Persist network/Wi-Fi-only preference.
+- [x] Persist concurrency within core bounds.
+- [x] Persist subtitle default where applicable.
+- [x] Persist only retry controls that truly affect runtime.
+- [x] Prove runtime consumes each setting.
 
 ### RMD-1103 — Playback settings
 
-- [ ] Persist supported defaults such as speed/resume behavior if retained in product spec.
-- [ ] Apply to canonical playback session.
-- [ ] Remove decorative settings with no runtime meaning.
+- [x] Persist supported defaults such as speed/resume behavior if retained in product spec.
+- [x] Apply to canonical playback session.
+- [x] Remove decorative settings with no runtime meaning.
 
 ### RMD-1104 — Storage settings
 
-- [ ] Calculate actual managed-media usage.
-- [ ] Show DB/partial/cache breakdown where useful.
-- [ ] Implement safe cleanup actions.
-- [ ] Confirm destructive cleanup.
-- [ ] Add tests against temporary storage.
+- [x] Calculate actual managed-media usage.
+- [x] Show DB/partial/cache breakdown where useful.
+- [x] Implement safe cleanup actions.
+- [x] Confirm destructive cleanup.
+- [x] Add tests against temporary storage.
 
 ### RMD-1105 — Appearance settings
 
-- [ ] Persist System/Light/Dark selection.
-- [ ] Apply immediately to Compose theme.
-- [ ] Persist Library layout preference if offered.
+- [x] Persist System/Light/Dark selection.
+- [x] Apply immediately to Compose theme.
+- [x] Persist Library layout preference if offered.
 
 ### RMD-1106 — About
 
-- [ ] Replace hard-coded `0.1.0` with real version/build metadata.
-- [ ] Show source revision when available.
-- [ ] Link/render licenses/privacy/legal/support diagnostics as actually supported.
+
+- [x] Replace hard-coded `0.1.0` with real version/build metadata.
+- [x] Show source revision when available.
+- [x] Link/render licenses/privacy/legal/support diagnostics as actually supported.
+
+**Evidence (RMD-1100 canonical reconciliation):** `docs/RMD_1100_DURABLE_SETTINGS_CANONICAL_RECONCILIATION_2026-09-30.md` records the completed RMD-1101 through RMD-1106 implementation and qualification. Supporting evidence is in `docs/RMD_1101_1103_SETTINGS_QUALIFICATION_2026-09-30.md`, `docs/RMD_1102_RUNTIME_CONCURRENCY_IMPLEMENTATION_2026-09-30.md`, `docs/RMD_1102_RUNTIME_SETTINGS_QUALIFICATION_2026-09-30.md`, `docs/RMD_1104_STORAGE_SETTINGS_RECONCILIATION_2026-09-30.md`, `docs/RMD_1105_APPEARANCE_SETTINGS_RECONCILIATION_2026-09-30.md`, and `docs/RMD_1106_ABOUT_RECONCILIATION_2026-09-30.md`. Exact master `ad2474d169508f085cfbc5e7d147fcbb8d31ef46` passed CI `36705782171`, Android smoke `36705782260`, Android FGS/API-35 UIDT `36705782190`, Supply chain `36705782245`, CI evidence `36705782364`, and Deterministic E2E `36705782156`.
+
 
 ---
 
@@ -797,6 +803,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Verify partial cleanup/recoverability.
 - [ ] Verify user-visible actionable failure.
 - [ ] Verify no false completed library record.
+
 
 ### RMD-1506 — Connectivity E2E
 
