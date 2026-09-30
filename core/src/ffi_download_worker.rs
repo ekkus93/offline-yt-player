@@ -17,6 +17,18 @@ pub struct FfiDownloadWorkerResult {
     pub error: Option<FfiError>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiDownloadPresentation {
+    pub job_id: String,
+    pub display_title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiDownloadPresentationResult {
+    pub items: Vec<FfiDownloadPresentation>,
+    pub error: Option<FfiError>,
+}
+
 #[derive(Debug, uniffi::Object)]
 pub struct FfiDownloadWorkerService {
     database_path: PathBuf,
@@ -29,23 +41,16 @@ impl FfiDownloadWorkerService {
     pub fn open(database_path: String) -> Result<Arc<Self>, FfiCoreServiceOpenError> {
         let database_path = PathBuf::from(database_path);
         LibraryStore::open(&database_path).map_err(|error| {
-            FfiCoreServiceOpenError::Persistence {
-                message: error.message,
-            }
+            FfiCoreServiceOpenError::Persistence { message: error.message }
         })?;
         DurableDownloadWorkStore::open(&database_path).map_err(|error| {
-            FfiCoreServiceOpenError::Persistence {
-                message: error.message,
-            }
+            FfiCoreServiceOpenError::Persistence { message: error.message }
         })?;
         let library_root = database_path
             .parent()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
-        Ok(Arc::new(Self {
-            database_path,
-            library_root,
-        }))
+        Ok(Arc::new(Self { database_path, library_root }))
     }
 
     pub fn execute_job(
@@ -63,6 +68,24 @@ impl FfiDownloadWorkerService {
                 failed: false,
                 retry_wait: false,
                 canceled: false,
+                error: Some(FfiError::from(&error)),
+            },
+        }
+    }
+
+    pub fn download_presentations(&self) -> FfiDownloadPresentationResult {
+        match DurableDownloadWorkStore::open(&self.database_path)
+            .and_then(|store| store.load_presentations())
+        {
+            Ok(items) => FfiDownloadPresentationResult {
+                items: items
+                    .into_iter()
+                    .map(|(job_id, display_title)| FfiDownloadPresentation { job_id, display_title })
+                    .collect(),
+                error: None,
+            },
+            Err(error) => FfiDownloadPresentationResult {
+                items: Vec::new(),
                 error: Some(FfiError::from(&error)),
             },
         }

@@ -12,9 +12,9 @@ pub struct DurableDownloadWorkItem {
 
 /// Process-death-safe executable work-plan storage used by Android runtime launch points.
 ///
-/// This is intentionally separate from queue state: queue state remains authoritative for
-/// eligibility/control, while this table stores the provider-neutral plan needed to execute an
-/// eligible durable job after the app process has been recreated.
+/// Queue state remains authoritative for eligibility/control. The presentation table deliberately
+/// outlives executable work deletion so completed Downloads rows retain resolved metadata after the
+/// worker has discarded the no-longer-executable plan.
 #[derive(Debug, Clone)]
 pub struct DurableDownloadWorkStore {
     connection: Arc<Mutex<Connection>>,
@@ -29,6 +29,10 @@ impl DurableDownloadWorkStore {
                    job_id TEXT PRIMARY KEY,
                    plan_json TEXT NOT NULL,
                    created_at_epoch_ms INTEGER NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS download_presentations (
+                   job_id TEXT PRIMARY KEY,
+                   display_title TEXT NOT NULL
                  );",
             )
             .map_err(db_error)?;
@@ -56,7 +60,8 @@ impl DurableDownloadWorkStore {
             ));
         }
         let plan_json = serde_json::to_string(&work.plan).map_err(json_error)?;
-        self.connection()?
+        let connection = self.connection()?;
+        connection
             .execute(
                 "INSERT INTO download_work_items(job_id, plan_json, created_at_epoch_ms)
                  VALUES(?1, ?2, ?3)
@@ -64,6 +69,14 @@ impl DurableDownloadWorkStore {
                    plan_json=excluded.plan_json,
                    created_at_epoch_ms=excluded.created_at_epoch_ms",
                 params![work.job_id, plan_json, to_i64(work.created_at_epoch_ms)?],
+            )
+            .map_err(db_error)?;
+        connection
+            .execute(
+                "INSERT INTO download_presentations(job_id, display_title)
+                 VALUES(?1, ?2)
+                 ON CONFLICT(job_id) DO UPDATE SET display_title=excluded.display_title",
+                params![work.job_id, work.plan.title],
             )
             .map_err(db_error)?;
         Ok(())
@@ -102,6 +115,17 @@ impl DurableDownloadWorkStore {
             });
         }
         Ok(work)
+    }
+
+    pub fn load_presentations(&self) -> Result<Vec<(String, String)>, CoreError> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare("SELECT job_id, display_title FROM download_presentations ORDER BY job_id")
+            .map_err(db_error)?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(db_error)?;
+        rows.map(|row| row.map_err(db_error)).collect()
     }
 
     pub fn delete(&self, job_id: &str) -> Result<bool, CoreError> {
@@ -178,8 +202,10 @@ mod tests {
 
         let reopened = DurableDownloadWorkStore::open(&database).unwrap();
         assert_eq!(reopened.load_all().unwrap(), vec![expected.clone()]);
+        assert_eq!(reopened.load_presentations().unwrap(), vec![("fixture-job".into(), "Fixture".into())]);
         assert!(reopened.delete(&expected.job_id).unwrap());
         assert!(reopened.load_all().unwrap().is_empty());
+        assert_eq!(reopened.load_presentations().unwrap(), vec![("fixture-job".into(), "Fixture".into())]);
     }
 
     #[test]
