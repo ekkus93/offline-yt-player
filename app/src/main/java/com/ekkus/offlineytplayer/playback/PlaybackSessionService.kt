@@ -5,9 +5,11 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 
@@ -58,4 +60,18 @@ private class SplitAudioMediaSourceFactory(
     }
 
     override fun getSupportedTypes(): IntArray = delegate.getSupportedTypes()
+
+    override fun setDrmSessionManagerProvider(
+        drmSessionManagerProvider: DrmSessionManagerProvider,
+    ): MediaSource.Factory {
+        delegate.setDrmSessionManagerProvider(drmSessionManagerProvider)
+        return this
+    }
+
+    override fun setLoadErrorHandlingPolicy(
+        loadErrorHandlingPolicy: LoadErrorHandlingPolicy,
+    ): MediaSource.Factory {
+        delegate.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+        return this
+    }
 }
