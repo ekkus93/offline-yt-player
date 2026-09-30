@@ -1,14 +1,15 @@
 # RMD-601 / RMD-603 current-master reconciliation — 2026-09-29
 
-Candidate exact master: `95fcd880c882ea4cb9c27ce6127ace51db054b87`.
+Implementation candidate exact master: `95fcd880c882ea4cb9c27ce6127ace51db054b87`.
+Reconciliation exact master: `cba2bdd59e6b2679887e834a9fc29925936be3d6`.
 
-This note reconciles already-merged production wiring before adding redundant Android qualification, following `docs/ANDROID_QUALIFICATION_ACCELERATION_PLAN_2026-09-22.md`. It does not by itself change the canonical remediation checklist.
+This note reconciles already-merged production wiring before adding redundant Android qualification, following `docs/ANDROID_QUALIFICATION_ACCELERATION_PLAN_2026-09-22.md`. It does not weaken the canonical remediation checklist or substitute documentation for production behavior.
 
 ## RMD-601 — Library repository wiring
 
 Current production startup no longer supplies `emptyList<LibraryRowModel>()`. `MainActivity.bootstrapProductionUi()` opens `GeneratedUniffiCoreGateway` against the app-private `offline-yt-player.sqlite3`, runs startup reconciliation, calls `listLibrary()`, and maps persisted `CoreLibraryItem` records plus `GeneratedUniffiLibraryPlaybackGateway.listPlaybackAssets()` into `LibraryScreenState.Ready` / `LibraryRowModel`. `AppStateRefresher` republishes subsequent repository reads while the Activity is started. Core/open/reconciliation failures map to `LibraryScreenState.Failed`, startup begins in `LibraryScreenState.Loading`, and an empty successful repository read is represented as `Ready(emptyList())` for the Library screen's empty-state rendering.
 
-The mapped production row uses persisted display title, quality, duration, completion state, playback position, and local playback asset paths. Search/filter presentation remains a UI concern over the repository-backed rows rather than fabricated production records.
+The mapped production row uses persisted display title, quality, duration, completion state, playback position, and local playback asset paths. Search/filter presentation remains a UI concern over repository-backed rows rather than fabricated production records.
 
 Relevant production paths:
 
@@ -35,7 +36,7 @@ Relevant production paths:
 
 ## Exact-head qualification
 
-Exact master `95fcd880c882ea4cb9c27ce6127ace51db054b87` passed the complete currently configured exact-head matrix before this reconciliation commit:
+The implementation candidate `95fcd880c882ea4cb9c27ce6127ace51db054b87` passed the complete configured matrix:
 
 - CI `36654583862`
 - Android smoke `36654583867`
@@ -44,4 +45,13 @@ Exact master `95fcd880c882ea4cb9c27ce6127ace51db054b87` passed the complete curr
 - CI evidence `36654583893`
 - Deterministic E2E fixture `36654583870`
 
-Canonical TODO checkboxes should only be changed after the reconciliation commit itself has passed exact-head CI, preserving RMD-G04.
+The reconciliation commit itself, exact master `cba2bdd59e6b2679887e834a9fc29925936be3d6`, also passed the complete configured matrix:
+
+- CI `36662461189`
+- Android smoke `36662461138`
+- Android FGS timeout `36662461068`
+- Supply chain `36662460984`
+- CI evidence `36662460963`
+- Deterministic E2E fixture `36662460962`
+
+Therefore the RMD-601 and RMD-603 canonical checklist subtasks are evidence-qualified and ready for canonical TODO checkbox reconciliation. This note deliberately does not claim RMD-604 lifecycle-aware state-holder requirements, RMD-1001 operational Library actions, or any RMD-1500 E2E requirement.
