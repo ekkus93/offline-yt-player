@@ -28,8 +28,11 @@ class SourceAnalysisUseCase(
     fun analyzeBlocking(sourceUrl: String): SourceAnalysisState {
         val loading = begin(sourceUrl)
         if (loading !is SourceAnalysisState.Loading) return loading
-        return complete(loading.ticket, gateway.analyze(loading.ticket.normalizedUrl))
+        return analyzeBlocking(loading.ticket)
     }
+
+    fun analyzeBlocking(ticket: SourceAnalysisTicket): SourceAnalysisState =
+        complete(ticket, gateway.analyze(ticket.normalizedUrl))
 
     @Synchronized
     fun complete(

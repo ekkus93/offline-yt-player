@@ -15,11 +15,13 @@ class AddScreenPolicyTest {
     }
 
     @Test
-    fun analyzeUsesProductionGatewayAndSuppressesSupersededResults() {
-        assertTrue(appShell.contains("gateway.analyze(requestUrl)"))
+    fun analyzeUsesProductionUseCaseAndSuppressesSupersededResults() {
+        assertTrue(appShell.contains("SourceAnalysisUseCase"))
+        assertTrue(appShell.contains("useCase.begin(url)"))
+        assertTrue(appShell.contains("useCase.analyzeBlocking(started.ticket)"))
+        assertTrue(appShell.contains("resolved is SourceAnalysisState.Superseded"))
         assertTrue(appShell.contains("withContext(Dispatchers.IO)"))
-        assertTrue(appShell.contains("if (activeAnalysisUrl != requestUrl) return@launch"))
-        assertTrue(appShell.contains("DownloadSetupState(analysis.sourceUrl"))
+        assertTrue(appShell.contains("DownloadSetupState("))
     }
 
     @Test

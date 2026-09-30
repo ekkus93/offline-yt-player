@@ -41,6 +41,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
+import com.ekkus.offlineytplayer.coregateway.SourceAnalysisState
+import com.ekkus.offlineytplayer.coregateway.SourceAnalysisUseCase
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.settings.AppSettingsMutation
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
@@ -78,7 +80,209 @@ private fun formatStorageBytes(bytes: Long): String = when { bytes >= 1024L * 10
 private fun nextPlaybackSettingSpeed(current: Float): Float = when { current < 1f -> 1f; current < 1.25f -> 1.25f; current < 1.5f -> 1.5f; current < 2f -> 2f; else -> 0.75f }
 private fun nextAppearanceSetting(current: AppearanceSetting): AppearanceSetting = when (current) { AppearanceSetting.System -> AppearanceSetting.Light; AppearanceSetting.Light -> AppearanceSetting.Dark; AppearanceSetting.Dark -> AppearanceSetting.System }
 
-@Composable private fun AddScreen(padding: PaddingValues, initialSharedUrl: String?, sourceGateway: AppSourceAnalysisGateway?, downloadControlGateway: AppDownloadControlGateway?, settings: AppSettingsSnapshot) { val clipboard = LocalClipboardManager.current; val scope = rememberCoroutineScope(); var url by rememberSaveable(initialSharedUrl) { mutableStateOf(initialSharedUrl.orEmpty()) }; var setup by remember { mutableStateOf<DownloadSetupState?>(null) }; var advanced by rememberSaveable { mutableStateOf(false) }; var analyzing by remember { mutableStateOf(false) }; var scheduling by remember { mutableStateOf(false) }; var status by rememberSaveable { mutableStateOf<String?>(null) }; var activeAnalysisUrl by remember { mutableStateOf<String?>(null) }; var analysisJob by remember { mutableStateOf<Job?>(null) }; fun cancelSupersededAnalysis() { analysisJob?.cancel(); analysisJob = null; activeAnalysisUrl = null; analyzing = false }; DisposableEffect(Unit) { onDispose { analysisJob?.cancel() } }; if (advanced) { val activeSetup = setup; if (activeSetup != null) { AdvancedDownloadOptions(padding, activeSetup, { appliedSetup -> setup = appliedSetup; advanced = false; status = "Download options applied." }) { advanced = false }; return } }; Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Text("Download a supported video for offline playback."); Text("Settings: ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}"); OutlinedTextField(value = url, onValueChange = { url = it; cancelSupersededAnalysis(); setup = null; status = null }, modifier = Modifier.fillMaxWidth(), label = { Text("Video URL") }, singleLine = true); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { OutlinedButton(onClick = { val pasted = AddWorkflowPolicy.boundedClipboardText(clipboard.getText()?.text); val acceptedText = pasted.acceptedText; if (acceptedText == null) status = pasted.statusMessage else { cancelSupersededAnalysis(); url = acceptedText; setup = null; status = pasted.statusMessage } }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Paste") }; Button(onClick = { val gateway = sourceGateway; if (gateway == null) { status = "Source resolver is unavailable."; return@Button }; val requestUrl = url; analysisJob?.cancel(); activeAnalysisUrl = requestUrl; analyzing = true; setup = null; status = "Resolving source…"; analysisJob = scope.launch { val result = withContext(Dispatchers.IO) { gateway.analyze(requestUrl) }; if (activeAnalysisUrl != requestUrl) return@launch; analyzing = false; analysisJob = null; result.error?.let { status = it.message; return@launch }; val analysis = result.value ?: run { status = "Source resolver returned no media."; return@launch }; val qualityLabels = AddWorkflowPolicy.qualityLabels(analysis.qualityOptions.map { it.label }, analysis.qualityLabel); val preferredQualityLabel = AddWorkflowPolicy.preferredQualityLabel(qualityLabels, settings.defaultQuality, analysis.qualityLabel); val qualityChoiceIdsByLabel = analysis.qualityOptions.associate { it.label to it.choiceId }; val qualityEstimatedBytesByLabel = analysis.qualityOptions.associate { it.label to it.estimatedBytes }; setup = DownloadSetupState(analysis.sourceUrl, analysis.title, analysis.durationMs?.let(::formatSetupDuration) ?: "Unknown duration", preferredQualityLabel, qualityEstimatedBytesByLabel[preferredQualityLabel]?.let(::formatSetupBytes) ?: "Size unavailable", true, analysis.thumbnailUrl, qualityLabels, listOf(settings.subtitleDefault), listOf("Default track"), listOf("Best compatible", AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)), qualityChoiceIdsByLabel, qualityEstimatedBytesByLabel, qualityChoiceIdsByLabel[preferredQualityLabel]); status = null } }, enabled = url.isNotBlank() && !analyzing && !scheduling, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(if (analyzing) "Analyzing…" else "Analyze") } }; Text("Supports recognized YouTube video URLs. Playlists and channel pages are not supported."); status?.let { Text(it) }; setup?.let { setupState -> DownloadSetupPreview(setupState, { advanced = true }) { val gateway = downloadControlGateway; if (gateway == null) { status = "Download scheduler is unavailable."; return@DownloadSetupPreview }; scheduling = true; status = "Scheduling ${setupState.qualityLabel} download with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}…"; val jobId = setupState.sourceUrl; scope.launch { val result = withContext(Dispatchers.IO) { gateway.enqueue(jobId, setupState.selectedQualityChoiceId) }; scheduling = false; result.error?.let { status = it.message; return@launch }; status = if (result.value == true) "Download scheduled for ${setupState.qualityLabel} with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}." else "Download was not queued." } } } } }
+@Composable
+private fun AddScreen(
+    padding: PaddingValues,
+    initialSharedUrl: String?,
+    sourceGateway: AppSourceAnalysisGateway?,
+    downloadControlGateway: AppDownloadControlGateway?,
+    settings: AppSettingsSnapshot,
+) {
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    val sourceAnalysisUseCase = remember(sourceGateway) { sourceGateway?.let(::SourceAnalysisUseCase) }
+    var url by rememberSaveable(initialSharedUrl) { mutableStateOf(initialSharedUrl.orEmpty()) }
+    var setup by remember { mutableStateOf<DownloadSetupState?>(null) }
+    var advanced by rememberSaveable { mutableStateOf(false) }
+    var analyzing by remember { mutableStateOf(false) }
+    var scheduling by remember { mutableStateOf(false) }
+    var status by rememberSaveable { mutableStateOf<String?>(null) }
+    var analysisJob by remember { mutableStateOf<Job?>(null) }
+
+    fun cancelSupersededAnalysis() {
+        sourceAnalysisUseCase?.cancelActive()
+        analysisJob?.cancel()
+        analysisJob = null
+        analyzing = false
+    }
+
+    DisposableEffect(sourceAnalysisUseCase) {
+        onDispose {
+            sourceAnalysisUseCase?.cancelActive()
+            analysisJob?.cancel()
+        }
+    }
+
+    if (advanced) {
+        val activeSetup = setup
+        if (activeSetup != null) {
+            AdvancedDownloadOptions(
+                padding,
+                activeSetup,
+                { appliedSetup ->
+                    setup = appliedSetup
+                    advanced = false
+                    status = "Download options applied."
+                },
+            ) { advanced = false }
+            return
+        }
+    }
+
+    Column(
+        Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing),
+        verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+    ) {
+        Text("Download a supported video for offline playback.")
+        Text("Settings: ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}")
+        OutlinedTextField(
+            value = url,
+            onValueChange = {
+                url = it
+                cancelSupersededAnalysis()
+                setup = null
+                status = null
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Video URL") },
+            singleLine = true,
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+        ) {
+            OutlinedButton(
+                onClick = {
+                    val pasted = AddWorkflowPolicy.boundedClipboardText(clipboard.getText()?.text)
+                    val acceptedText = pasted.acceptedText
+                    if (acceptedText == null) {
+                        status = pasted.statusMessage
+                    } else {
+                        cancelSupersededAnalysis()
+                        url = acceptedText
+                        setup = null
+                        status = pasted.statusMessage
+                    }
+                },
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Paste") }
+            Button(
+                onClick = {
+                    val useCase = sourceAnalysisUseCase
+                    if (useCase == null) {
+                        status = "Source resolver is unavailable."
+                        return@Button
+                    }
+                    cancelSupersededAnalysis()
+                    val started = useCase.begin(url)
+                    if (started !is SourceAnalysisState.Loading) {
+                        status = sourceAnalysisStatusMessage(started)
+                        setup = null
+                        return@Button
+                    }
+                    analyzing = true
+                    setup = null
+                    status = "Resolving source…"
+                    analysisJob = scope.launch {
+                        val resolved = withContext(Dispatchers.IO) {
+                            useCase.analyzeBlocking(started.ticket)
+                        }
+                        if (resolved is SourceAnalysisState.Superseded) return@launch
+                        analyzing = false
+                        analysisJob = null
+                        if (resolved !is SourceAnalysisState.Resolved) {
+                            status = sourceAnalysisStatusMessage(resolved)
+                            return@launch
+                        }
+                        val analysis = resolved.analysis
+                        val qualityLabels = AddWorkflowPolicy.qualityLabels(
+                            analysis.qualityOptions.map { it.label },
+                            analysis.qualityLabel,
+                        )
+                        val preferredQualityLabel = AddWorkflowPolicy.preferredQualityLabel(
+                            qualityLabels,
+                            settings.defaultQuality,
+                            analysis.qualityLabel,
+                        )
+                        val qualityChoiceIdsByLabel =
+                            analysis.qualityOptions.associate { it.label to it.choiceId }
+                        val qualityEstimatedBytesByLabel =
+                            analysis.qualityOptions.associate { it.label to it.estimatedBytes }
+                        setup = DownloadSetupState(
+                            sourceUrl = analysis.sourceUrl,
+                            title = analysis.title,
+                            durationLabel = analysis.durationMs?.let(::formatSetupDuration)
+                                ?: "Unknown duration",
+                            qualityLabel = preferredQualityLabel,
+                            estimatedSizeLabel = qualityEstimatedBytesByLabel[preferredQualityLabel]
+                                ?.let(::formatSetupBytes) ?: "Size unavailable",
+                            readyForDownload = true,
+                            thumbnailUrl = analysis.thumbnailUrl,
+                            qualityOptions = qualityLabels,
+                            subtitleOptions = listOf(settings.subtitleDefault),
+                            audioOptions = listOf("Default track"),
+                            containerOptions = listOf(
+                                "Best compatible",
+                                AddWorkflowPolicy.downloadSettingsSummary(
+                                    settings.wifiOnlyDownloads,
+                                    settings.maxConcurrentDownloads,
+                                ),
+                            ),
+                            qualityChoiceIdsByLabel = qualityChoiceIdsByLabel,
+                            qualityEstimatedBytesByLabel = qualityEstimatedBytesByLabel,
+                            selectedQualityChoiceId = qualityChoiceIdsByLabel[preferredQualityLabel],
+                        )
+                        status = null
+                    }
+                },
+                enabled = url.isNotBlank() && !analyzing && !scheduling,
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text(if (analyzing) "Analyzing…" else "Analyze") }
+        }
+        Text("Supports recognized YouTube video URLs. Playlists and channel pages are not supported.")
+        status?.let { Text(it) }
+        setup?.let { setupState ->
+            DownloadSetupPreview(setupState, { advanced = true }) {
+                val gateway = downloadControlGateway
+                if (gateway == null) {
+                    status = "Download scheduler is unavailable."
+                    return@DownloadSetupPreview
+                }
+                scheduling = true
+                status =
+                    "Scheduling ${setupState.qualityLabel} download with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}…"
+                val jobId = setupState.sourceUrl
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        gateway.enqueue(jobId, setupState.selectedQualityChoiceId)
+                    }
+                    scheduling = false
+                    result.error?.let {
+                        status = it.message
+                        return@launch
+                    }
+                    status = if (result.value == true) {
+                        "Download scheduled for ${setupState.qualityLabel} with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}."
+                    } else {
+                        "Download was not queued."
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun sourceAnalysisStatusMessage(state: SourceAnalysisState): String = when (state) {
+    SourceAnalysisState.Idle -> "Source resolver is idle."
+    is SourceAnalysisState.Loading -> "Resolving source…"
+    is SourceAnalysisState.Resolved -> ""
+    is SourceAnalysisState.Unsupported -> state.message
+    is SourceAnalysisState.NetworkFailure -> state.error.message
+    is SourceAnalysisState.SourceChanged -> state.error.message
+    is SourceAnalysisState.Failed -> state.error.message
+    is SourceAnalysisState.Superseded -> "Source analysis was superseded."
+}
+
 private fun formatSetupDuration(durationMs: Long): String { val seconds = durationMs / 1000; return "%d:%02d".format(seconds / 60, seconds % 60) }
 private fun formatSetupBytes(bytes: Long): String = if (bytes >= 1024L * 1024L) "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0)) else "$bytes bytes"
 @Composable
