@@ -40,17 +40,22 @@ impl FfiDownloadWorkerService {
     #[uniffi::constructor]
     pub fn open(database_path: String) -> Result<Arc<Self>, FfiCoreServiceOpenError> {
         let database_path = PathBuf::from(database_path);
-        LibraryStore::open(&database_path).map_err(|error| {
-            FfiCoreServiceOpenError::Persistence { message: error.message }
+        LibraryStore::open(&database_path).map_err(|error| FfiCoreServiceOpenError::Persistence {
+            message: error.message,
         })?;
         DurableDownloadWorkStore::open(&database_path).map_err(|error| {
-            FfiCoreServiceOpenError::Persistence { message: error.message }
+            FfiCoreServiceOpenError::Persistence {
+                message: error.message,
+            }
         })?;
         let library_root = database_path
             .parent()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
-        Ok(Arc::new(Self { database_path, library_root }))
+        Ok(Arc::new(Self {
+            database_path,
+            library_root,
+        }))
     }
 
     pub fn execute_job(
@@ -80,7 +85,10 @@ impl FfiDownloadWorkerService {
             Ok(items) => FfiDownloadPresentationResult {
                 items: items
                     .into_iter()
-                    .map(|(job_id, display_title)| FfiDownloadPresentation { job_id, display_title })
+                    .map(|(job_id, display_title)| FfiDownloadPresentation {
+                        job_id,
+                        display_title,
+                    })
                     .collect(),
                 error: None,
             },
