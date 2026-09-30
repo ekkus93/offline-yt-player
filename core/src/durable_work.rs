@@ -123,7 +123,9 @@ impl DurableDownloadWorkStore {
             .prepare("SELECT job_id, display_title FROM download_presentations ORDER BY job_id")
             .map_err(db_error)?;
         let rows = statement
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
             .map_err(db_error)?;
         rows.map(|row| row.map_err(db_error)).collect()
     }
@@ -202,10 +204,16 @@ mod tests {
 
         let reopened = DurableDownloadWorkStore::open(&database).unwrap();
         assert_eq!(reopened.load_all().unwrap(), vec![expected.clone()]);
-        assert_eq!(reopened.load_presentations().unwrap(), vec![("fixture-job".into(), "Fixture".into())]);
+        assert_eq!(
+            reopened.load_presentations().unwrap(),
+            vec![("fixture-job".into(), "Fixture".into())]
+        );
         assert!(reopened.delete(&expected.job_id).unwrap());
         assert!(reopened.load_all().unwrap().is_empty());
-        assert_eq!(reopened.load_presentations().unwrap(), vec![("fixture-job".into(), "Fixture".into())]);
+        assert_eq!(
+            reopened.load_presentations().unwrap(),
+            vec![("fixture-job".into(), "Fixture".into())]
+        );
     }
 
     #[test]
