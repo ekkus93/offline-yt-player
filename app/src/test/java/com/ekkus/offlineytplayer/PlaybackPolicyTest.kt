@@ -57,27 +57,25 @@ class PlaybackPolicyTest {
 
     @Test
     fun libraryPlaybackRouteRejectsIncompleteAndRemoteItems() {
-        assertNull(
-            LibraryPlaybackRoute.assetFor(
-                LibraryRowModel(
-                    id = "item-1",
-                    title = "Incomplete",
-                    detail = "downloading",
-                    completed = false,
-                    videoPath = "/data/user/0/com.ekkus.offlineytplayer/files/items/item-1/video.mp4",
-                ),
-            ),
+        val incomplete = LibraryRowModel(
+            id = "item-1",
+            title = "Incomplete",
+            detail = "downloading",
+            completed = false,
+            videoPath = "/data/user/0/com.ekkus.offlineytplayer/files/items/item-1/video.mp4",
         )
-        val remote = runCatching {
-            LibraryPlaybackRoute.assetFor(
-                LibraryRowModel(
-                    id = "item-2",
-                    title = "Remote",
-                    detail = "not offline",
-                    videoPath = "https://example.invalid/video.mp4",
-                ),
-            )
-        }
-        assertTrue(remote.isFailure)
+        assertNull(LibraryPlaybackRoute.assetFor(incomplete))
+        assertEquals("Download is not complete yet.", LibraryPlaybackRoute.unavailableReason(incomplete))
+
+        val remote = LibraryRowModel(
+            id = "item-2",
+            title = "Remote",
+            detail = "not offline",
+            videoPath = "https://example.invalid/video.mp4",
+        )
+        assertNull(LibraryPlaybackRoute.assetFor(remote))
+        assertTrue(
+            LibraryPlaybackRoute.unavailableReason(remote)!!.contains("remote playback URIs are forbidden"),
+        )
     }
 }
