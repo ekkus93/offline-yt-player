@@ -9,9 +9,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub fn build_download_work_if_supported_source_url(
     job_id: &str,
 ) -> Result<Option<DurableDownloadWorkItem>, CoreError> {
+    build_download_work_if_supported_source_url_with_choice(job_id, None)
+}
+
+pub fn build_download_work_if_supported_source_url_with_choice(
+    job_id: &str,
+    choice_id: Option<&str>,
+) -> Result<Option<DurableDownloadWorkItem>, CoreError> {
     let registry = SourceRegistry::production();
     match registry.select(job_id) {
-        Ok(source) => build_download_work_with_source(job_id, source.as_ref()).map(Some),
+        Ok(source) => build_download_work_with_source_and_choice(job_id, source.as_ref(), choice_id)
+            .map(Some),
         Err(error) => {
             if matches!(
                 error.kind,
@@ -29,21 +37,91 @@ pub(crate) fn build_download_work_with_source(
     job_id: &str,
     source: &dyn MediaSource,
 ) -> Result<DurableDownloadWorkItem, CoreError> {
+    build_download_work_with_source_and_choice(job_id, source, None)
+}
+
+pub(crate) fn build_download_work_with_source_and_choice(
+    job_id: &str,
+    source: &dyn MediaSource,
+    choice_id: Option<&str>,
+) -> Result<DurableDownloadWorkItem, CoreError> {
     let media = block_on(source.resolve(job_id))?;
     let choices = block_on(source.choices(&media))?;
-    let choice = choices.into_iter().next().ok_or_else(|| {
-        CoreError::new(
-            ErrorKind::NoCompatibleFormat,
-            "source did not provide an executable download choice",
-            false,
-        )
-    })?;
+    let choice = match choice_id {
+        Some(requested) => choices
+            .into_iter()
+            .find(|choice| choice.choice_id == requested)
+            .ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::NoCompatibleFormat,
+                    "requested download quality is not available",
+                    false,
+                )
+            })?,
+        None => choices.into_iter().next().ok_or_else(|| {
+            CoreError::new(
+                ErrorKind::NoCompatibleFormat,
+                "source did not provide an executable download choice",
+                false,
+            )
+        })?,
+    };
     let plan = block_on(source.download_plan(&media, &choice.choice_id))?;
     Ok(DurableDownloadWorkItem {
         job_id: job_id.to_owned(),
         plan,
         created_at_epoch_ms: current_epoch_ms()?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DirectFixtureSource, ErrorKind, FixtureMedia};
+
+    fn fixture_source() -> (String, DirectFixtureSource) {
+        let source_url = "https://fixture.invalid/watch/one".to_owned();
+        let source = DirectFixtureSource::with_entries([(
+            source_url.clone(),
+            FixtureMedia {
+                media_id: "one".into(),
+                title: "Fixture One".into(),
+                duration_ms: 42_000,
+                media_url: "https://fixture.invalid/media/one.mp4".into(),
+                thumbnail_url: None,
+                bytes: Some(1_024),
+            },
+        )]);
+        (source_url, source)
+    }
+
+    #[test]
+    fn explicit_choice_id_is_persisted_into_the_executable_plan() {
+        let (source_url, source) = fixture_source();
+        let work = build_download_work_with_source_and_choice(
+            &source_url,
+            &source,
+            Some("fixture-720p"),
+        )
+        .unwrap();
+
+        assert_eq!(work.plan.quality.choice_id, "fixture-720p");
+        assert_eq!(work.plan.quality.label, "720p");
+    }
+
+    #[test]
+    fn unavailable_explicit_choice_fails_closed() {
+        let (source_url, source) = fixture_source();
+        let error = build_download_work_with_source_and_choice(
+            &source_url,
+            &source,
+            Some("missing-choice"),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::NoCompatibleFormat);
+        assert_eq!(error.message, "requested download quality is not available");
+    }
 }
 
 fn current_epoch_ms() -> Result<u64, CoreError> {

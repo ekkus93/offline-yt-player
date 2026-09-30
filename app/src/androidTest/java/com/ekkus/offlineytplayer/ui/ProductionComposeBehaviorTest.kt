@@ -155,11 +155,13 @@ class ProductionComposeBehaviorTest {
         compose.onNodeWithText("720p · Audio only").assertIsDisplayed()
         compose.onNodeWithText("Subtitle tracks").assertIsDisplayed()
         compose.onNodeWithText("Preferred language").assertIsDisplayed()
-        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithText("Select Audio only").performClick()
+        compose.onNodeWithText("0:42 · Audio only · 2.0 MB").assertIsDisplayed()
         compose.onNodeWithText("Download").performClick()
         compose.waitUntil(timeoutMillis = 5_000) { controls.enqueuedJobIds.isNotEmpty() }
         compose.runOnIdle {
             assertEquals(listOf("https://youtu.be/dQw4w9WgXcQ"), controls.enqueuedJobIds)
+            assertEquals(listOf("audio-only"), controls.enqueuedChoiceIds)
         }
     }
 
@@ -198,6 +200,7 @@ class ProductionComposeBehaviorTest {
     @Test
     fun player_screen_exposes_subtitle_and_audio_track_labels() {
         compose.setContent {
+
             PortraitPlayerScreen(
                 asset = LocalPlaybackAsset(
                     videoPath = "/data/local/tmp/fixture-video.mp4",
@@ -280,8 +283,8 @@ private class FakeSourceAnalysisGateway(
         qualityLabel = "720p",
         estimatedBytes = 12L * 1024L * 1024L,
         qualityOptions = listOf(
-            CoreSourceQualityChoice("720p", 12L * 1024L * 1024L),
-            CoreSourceQualityChoice("Audio only", 2L * 1024L * 1024L),
+            CoreSourceQualityChoice("720p", 12L * 1024L * 1024L, "video-720p"),
+            CoreSourceQualityChoice("Audio only", 2L * 1024L * 1024L, "audio-only"),
         ),
     ),
 ) : AppSourceAnalysisGateway {

@@ -10,8 +10,10 @@ internal class SchedulingDownloadControlGateway(
     private val scheduler: DownloadExecutionScheduler,
     private val settingsSnapshot: () -> AppSettingsSnapshot,
 ) : AppDownloadControlGateway {
-    override fun enqueue(jobId: String): CoreGatewayResult<Boolean> {
-        val result = delegate.enqueue(jobId)
+    override fun enqueue(jobId: String): CoreGatewayResult<Boolean> = enqueue(jobId, null)
+
+    override fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> {
+        val result = delegate.enqueue(jobId, choiceId)
         if (result.error != null || result.value != true) return result
 
         val settings = settingsSnapshot()

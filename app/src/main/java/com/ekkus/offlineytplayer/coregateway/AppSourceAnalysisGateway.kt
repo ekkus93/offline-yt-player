@@ -8,6 +8,7 @@ import java.lang.reflect.Method
 data class CoreSourceQualityChoice(
     val label: String,
     val estimatedBytes: Long?,
+    val choiceId: String = label,
 )
 
 data class CoreSourceAnalysis(
@@ -52,6 +53,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
             CoreSourceQualityChoice(
                 label = SourceMetadataPolicy.qualityLabel(readSourceString(choice, "label")),
                 estimatedBytes = (readSourceNullable(choice, "estimatedBytes", "estimated_bytes") as Number?)?.toLong(),
+                choiceId = readSourceString(choice, "choiceId", "choice_id"),
             )
         }.distinctBy { it.label }
         val preferred = qualityOptions.firstOrNull()

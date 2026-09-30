@@ -28,6 +28,24 @@ class SchedulingDownloadControlGatewayTest {
     }
 
     @Test
+    fun enqueueForwardsSelectedQualityChoiceBeforeScheduling() {
+        val delegate = FakeDownloadControlGateway()
+        val scheduler = RecordingDownloadExecutionScheduler(accepted = true)
+        val gateway = SchedulingDownloadControlGateway(
+            delegate = delegate,
+            scheduler = scheduler,
+            settingsSnapshot = { AppSettingsSnapshot() },
+        )
+
+        val result = gateway.enqueue("job-choice", "audio-only")
+
+        assertEquals(CoreGatewayResult(value = true, error = null), result)
+        assertEquals(listOf("job-choice"), delegate.enqueuedJobIds)
+        assertEquals(listOf("audio-only"), delegate.enqueuedChoiceIds)
+        assertEquals("job-choice", scheduler.requests.single().queueItemId)
+    }
+
+    @Test
     fun enqueueReportsSchedulerRejectionAfterDurableQueueAcceptsWork() {
         val delegate = FakeDownloadControlGateway()
         val scheduler = RecordingDownloadExecutionScheduler(accepted = false)

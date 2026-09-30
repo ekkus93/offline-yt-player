@@ -6,6 +6,7 @@ import java.util.concurrent.Future
 
 interface AppDownloadControlGateway : Closeable {
     fun enqueue(jobId: String): CoreGatewayResult<Boolean>
+    fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> = enqueue(jobId)
     fun pause(jobId: String): CoreGatewayResult<Boolean>
     fun resume(jobId: String): CoreGatewayResult<Boolean>
     fun cancel(jobId: String): CoreGatewayResult<Boolean>
@@ -16,7 +17,10 @@ class GeneratedUniffiDownloadControlGateway private constructor(
     private val ffiService: Any,
     private val dispatcher: CoreCallDispatcher,
 ) : AppDownloadControlGateway {
-    fun enqueueAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { enqueue(jobId) }
+    fun enqueueAsync(
+        jobId: String,
+        choiceId: String? = null,
+    ): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { enqueue(jobId, choiceId) }
 
     fun pauseAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { pause(jobId) }
 
@@ -27,6 +31,9 @@ class GeneratedUniffiDownloadControlGateway private constructor(
     fun retryAsync(jobId: String): Future<CoreGatewayResult<Boolean>> = dispatcher.submit { retry(jobId) }
 
     override fun enqueue(jobId: String): CoreGatewayResult<Boolean> = control("enqueue", jobId)
+
+    override fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> =
+        if (choiceId.isNullOrBlank()) enqueue(jobId) else controlWithChoice(jobId, choiceId)
 
     override fun pause(jobId: String): CoreGatewayResult<Boolean> = control("pause", jobId)
 
@@ -49,11 +56,28 @@ class GeneratedUniffiDownloadControlGateway private constructor(
         )
     }
 
+    private fun controlWithChoice(jobId: String, choiceId: String): CoreGatewayResult<Boolean> {
+        checkNotMainThread()
+        val result = callFfi("enqueueWithChoice", jobId, choiceId)
+        return CoreGatewayResult(
+            value = readBoolean(result, "updated"),
+            error = readError(result),
+        )
+    }
+
     private fun callFfi(methodName: String, argument: String): Any {
         val method = ffiService.javaClass.methods.firstOrNull { method ->
             method.name == methodName && method.parameterTypes.contentEquals(arrayOf(String::class.java))
         } ?: error("Generated FFI download-control service does not expose $methodName")
         return method.invoke(ffiService, argument)
+            ?: error("Generated FFI download-control service returned null for $methodName")
+    }
+
+    private fun callFfi(methodName: String, first: String, second: String): Any {
+        val method = ffiService.javaClass.methods.firstOrNull { method ->
+            method.name == methodName && method.parameterTypes.size == 2
+        } ?: error("Generated FFI download-control service does not expose $methodName")
+        return method.invoke(ffiService, first, second)
             ?: error("Generated FFI download-control service returned null for $methodName")
     }
 
@@ -86,6 +110,7 @@ class GeneratedUniffiDownloadControlGateway private constructor(
 
 class FakeDownloadControlGateway : AppDownloadControlGateway {
     val enqueuedJobIds = mutableListOf<String>()
+    val enqueuedChoiceIds = mutableListOf<String?>()
     val pausedJobIds = mutableListOf<String>()
     val resumedJobIds = mutableListOf<String>()
     val canceledJobIds = mutableListOf<String>()
@@ -93,6 +118,13 @@ class FakeDownloadControlGateway : AppDownloadControlGateway {
 
     override fun enqueue(jobId: String): CoreGatewayResult<Boolean> {
         enqueuedJobIds += jobId
+        enqueuedChoiceIds += null
+        return CoreGatewayResult(value = true, error = null)
+    }
+
+    override fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> {
+        enqueuedJobIds += jobId
+        enqueuedChoiceIds += choiceId
         return CoreGatewayResult(value = true, error = null)
     }
 

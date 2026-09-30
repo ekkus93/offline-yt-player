@@ -1,6 +1,7 @@
 use crate::{
     CoreError, DownloadState, DownloadStateMachine, DurableDownloadSnapshot,
-    DurableDownloadWorkStore, ErrorKind, LibraryStore, build_download_work_if_supported_source_url,
+    DurableDownloadWorkStore, ErrorKind, LibraryStore,
+    build_download_work_if_supported_source_url_with_choice,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -41,7 +42,24 @@ impl FfiDownloadControlService {
     }
 
     pub fn enqueue(&self, job_id: String) -> FfiDownloadControlResult {
-        match self.enqueue_inner(&job_id) {
+        match self.enqueue_inner(&job_id, None) {
+            Ok(updated) => FfiDownloadControlResult {
+                updated,
+                error: None,
+            },
+            Err(error) => FfiDownloadControlResult {
+                updated: false,
+                error: Some(crate::ffi::FfiError::from(&error)),
+            },
+        }
+    }
+
+    pub fn enqueue_with_choice(
+        &self,
+        job_id: String,
+        choice_id: String,
+    ) -> FfiDownloadControlResult {
+        match self.enqueue_inner(&job_id, Some(&choice_id)) {
             Ok(updated) => FfiDownloadControlResult {
                 updated,
                 error: None,
@@ -80,7 +98,7 @@ impl FfiDownloadControlService {
 }
 
 impl FfiDownloadControlService {
-    fn enqueue_inner(&self, job_id: &str) -> Result<bool, CoreError> {
+    fn enqueue_inner(&self, job_id: &str, choice_id: Option<&str>) -> Result<bool, CoreError> {
         if job_id.trim().is_empty() {
             return Err(CoreError::new(
                 ErrorKind::InvalidInput,
@@ -92,7 +110,7 @@ impl FfiDownloadControlService {
         if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) {
             return Ok(false);
         }
-        let executable_work = build_download_work_if_supported_source_url(job_id)?;
+        let executable_work = build_download_work_if_supported_source_url_with_choice(job_id, choice_id)?;
         let work_store = match &executable_work {
             Some(_) => Some(DurableDownloadWorkStore::open(&self.database_path)?),
             None => None,
