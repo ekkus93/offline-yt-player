@@ -8,7 +8,10 @@ class MediaSessionBehaviorQualificationTest {
     @Test
     fun playbackServiceOwnsTheCanonicalSessionPlayer() {
         val service = File("src/main/java/com/ekkus/offlineytplayer/playback/PlaybackSessionService.kt").readText()
-        assertTrue(service.contains("ExoPlayer.Builder(this).build()"))
+        assertTrue(service.contains("ExoPlayer.Builder(this)"))
+        assertTrue(service.contains("setMediaSourceFactory("))
+        assertTrue(service.contains("SplitAudioMediaSourceFactory(DefaultMediaSourceFactory(this))"))
+        assertTrue(service.contains(".build()"))
         assertTrue(service.contains("MediaSession.Builder(this, player).build()"))
         assertTrue(service.contains("override fun onGetSession"))
         assertTrue(service.contains("session.player.release()"))
