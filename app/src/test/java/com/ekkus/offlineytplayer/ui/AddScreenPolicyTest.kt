@@ -26,7 +26,7 @@ class AddScreenPolicyTest {
     fun setupPreviewDisplaysResolvedOptionsAndSchedulerStatus() {
         assertTrue(appShell.contains("Text(\"Quality options: \${AddWorkflowPolicy.optionSummary"))
         assertTrue(appShell.contains("Scheduling \${setupState.qualityLabel} download"))
-        assertTrue(appShell.contains("gateway.enqueue(jobId)"))
+        assertTrue(appShell.contains("gateway.enqueue(jobId, setupState.selectedQualityChoiceId)"))
         assertTrue(appShell.contains("Download scheduled for \${setupState.qualityLabel}"))
     }
 
