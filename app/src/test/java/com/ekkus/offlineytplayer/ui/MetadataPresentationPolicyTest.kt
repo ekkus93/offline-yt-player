@@ -1,5 +1,6 @@
 package com.ekkus.offlineytplayer.ui
 
+import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,7 +15,6 @@ class MetadataPresentationPolicyTest {
             quality = " 1080p ",
             source = " YouTube ",
         )
-
         assertEquals("Example title", compact.title)
         assertEquals("12:34", compact.duration)
         assertEquals("1080p", compact.quality)
@@ -25,16 +25,34 @@ class MetadataPresentationPolicyTest {
     }
 
     @Test
-    fun longDetailsMoveToDedicatedDeterministicRegion() {
+    fun malformedAndVeryLongMetadataIsBoundedDeterministically() {
+        val compact = MetadataPresentationPolicy.compact(
+            title = "x".repeat(SourceMetadataPolicy.MaxTitleChars + 100),
+            duration = null,
+            quality = "q".repeat(SourceMetadataPolicy.MaxQualityLabelChars + 100),
+            source = "s".repeat(SourceMetadataPolicy.MaxChannelChars + 100),
+        )
+        assertEquals(SourceMetadataPolicy.MaxTitleChars, compact.title.length)
+        assertEquals(SourceMetadataPolicy.MaxQualityLabelChars, compact.quality?.length)
+        assertEquals(SourceMetadataPolicy.MaxChannelChars, compact.source?.length)
+
         val details = MetadataPresentationPolicy.details(
             mapOf(
-                "Codec" to "H.264",
-                "Description" to "Long source description",
+                "L".repeat(100) to "D".repeat(SourceMetadataPolicy.MaxDescriptionChars + 100),
                 "" to "ignored",
                 "Empty" to "  ",
             ),
         )
+        assertEquals(1, details.size)
+        assertEquals(64, details.single().label.length)
+        assertEquals(SourceMetadataPolicy.MaxDescriptionChars, details.single().value.length)
+    }
 
+    @Test
+    fun longDetailsMoveToDedicatedDeterministicRegion() {
+        val details = MetadataPresentationPolicy.details(
+            mapOf("Codec" to "H.264", "Description" to "Long source description"),
+        )
         assertTrue(MetadataPresentationPolicy.LongDetailsUseDedicatedRegion)
         assertEquals(
             listOf(

@@ -1,5 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
+import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
+
 internal data class CompactMetadata(
     val title: String,
     val duration: String?,
@@ -24,15 +26,15 @@ internal object MetadataPresentationPolicy {
         quality: String?,
         source: String?,
     ): CompactMetadata = CompactMetadata(
-        title = title.trim(),
+        title = SourceMetadataPolicy.title(title),
         duration = duration?.trim()?.takeIf { it.isNotEmpty() },
-        quality = quality?.trim()?.takeIf { it.isNotEmpty() },
-        source = source?.trim()?.takeIf { it.isNotEmpty() },
+        quality = quality?.let(SourceMetadataPolicy::qualityLabel),
+        source = source?.trim()?.takeIf { it.isNotEmpty() }?.take(SourceMetadataPolicy.MaxChannelChars),
     )
 
     fun details(fields: Map<String, String>): List<MetadataDetailRow> = fields
         .asSequence()
-        .map { (label, value) -> label.trim() to value.trim() }
+        .map { (label, value) -> label.trim().take(64) to value.trim().take(SourceMetadataPolicy.MaxDescriptionChars) }
         .filter { (label, value) -> label.isNotEmpty() && value.isNotEmpty() }
         .sortedBy { (label, _) -> label.lowercase() }
         .map { (label, value) -> MetadataDetailRow(label, value) }
