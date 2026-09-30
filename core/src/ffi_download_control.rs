@@ -110,7 +110,8 @@ impl FfiDownloadControlService {
         if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) {
             return Ok(false);
         }
-        let executable_work = build_download_work_if_supported_source_url_with_choice(job_id, choice_id)?;
+        let executable_work =
+            build_download_work_if_supported_source_url_with_choice(job_id, choice_id)?;
         let work_store = match &executable_work {
             Some(_) => Some(DurableDownloadWorkStore::open(&self.database_path)?),
             None => None,
@@ -198,6 +199,7 @@ impl FfiDownloadControlService {
         machine.transition(DownloadState::Queued)?;
         snapshot.state = machine.state();
         snapshot.attempt = 0;
+
         snapshot.retry_at_epoch_ms = None;
         snapshot.last_error = None;
         self.library.save_download_snapshot(snapshot)?;

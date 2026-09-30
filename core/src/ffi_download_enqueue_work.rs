@@ -18,8 +18,9 @@ pub fn build_download_work_if_supported_source_url_with_choice(
 ) -> Result<Option<DurableDownloadWorkItem>, CoreError> {
     let registry = SourceRegistry::production();
     match registry.select(job_id) {
-        Ok(source) => build_download_work_with_source_and_choice(job_id, source.as_ref(), choice_id)
-            .map(Some),
+        Ok(source) => {
+            build_download_work_with_source_and_choice(job_id, source.as_ref(), choice_id).map(Some)
+        }
         Err(error) => {
             if matches!(
                 error.kind,
@@ -98,12 +99,9 @@ mod tests {
     #[test]
     fn explicit_choice_id_is_persisted_into_the_executable_plan() {
         let (source_url, source) = fixture_source();
-        let work = build_download_work_with_source_and_choice(
-            &source_url,
-            &source,
-            Some("fixture-720p"),
-        )
-        .unwrap();
+        let work =
+            build_download_work_with_source_and_choice(&source_url, &source, Some("fixture-720p"))
+                .unwrap();
 
         assert_eq!(work.plan.quality.choice_id, "fixture-720p");
         assert_eq!(work.plan.quality.label, "720p");
