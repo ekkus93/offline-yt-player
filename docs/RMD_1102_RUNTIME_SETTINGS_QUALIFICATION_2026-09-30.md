@@ -1,0 +1,11 @@
+# RMD-1102 Runtime Settings Qualification — 2026-09-30
+
+RMD-1102 requires persisted download preferences to affect production behavior rather than remain decorative settings.
+
+Exact master `676186bb0102cebfcbb8365b4aea9916effaa372` passed the complete configured qualification matrix: CI `36692961435`, Android smoke `36692961526`, Android FGS/UIDT `36692961459`, Supply chain `36692961491`, CI evidence `36692961408`, and deterministic E2E fixture `36692961419`.
+
+Production runtime consumption is now established for the settings with runtime meaning. `SchedulingDownloadControlGateway` reads the current typed settings snapshot at enqueue time and maps `wifiOnlyDownloads` to the Android scheduler's `WifiOnly`/`AnyNetwork` constraint; `SchedulingDownloadControlGatewayTest` covers both mappings. `DownloadWorkerExecutor` opens the production `SharedPreferencesAppSettingsStore` at execution time and passes `maxConcurrentDownloads` through generated UniFFI `FfiDownloadWorkerService.executeJob`; the Rust service supplies it to `DownloadWorker`, whose existing bounded-concurrency policy enforces the authoritative core ceiling. The durable settings instrumentation proof verifies persistence/defaults/clamping across close/reopen.
+
+The Add/Download Setup policy uses the configured default-quality value only when that value is one of the resolved production choices, otherwise falling back to an actual resolved choice; `AddWorkflowPolicyTest.preferredQualityHonorsConfiguredValueOnlyWhenAvailable` covers that fail-closed mapping. Subtitle defaults remain persisted for applicability to source/setup flows; they must not fabricate a subtitle track when production source metadata exposes none. No decorative retry-count setting is persisted.
+
+This evidence is sufficient for RMD-1102 implementation qualification, but the canonical remediation TODO remains the source of completion truth. Its checkboxes must only be reconciled after the canonical file itself is updated with this exact-head evidence.
