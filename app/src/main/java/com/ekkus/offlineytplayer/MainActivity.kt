@@ -19,6 +19,7 @@ import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryPlaybackAsset
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
+import com.ekkus.offlineytplayer.coregateway.DownloadPresentationGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
     private var downloadControlGateway: AppDownloadControlGateway? = null
     private var libraryPlaybackGateway: GeneratedUniffiLibraryPlaybackGateway? = null
     private var sourceAnalysisGateway: GeneratedUniffiSourceAnalysisGateway? = null
+    private var downloadPresentationGateway: DownloadPresentationGateway? = null
     private var settingsStore: SharedPreferencesAppSettingsStore? = null
     private var settingsSubscription: SettingsSubscription? = null
     private var stateRefresher: AppStateRefresher? = null
@@ -115,10 +117,12 @@ class MainActivity : ComponentActivity() {
             val controls = runCatching { GeneratedUniffiDownloadControlGateway.open(databasePath) }
             val playback = runCatching { GeneratedUniffiLibraryPlaybackGateway.open(databasePath) }
             val sources = runCatching { GeneratedUniffiSourceAnalysisGateway.open() }
+            val presentations = runCatching { DownloadPresentationGateway.open(databasePath) }
             val openedCore = core.getOrNull()
             val startupReconciliation = openedCore?.reconcileStartup()
             val startupFailure = startupReconciliation?.error
             val initialPlaybackAssets = if (startupFailure == null) playback.getOrNull()?.listPlaybackAssets() else null
+            val initialTitles = if (startupFailure == null) presentations.getOrNull()?.titlesByJobId().orEmpty() else emptyMap()
             val initialLibrary = when {
                 core.isFailure -> LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> LibraryScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
@@ -127,7 +131,7 @@ class MainActivity : ComponentActivity() {
             val initialDownloads = when {
                 core.isFailure -> DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> DownloadsScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
-                else -> openedCore!!.listDownloadQueue().toDownloadsScreenState()
+                else -> openedCore!!.listDownloadQueue().toDownloadsScreenState(initialTitles)
             }
             if (isFinishing || isDestroyed) {
                 core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); sources.getOrNull()?.close()
@@ -150,6 +154,7 @@ class MainActivity : ComponentActivity() {
                 }
                 libraryPlaybackGateway = playback.getOrNull()
                 sourceAnalysisGateway = sources.getOrNull()
+                downloadPresentationGateway = presentations.getOrNull()
                 coreGateway?.takeIf { startupFailure == null }?.let { gateway ->
                     stateRefresher = AppStateRefresher(
                         gateway = gateway,
@@ -159,7 +164,10 @@ class MainActivity : ComponentActivity() {
                                 if (!isDestroyed) libraryState = result.toLibraryScreenState(libraryRoot, playbackResult)
                             }
                         },
-                        onDownloads = { result -> runOnUiThread { if (!isDestroyed) downloadsState = result.toDownloadsScreenState() } },
+                        onDownloads = { result ->
+                            val titles = downloadPresentationGateway?.titlesByJobId().orEmpty()
+                            runOnUiThread { if (!isDestroyed) downloadsState = result.toDownloadsScreenState(titles) }
+                        },
                     ).also { if (activityStarted) it.start() }
                 }
             }
@@ -204,14 +212,16 @@ private fun CoreLibraryItem.libraryDetail(playback: CoreLibraryPlaybackAsset?): 
     playback?.takeUnless { it.playable }?.unavailableReason?.let(SourceMetadataPolicy::diagnostic),
 ).joinToString(" · ")
 
-private fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenState(): DownloadsScreenState {
+private fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenState(
+    titlesByJobId: Map<String, String>,
+): DownloadsScreenState {
     error?.let { return DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
     return DownloadsScreenState.Ready(value.orEmpty().map { snapshot ->
         val total = snapshot.totalBytes
         val percent = if (total != null && total > 0) ((snapshot.bytesDownloaded.coerceAtMost(total) * 100L) / total).toInt() else 0
         DownloadRowModel(
             id = snapshot.jobId,
-            title = SourceMetadataPolicy.title(snapshot.jobId),
+            title = SourceMetadataPolicy.title(titlesByJobId[snapshot.jobId].orEmpty()),
             state = snapshot.state.toUiState(),
             percent = percent,
             size = if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes",
