@@ -48,8 +48,13 @@ impl FfiDownloadWorkerService {
         }))
     }
 
-    pub fn execute_job(&self, job_id: String, now_epoch_ms: u64) -> FfiDownloadWorkerResult {
-        match self.execute_job_inner(&job_id, now_epoch_ms) {
+    pub fn execute_job(
+        &self,
+        job_id: String,
+        now_epoch_ms: u64,
+        max_concurrent_downloads: u64,
+    ) -> FfiDownloadWorkerResult {
+        match self.execute_job_inner(&job_id, now_epoch_ms, max_concurrent_downloads) {
             Ok(result) => result,
             Err(error) => FfiDownloadWorkerResult {
                 executed: false,
@@ -69,6 +74,7 @@ impl FfiDownloadWorkerService {
         &self,
         job_id: &str,
         now_epoch_ms: u64,
+        max_concurrent_downloads: u64,
     ) -> Result<FfiDownloadWorkerResult, crate::CoreError> {
         let work_store = DurableDownloadWorkStore::open(&self.database_path)?;
         let Some(work) = work_store
@@ -87,7 +93,7 @@ impl FfiDownloadWorkerService {
             LibraryStore::open(&self.database_path)?,
             &self.library_root,
             DownloadPolicy::default(),
-            1,
+            usize::try_from(max_concurrent_downloads).unwrap_or(usize::MAX),
         );
         let cancel = AtomicBool::new(false);
         let report = worker.execute_ready_at(

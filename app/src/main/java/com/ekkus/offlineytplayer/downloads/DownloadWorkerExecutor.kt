@@ -1,6 +1,7 @@
 package com.ekkus.offlineytplayer.downloads
 
 import android.content.Context
+import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
 import java.io.File
 import java.lang.reflect.Method
 
@@ -12,12 +13,19 @@ internal object DownloadWorkerExecutor {
             className = "com.ekkus.offlineytplayer.core.FfiDownloadWorkerService",
             databasePath = File(context.filesDir, ProductionDatabaseName).absolutePath,
         )
+        val maxConcurrentDownloads = SharedPreferencesAppSettingsStore.open(context).use { store ->
+            store.snapshot().maxConcurrentDownloads.toULong()
+        }
         try {
             val execute = service.javaClass.methods.firstOrNull { method ->
-                method.name == "executeJob" && method.parameterTypes.size == 2
-            } ?: error("Generated FfiDownloadWorkerService does not expose executeJob/2")
-            val result = execute.invoke(service, queueItemId, System.currentTimeMillis().toULong())
-                ?: error("Generated FfiDownloadWorkerService.executeJob returned null")
+                method.name == "executeJob" && method.parameterTypes.size == 3
+            } ?: error("Generated FfiDownloadWorkerService does not expose executeJob/3")
+            val result = execute.invoke(
+                service,
+                queueItemId,
+                System.currentTimeMillis().toULong(),
+                maxConcurrentDownloads,
+            ) ?: error("Generated FfiDownloadWorkerService.executeJob returned null")
             readNullable(result, "error") == null && readBoolean(result, "executed")
         } finally {
             (service as? AutoCloseable)?.close()
