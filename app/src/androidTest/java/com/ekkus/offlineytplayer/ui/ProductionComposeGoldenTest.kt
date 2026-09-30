@@ -332,6 +332,7 @@ class ProductionComposeGoldenTest {
             "library_populated" to setOf(
                 "69a0c4a62f147af7b3fbccfc09fb3e9952a6491ad6e0ccb263d1a92e1f097c32",
                 "6be56fdbea5f3a875ec625514c059a59824777488758b4086568c2603fdfe628",
+                "6fb3b3b7a8309990987a2b2ce3bb46fa50943cede0f59b9f8b48894088eee64c",
             ),
             "add_invalid" to setOf(
                 "a0de221ecc84f92c725c6077d121ec3e9b11d07351dc20cf67eb5db62bf28a6e",
@@ -353,8 +354,14 @@ class ProductionComposeGoldenTest {
                 "ac97f999b0b98dac7c76d0098a8c509bb80c5149a6c9a98b3882fa663c2e5f6e",
             ),
             "settings_hub" to setOf("907224d90bc0a87418bed06661427bc4dfc6aa9871a64348fc03ba238fac0052"),
-            "smallest_portrait" to setOf("54e27dfa0c00e4ee672d13ac7d80193512406be63a0a015ac1a44fce66fc8498"),
-            "large_font_library" to setOf("307936d82d0b4bd812638249cb888112437355f73852c697a6c1cba2487a9838"),
+            "smallest_portrait" to setOf(
+                "54e27dfa0c00e4ee672d13ac7d80193512406be63a0a015ac1a44fce66fc8498",
+                "f3876b9b72dc46b778566181a603204a26ac8e214e51607fec46854532df5028",
+            ),
+            "large_font_library" to setOf(
+                "307936d82d0b4bd812638249cb888112437355f73852c697a6c1cba2487a9838",
+                "3ac570d0d5c821bb915930ade85901f3786a377264737c7cbae1108b28bd0288",
+            ),
             "large_font_settings" to setOf("4c6185c13f3576d592a4dac8934b750c360cfa9c6e0e1b4181cac96423115611"),
         )
     }
