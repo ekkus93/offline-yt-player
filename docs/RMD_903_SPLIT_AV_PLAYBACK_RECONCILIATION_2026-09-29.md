@@ -1,23 +1,17 @@
-# RMD-903 split A/V playback reconciliation — 2026-09-29
+# RMD-903 Split A/V Playback Reconciliation — 2026-09-29
 
-RMD-903 requires completed offline playback to use both local video and local audio assets when an item has separate streams, build the correct merged Media3 source, keep playback URIs local, and prove the split A/V path deterministically.
+RMD-903 requires completed offline items with separate local video and audio assets to play through the canonical Media3 session without introducing network URIs or a second UI-owned player.
 
-## Current production path
+## Production path
 
-`app/src/main/java/com/ekkus/offlineytplayer/playback/LocalPlayback.kt` satisfies the split A/V source-construction requirements:
-
-- `LocalPlaybackAsset` carries `videoPath` plus optional `audioPath` for completed local items that require separate A/V playback.
-- `LocalPlaybackPolicy.validate` rejects blank paths, remote `http://` or `https://` playback URIs, and identical video/audio paths for separate-asset playback.
-- `LocalPlaybackPolicy.mediaSourcePlanFor` preserves the distinct local video path, audio path, subtitle tracks, audio tracks, and restored start position.
-- `LocalPlaybackPolicy.mediaSourceFor` builds a local video MediaSource from the validated asset, builds a separate local audio MediaSource when `audioPath` is present, and returns `MergingMediaSource(videoSource, audioSource)` for split A/V playback.
-- `LocalPlaybackPolicy.mediaItemBuilderFor` uses `Uri.fromFile(File(path))`, preserving the offline/local playback boundary for completed library assets.
+- `LocalPlaybackPolicy.mediaItemFor(LocalPlaybackAsset)` validates that both the primary video path and optional split audio path are local, distinct, non-blank paths before constructing the `MediaItem` used by `PortraitPlayerScreen`.
+- The split audio path is carried as the local `MediaItem` tag by `LocalPlaybackPolicy.mediaItemFor(...)`, preserving the `MediaController.setMediaItem(...)` production path while avoiding remote URI reconstruction in Compose.
+- `PlaybackSessionService` now builds the canonical service-owned `ExoPlayer` with `SplitAudioMediaSourceFactory(DefaultMediaSourceFactory(this))`.
+- `SplitAudioMediaSourceFactory.createMediaSource(...)` builds the canonical video source from the controller-provided `MediaItem`, reconstructs the optional local audio source with `LocalPlaybackPolicy.mediaItemFor(audioPath)`, and returns `MergingMediaSource(videoSource, audioSource)` when split audio exists.
+- Single-file completed offline items still use the delegate video source unchanged.
 
 ## Deterministic qualification
 
-Existing deterministic coverage in `LocalPlaybackPolicyTest` proves separate local video/audio paths are preserved, single-file items do not claim split A/V playback, remote audio paths are rejected, and identical video/audio paths are rejected.
+`LocalPlaybackPolicyTest` already proves split video/audio plans retain distinct local paths, reject remote audio assets, reject identical audio/video paths, and keep all playback requests local. `SplitAudioPlaybackSessionIntegrationTest` now guards that the service-owned canonical player installs the split-audio source factory and that the local playback item carries the split audio path into that production session factory.
 
-`app/src/test/java/com/ekkus/offlineytplayer/playback/SplitAvPlaybackSourcePolicyTest.kt` adds a focused production-source guard for the merged Media3 source construction and local-only URI boundary.
-
-## Boundary
-
-This closes the deterministic source-construction proof for RMD-903. Full RMD-1502 end-to-end split A/V offline playback remains separate because it must prove the Android app can schedule/download separate fixture assets, cold-start offline, and play synchronized merged A/V through the canonical session.
+RMD-903 must remain unchecked in the canonical TODO until this exact implementation head passes the required exact-head CI matrix and the TODO is reconciled with that evidence.
