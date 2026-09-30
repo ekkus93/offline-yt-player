@@ -1,12 +1,13 @@
 package com.ekkus.offlineytplayer.coregateway
 
 import android.content.ContentValues
-import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
-import androidx.core.content.ContextCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.ekkus.offlineytplayer.downloads.DownloadForegroundService
+import com.ekkus.offlineytplayer.downloads.AndroidDownloadExecutionScheduler
+import com.ekkus.offlineytplayer.downloads.DownloadNetworkPreference
+import com.ekkus.offlineytplayer.downloads.DownloadScheduleRequest
+import com.ekkus.offlineytplayer.downloads.DownloadSchedulerKind
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
@@ -77,7 +78,7 @@ class GeneratedUniffiCoreGatewaySmokeTest {
     }
 
     @Test
-    fun foregroundServiceScheduleWorkCompletesDurableFixtureIntoLibrary() {
+    fun androidSchedulerFallbackCompletesDurableFixtureIntoLibrary() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val database = context.filesDir.resolve("offline-yt-player.sqlite3")
         val itemDir = context.filesDir.resolve("items/rmd-502a-foreground")
@@ -108,13 +109,15 @@ class GeneratedUniffiCoreGatewaySmokeTest {
             GeneratedUniffiCoreGateway.open(database.absolutePath).close()
             seedDurableFixtureWork(database.absolutePath, jobId, mediaUrl, payload.size)
 
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, DownloadForegroundService::class.java).apply {
-                    action = DownloadForegroundService.ACTION_SCHEDULE_WORK
-                    putExtra(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, jobId)
-                },
+            val scheduled = AndroidDownloadExecutionScheduler(context).schedule(
+                DownloadScheduleRequest(
+                    queueItemId = jobId,
+                    estimatedDownloadBytes = payload.size.toLong(),
+                    networkPreference = DownloadNetworkPreference.AnyNetwork,
+                ),
             )
+            assertEquals(DownloadSchedulerKind.ForegroundServiceFallback, scheduled.kind)
+            assertTrue(scheduled.accepted)
 
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { gateway ->
                 val completed = waitForCompletedFixture(gateway, jobId)
