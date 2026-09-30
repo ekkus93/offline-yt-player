@@ -47,7 +47,7 @@ jobs:
           export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           cargo build -p offline-yt-core --target aarch64-linux-android
           cargo build -p offline-yt-core --target x86_64-linux-android
-      - name: Run API 35 dataSync timeout qualification
+      - name: Run API 35 dataSync timeout and UIDT qualification
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -58,7 +58,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
           script: >-
             ./gradlew --no-daemon connectedDebugAndroidTest
-            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutAdbInstrumentedTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutAdbInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest
       - name: Upload timeout qualification evidence
         if: always()
         uses: actions/upload-artifact@v4
