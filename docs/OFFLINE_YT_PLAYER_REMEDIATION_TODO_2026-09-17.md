@@ -199,6 +199,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Add regression test: HTTP 404/nonretryable status does not retry.
 - [x] Add regression test: source-change/nonretryable provider failure does not enter generic retry loop.
 
+
 - [x] Add regression tests for retryable transient statuses/network errors.
 
 ### RMD-402 — Unify retry policy with production scheduler
@@ -277,7 +278,10 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Emit/persist progress at bounded cadence.
 - [x] Commit completion only after integrity and asset promotion succeed.
 - [x] Release/repair claimed work after cancellation/process death.
-- [ ] **RMD-502a — Attach Android runtime launch points to executable durable work.** Persist enough provider-neutral download-plan data for a queued job to be reconstructed after process death, and make both API 34+ `DownloadUserInitiatedJobService` and API 26–33 `DownloadForegroundService` invoke the real core worker loop instead of only owning notification/lifecycle state. Add deterministic Android qualification proving a scheduled fixture job advances through the runtime into completed durable Library state.
+- [x] **RMD-502a — Attach Android runtime launch points to executable durable work.** Persist enough provider-neutral download-plan data for a queued job to be reconstructed after process death, and make both API 34+ `DownloadUserInitiatedJobService` and API 26–33 `DownloadForegroundService` invoke the real core worker loop instead of only owning notification/lifecycle state. Add deterministic Android qualification proving a scheduled fixture job advances through the runtime into completed durable Library state.
+
+**Evidence (RMD-502a):** `docs/RMD_502A_ANDROID_RUNTIME_RECONCILIATION_2026-09-30.md` records provider-neutral executable-plan persistence, both production Android runtime launch points invoking `DownloadWorkerExecutor`, and deterministic API 26–33/API 34+ qualification through completed durable queue/Library/local-asset state. Exact master `682e7dda55987046ce3bb1694a377d98b0c9dd3b` passed CI `36676333860`, Android smoke `36676333845`, Android FGS timeout/API-35 UIDT `36676333767`, Supply chain `36676333779`, CI evidence `36676333747`, and Deterministic E2E fixture `36676333873`. This does not close the broader RMD-1500 E2E requirements.
+
 
 ### RMD-503 — Implement Pause
 
@@ -398,16 +402,20 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Populate actual subtitle languages/tracks.
 - [ ] Populate audio choices where multiple tracks are supported.
 - [ ] Limit container/format choices to real supported paths.
+
 - [ ] Apply changes back to Download Setup state.
 
 
 ### RMD-705 — Make Android Share enter the same pipeline
 
-- [ ] Bound incoming share text.
-- [ ] Extract/validate supported URL consistently.
-- [ ] Route to real Analyze/Setup state.
-- [ ] Define and test back-stack behavior.
-- [ ] Handle unsupported/multiple/no URL safely.
+- [x] Bound incoming share text.
+- [x] Extract/validate supported URL consistently.
+- [x] Route to real Analyze/Setup state.
+- [x] Define and test back-stack behavior.
+- [x] Handle unsupported/multiple/no URL safely.
+
+**Evidence (RMD-705):** `docs/RMD_705_SHARE_WORKFLOW_RECONCILIATION_2026-09-30.md` records bounded `ACTION_SEND text/plain` parsing through the shared supported-URL policy, routing accepted input into the normal Add → Analyze/Setup production path, back-stack qualification, and fail-closed handling for unsupported/ambiguous input. The implementation was present on exact master `682e7dda55987046ce3bb1694a377d98b0c9dd3b`, which passed the same six-workflow matrix recorded above. Full Share → runtime download → Library proof remains RMD-1504.
+
 
 ---
 
@@ -598,6 +606,7 @@ This checklist repairs the implementation and qualification gaps found during th
 ---
 
 ## RMD-1200 — Process death, reboot, and recovery
+
 
 ### RMD-1201 — Startup reconciliation is actually invoked
 
@@ -797,6 +806,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Restore eligible network.
 - [ ] Verify legal resume.
 - [ ] Repeat with Wi-Fi-only/metered policy where emulator controls permit.
+
 
 ### RMD-1507 — Notification-control E2E
 
