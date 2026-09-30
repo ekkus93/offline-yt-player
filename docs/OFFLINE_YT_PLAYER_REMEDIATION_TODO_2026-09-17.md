@@ -198,6 +198,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Refactor retry classification so `CoreError.retryable == false` cannot become retryable due only to `ErrorKind`.
 - [x] Add regression test: HTTP 404/nonretryable status does not retry.
 - [x] Add regression test: source-change/nonretryable provider failure does not enter generic retry loop.
+
 - [x] Add regression tests for retryable transient statuses/network errors.
 
 ### RMD-402 — Unify retry policy with production scheduler
@@ -399,6 +400,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Limit container/format choices to real supported paths.
 - [ ] Apply changes back to Download Setup state.
 
+
 ### RMD-705 — Make Android Share enter the same pipeline
 
 - [ ] Bound incoming share text.
@@ -436,10 +438,13 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-803 — Metadata presentation
 
-- [ ] Use persisted/resolved production metadata in all screens.
-- [ ] Bound title/channel/description-like fields.
-- [ ] Remove hard-coded/fake production metadata values.
-- [ ] Test malformed/very-long metadata rendering.
+- [x] Use persisted/resolved production metadata in all screens.
+- [x] Bound title/channel/description-like fields.
+- [x] Remove hard-coded/fake production metadata values.
+- [x] Test malformed/very-long metadata rendering.
+
+**Evidence (RMD-803):** production metadata presentation is reconciled in `docs/RMD_803_METADATA_PRESENTATION_RECONCILIATION_2026-09-30.md`; durable resolved titles flow through the persisted download-presentation record, UniFFI worker service, `DownloadPresentationGateway`, and production `MainActivity`, while `MetadataPresentationPolicy` bounds user-visible metadata and JVM tests cover malformed/blank/oversized values. The implementation/fix chain was qualified on exact head `b51cb3ad839e6f235755f1789609e395fac16b0c`, and the current master lineage through `fecfdf48ccbe419caca9c20af18a8dbaef4bdc9d` passed CI `36771268234`, Android smoke `36771268149`, Android FGS timeout `36771268018`, Supply chain `36771268121`, CI evidence `36771268179`, and Deterministic E2E fixture `36771268071`.
+
 
 ---
 
@@ -511,7 +516,10 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-1002 — Library Play action
 
 - [ ] Open canonical playback session for selected completed item.
-- [ ] Reject/disable play for incomplete/corrupt items with explanation.
+- [x] Reject/disable play for incomplete/corrupt items with explanation.
+
+**Evidence (RMD-1002 partial):** `LibraryPlaybackRoute` now fail-closes invalid/incomplete/remote playback rows, exposes an unavailable reason, and the Library UI renders that explanation. JVM policy coverage and the intentionally changed Library goldens were qualified on current master `fecfdf48ccbe419caca9c20af18a8dbaef4bdc9d` with all six exact-head workflows green. The separate requirement to open the canonical playback session remains unchecked pending RMD-901/RMD-902 completion.
+
 
 
 ### RMD-1003 — Library Details action
@@ -598,6 +606,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Reconcile staged/partial/orphan files.
 - [x] Reconcile metadata/file mismatches.
 - [x] Surface repairable failures.
+
 
 **Evidence (RMD-1201):** production startup now invokes `GeneratedUniffiCoreGateway.reconcileStartup()` before the first Library/Downloads reads in `MainActivity.bootstrapProductionUi()`, using `FfiStartupReconciliationService` and `GeneratedUniffiCoreGateway` to expose the Rust startup reconciliation path off the Android main thread. Interrupted live-worker states are requeued by `reconcile_startup_downloads`; staged metadata without durable queue state, metadata/file mismatches, and safe orphan partial/resume cleanup are handled by `reconcile_startup_with_library_root`; repairable failures are surfaced as durable retryable/failed queue records and Android startup failure UI state rather than silently presenting stale state. Qualified/merged evidence: PR #295 merged as `7e3ecdf007675af021ffa4a190dd78d1bc6eeebc` with exact head `226f938f37b1f36fa853454e52506f985c30f8d4`, push CI `35717226706`, and PR CI `35717885355`; PR #296 merged as `b3249849618909e875b7e25f2b1e1c8e9baf415f` with exact head `f061a889f3c0427de149ea8badcb46f0cd1bbe98`, push CI `35723493720`, and PR CI `35724149169`.
 
@@ -797,6 +806,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Verify durable state/UI mirrors each action.
 
 **Acceptance for RMD-1500:** policy enum sequence tests may remain, but they cannot be cited as the E2E evidence for these tasks.
+
 
 **Evidence (RMD-1500 incremental qualification):** Exact master `43847bddef7e710854bb8ff248fb4f7227ba1696` adds `Rmd1500AppPipelineFixtureTest`, which drives `OfflineYTPlayerApp(initialSharedUrl=...)` with a deterministic fixture source through the production Compose Add/Share → Analyze → Download Setup surface and app-owned gateway boundary without live-provider access. The same exact head passed CI `36473005897`, Android smoke `36473005880`, Android FGS timeout `36473005836`, Supply chain `36473005927`, CI evidence `36473005988`, and Deterministic E2E fixture `36473005955`. The existing deterministic core fixture lane separately proves real fixture download, durable Library persistence, cold-start reopen, playback-asset export, and no post-download network dependency. RMD-1501 through RMD-1507 remain unchecked until the required Android production-path scheduler/runtime, MediaSession playback, split A/V, subtitle, share, failure, connectivity, and notification-control flows are proven end-to-end.
 
