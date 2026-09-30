@@ -34,13 +34,6 @@ pub fn build_download_work_if_supported_source_url_with_choice(
     }
 }
 
-pub(crate) fn build_download_work_with_source(
-    job_id: &str,
-    source: &dyn MediaSource,
-) -> Result<DurableDownloadWorkItem, CoreError> {
-    build_download_work_with_source_and_choice(job_id, source, None)
-}
-
 pub(crate) fn build_download_work_with_source_and_choice(
     job_id: &str,
     source: &dyn MediaSource,
@@ -72,6 +65,23 @@ pub(crate) fn build_download_work_with_source_and_choice(
         job_id: job_id.to_owned(),
         plan,
         created_at_epoch_ms: current_epoch_ms()?,
+    })
+}
+
+fn current_epoch_ms() -> Result<u64, CoreError> {
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| {
+        CoreError::new(
+            ErrorKind::Internal,
+            "system clock is before the Unix epoch",
+            true,
+        )
+    })?;
+    u64::try_from(duration.as_millis()).map_err(|_| {
+        CoreError::new(
+            ErrorKind::Internal,
+            "current time exceeds supported epoch range",
+            false,
+        )
     })
 }
 
@@ -120,21 +130,4 @@ mod tests {
         assert_eq!(error.kind, ErrorKind::NoCompatibleFormat);
         assert_eq!(error.message, "requested download quality is not available");
     }
-}
-
-fn current_epoch_ms() -> Result<u64, CoreError> {
-    let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| {
-        CoreError::new(
-            ErrorKind::Internal,
-            "system clock is before the Unix epoch",
-            true,
-        )
-    })?;
-    u64::try_from(duration.as_millis()).map_err(|_| {
-        CoreError::new(
-            ErrorKind::Internal,
-            "current time exceeds supported epoch range",
-            false,
-        )
-    })
 }
