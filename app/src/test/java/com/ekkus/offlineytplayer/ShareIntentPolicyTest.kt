@@ -28,9 +28,12 @@ class ShareIntentPolicyTest {
         assertTrue(activity.contains("GeneratedUniffiDownloadControlGateway.open(databasePath)"))
         assertTrue(activity.contains("GeneratedUniffiLibraryPlaybackGateway.open(databasePath)"))
         assertTrue(activity.contains("GeneratedUniffiSourceAnalysisGateway.open()"))
+        assertTrue(activity.contains("DownloadPresentationGateway.open(databasePath)"))
         assertTrue(activity.contains("bootstrapExecutor.execute"))
         assertTrue(activity.contains("listLibrary().toLibraryScreenState(libraryRoot, initialPlaybackAssets)"))
-        assertTrue(activity.contains("listDownloadQueue().toDownloadsScreenState()"))
+        assertTrue(activity.contains("titlesByJobId().orEmpty()"))
+        assertTrue(activity.contains("listDownloadQueue().toDownloadsScreenState(initialTitles)"))
+        assertTrue(activity.contains("listDownloadQueue().toDownloadsScreenState(titles)"))
         assertTrue(activity.contains("downloadControlGateway = downloadControlGateway"))
         assertTrue(activity.contains("sourceAnalysisGateway = sourceAnalysisGateway"))
     }
