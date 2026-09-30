@@ -11,7 +11,9 @@ class PlaybackSessionOwnershipTest {
 
         assertTrue(source.contains("class PlaybackSessionService : MediaSessionService()"))
         assertTrue(source.contains("private var mediaSession: MediaSession? = null"))
-        assertTrue(source.contains("val player = ExoPlayer.Builder(this).build()"))
+        assertTrue(source.contains("val player = ExoPlayer.Builder(this)"))
+        assertTrue(source.contains("setMediaSourceFactory("))
+        assertTrue(source.contains("SplitAudioMediaSourceFactory(DefaultMediaSourceFactory(this))"))
         assertTrue(source.contains("mediaSession = MediaSession.Builder(this, player).build()"))
         assertTrue(source.contains("override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession"))
     }
