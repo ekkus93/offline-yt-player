@@ -9,10 +9,13 @@ class SplitAudioPlaybackSessionIntegrationTest {
     fun playbackSessionPlayerBuildsMergedMediaSourceForSplitAudioAssets() {
         val service = File("src/main/java/com/ekkus/offlineytplayer/playback/PlaybackSessionService.kt").readText()
 
-        assertTrue(service.contains("setMediaSourceFactory(SplitAudioMediaSourceFactory(DefaultMediaSourceFactory(this)))"))
+        assertTrue(service.contains("setMediaSourceFactory("))
+        assertTrue(service.contains("SplitAudioMediaSourceFactory(DefaultMediaSourceFactory(this))"))
         assertTrue(service.contains("LocalPlaybackPolicy.splitAudioPathFrom(mediaItem)"))
         assertTrue(service.contains("LocalPlaybackPolicy.mediaItemFor(audioPath)"))
         assertTrue(service.contains("MergingMediaSource(videoSource, audioSource)"))
+        assertTrue(service.contains("setDrmSessionManagerProvider("))
+        assertTrue(service.contains("setLoadErrorHandlingPolicy("))
     }
 
     @Test
