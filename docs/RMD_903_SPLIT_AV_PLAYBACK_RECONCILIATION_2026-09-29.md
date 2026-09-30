@@ -12,6 +12,10 @@ RMD-903 requires completed offline items with separate local video and audio ass
 
 ## Deterministic qualification
 
-`LocalPlaybackPolicyTest` already proves split video/audio plans retain distinct local paths, reject remote audio assets, reject identical audio/video paths, and keep all playback requests local. `SplitAudioPlaybackSessionIntegrationTest` now guards that the service-owned canonical player installs the split-audio source factory and that the local playback item carries the split audio path into that production session factory.
+`LocalPlaybackPolicyTest` proves split video/audio plans retain distinct local paths, reject remote audio assets, reject identical audio/video paths, and keep all playback requests local. `SplitAudioPlaybackSessionIntegrationTest` guards that the service-owned canonical player installs the split-audio source factory, delegates DRM/load-error policies, and carries the split audio path into that production session factory.
 
-RMD-903 must remain unchecked in the canonical TODO until this exact implementation head passes the required exact-head CI matrix and the TODO is reconciled with that evidence.
+## Exact-head evidence
+
+Exact master `3a4d92a249405754a0c678bae7d60d1ba155b48c` passed the required six-workflow matrix: CI `36652907080`, Android smoke `36652907084`, Android FGS timeout `36652907127`, Supply chain `36652907103`, CI evidence `36652907102`, and Deterministic E2E fixture `36652907106`.
+
+This evidence satisfies the RMD-903 implementation and qualification requirements. The canonical TODO can be reconciled by checking the RMD-903 subtasks and referencing this document plus the exact-head matrix above.

@@ -20,4 +20,6 @@ RMD-906 requires persisted playback position to be loaded before starting a comp
 
 The complete six-workflow matrix passed on exact master `aeef87e1feda6cf4ec8c695a9ffb4aefec84293a`: CI `36645508680`, Android smoke `36645508675`, Android FGS timeout `36645508711`, Supply chain `36645508740`, CI evidence `36645508674`, and Deterministic E2E fixture `36645508707`.
 
-This evidence satisfies the RMD-906 implementation and qualification requirements. The canonical TODO checkbox should be reconciled only on a subsequent exact master head containing this evidence commit after that head passes the required matrix.
+The same playback-position implementation is present on exact master `3a4d92a249405754a0c678bae7d60d1ba155b48c`, which passed the required six-workflow matrix: CI `36652907080`, Android smoke `36652907084`, Android FGS timeout `36652907127`, Supply chain `36652907103`, CI evidence `36652907102`, and Deterministic E2E fixture `36652907106`.
+
+This evidence satisfies the RMD-906 implementation and qualification requirements. The canonical TODO can be reconciled by checking the RMD-906 subtasks and referencing this document plus the exact-head matrix above.

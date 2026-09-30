@@ -14,4 +14,8 @@ RMD-905 requires the player to expose actual available audio tracks when multipl
 
 `AudioPlaybackControlIntegrationTest` guards the production audio-label/control/Media3-selection wiring off-emulator, and `LocalPlaybackPolicyTest` verifies multiple-track labels plus disabled behavior for zero or one available track. Existing Android smoke/Compose qualification continues to exercise the production player surface on emulator.
 
-RMD-905 must remain unchecked in the canonical TODO until this exact implementation head passes the required exact-head CI matrix and the TODO is reconciled with that evidence.
+## Exact-head evidence
+
+Exact master `3a4d92a249405754a0c678bae7d60d1ba155b48c` passed the required six-workflow matrix: CI `36652907080`, Android smoke `36652907084`, Android FGS timeout `36652907127`, Supply chain `36652907103`, CI evidence `36652907102`, and Deterministic E2E fixture `36652907106`.
+
+This evidence satisfies the RMD-905 implementation and qualification requirements. The canonical TODO can be reconciled by checking the RMD-905 subtasks and referencing this document plus the exact-head matrix above.
