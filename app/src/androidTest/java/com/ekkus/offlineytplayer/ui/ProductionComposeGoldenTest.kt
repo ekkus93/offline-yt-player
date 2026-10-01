@@ -333,10 +333,12 @@ class ProductionComposeGoldenTest {
                 "69a0c4a62f147af7b3fbccfc09fb3e9952a6491ad6e0ccb263d1a92e1f097c32",
                 "6be56fdbea5f3a875ec625514c059a59824777488758b4086568c2603fdfe628",
                 "6fb3b3b7a8309990987a2b2ce3bb46fa50943cede0f59b9f8b48894088eee64c",
+                "cae9c4866d3097c0f15c3345ef348de0db7fd3cf5849b169f9515930821e30dd",
             ),
             "add_invalid" to setOf(
                 "a0de221ecc84f92c725c6077d121ec3e9b11d07351dc20cf67eb5db62bf28a6e",
                 "64feb00fe7a58a43e49b1dfc66055894145b9ce7d3e15c40ab2f23069e5c2d14",
+                "ce03c82ba712fcc083fc7fdb0ea19149b2555f22dae11d8b7f3b98d4d4282ea9",
             ),
             "add_resolved" to setOf(
                 "0a57f16ceed3ac30f5f2ef26a2bd56f92991018788dc64a64bdb0ca654174d8c",
@@ -345,6 +347,7 @@ class ProductionComposeGoldenTest {
             "download_setup" to setOf(
                 "400b8f89775e011c0e2e285aca7bab40bfe0c099546a2e42c71ff3928adb1958",
                 "afb9a1a883beadc48b61658c6d43f7cc96819db7bb0705453d4a7bb5f5651476",
+                "464ee553fe778bec26dae8daffabc11fb9ce946ccb21f40005ae1eb8ee0e8f49",
             ),
             "downloads_active" to setOf("03bafe07f7a171f05b6fbba259f34a3900575fede548c58484243327b91a4945"),
             "downloads_failure" to setOf("49586fc31be38ef9c955e7e93782196c728be6baad292f7d7b576695a2c5c1ac"),
@@ -357,10 +360,12 @@ class ProductionComposeGoldenTest {
             "smallest_portrait" to setOf(
                 "54e27dfa0c00e4ee672d13ac7d80193512406be63a0a015ac1a44fce66fc8498",
                 "f3876b9b72dc46b778566181a603204a26ac8e214e51607fec46854532df5028",
+                "1817f041f023f67d485e86cd47d431701f5438d66589c8344f49509a97869218",
             ),
             "large_font_library" to setOf(
                 "307936d82d0b4bd812638249cb888112437355f73852c697a6c1cba2487a9838",
                 "3ac570d0d5c821bb915930ade85901f3786a377264737c7cbae1108b28bd0288",
+                "7ab4b6e7b6dd646d1f4b1879345ce71c57dca92349ffcf6b6a3ae1edea9c76f8",
             ),
             "large_font_settings" to setOf("4c6185c13f3576d592a4dac8934b750c360cfa9c6e0e1b4181cac96423115611"),
         )
