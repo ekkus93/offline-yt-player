@@ -48,14 +48,6 @@ pub fn build_download_work_if_supported_source_url_with_options(
     }
 }
 
-pub(crate) fn build_download_work_with_source_and_choice(
-    job_id: &str,
-    source: &dyn MediaSource,
-    choice_id: Option<&str>,
-) -> Result<DurableDownloadWorkItem, CoreError> {
-    build_download_work_with_source_and_options(job_id, source, choice_id, None, None)
-}
-
 pub(crate) fn build_download_work_with_source_and_options(
     job_id: &str,
     source: &dyn MediaSource,
@@ -139,8 +131,14 @@ mod tests {
     fn explicit_choice_id_is_persisted_into_the_executable_plan() {
         let (source_url, source) = fixture_source();
         let work =
-            build_download_work_with_source_and_choice(&source_url, &source, Some("fixture-720p"))
-                .unwrap();
+            build_download_work_with_source_and_options(
+                &source_url,
+                &source,
+                Some("fixture-720p"),
+                None,
+                None,
+            )
+            .unwrap();
 
         assert_eq!(work.plan.quality.choice_id, "fixture-720p");
         assert_eq!(work.plan.quality.label, "720p");
@@ -149,10 +147,12 @@ mod tests {
     #[test]
     fn unavailable_explicit_choice_fails_closed() {
         let (source_url, source) = fixture_source();
-        let error = build_download_work_with_source_and_choice(
+        let error = build_download_work_with_source_and_options(
             &source_url,
             &source,
             Some("missing-choice"),
+            None,
+            None,
         )
         .unwrap_err();
 

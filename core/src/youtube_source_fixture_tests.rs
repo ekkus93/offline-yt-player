@@ -70,6 +70,7 @@ fn subtitle_normalization_is_bounded() {
     extracted.subtitles = (0..200)
         .map(|index| ExtractedSubtitle {
             id: format!("track-{index}"),
+            url: format!("https://www.youtube.com/api/timedtext?v=x&track={index}"),
             language: "en".into(),
             label: None,
             auto_generated: false,
