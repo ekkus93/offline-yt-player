@@ -19,11 +19,31 @@ pub struct FfiSourceIdentity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiSubtitleChoice {
+    pub track_id: String,
+    pub language: String,
+    pub label: Option<String>,
+    pub format: String,
+    pub auto_generated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiAudioChoice {
+    pub format_id: String,
+    pub label: String,
+    pub container: String,
+    pub bitrate_bps: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FfiMediaSummary {
     pub source: FfiSourceIdentity,
     pub title: String,
     pub duration_ms: Option<u64>,
     pub thumbnail_url: Option<String>,
+    pub subtitle_options: Vec<FfiSubtitleChoice>,
+    pub audio_options: Vec<FfiAudioChoice>,
+    pub container_options: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -244,6 +264,51 @@ impl From<&MediaInfo> for FfiMediaSummary {
             title: value.title.clone(),
             duration_ms: value.duration_ms,
             thumbnail_url: value.thumbnail_url.clone(),
+            subtitle_options: value
+                .subtitles
+                .iter()
+                .map(|track| FfiSubtitleChoice {
+                    track_id: track.track_id.clone(),
+                    language: track.format.language.clone(),
+                    label: track.format.label.clone(),
+                    format: track.format.format.clone(),
+                    auto_generated: track.format.auto_generated,
+                })
+                .collect(),
+            audio_options: value
+                .formats
+                .iter()
+                .filter(|format| {
+                    format.role == crate::StreamRole::AudioOnly && format.compatible_direct_play
+                })
+                .map(|format| FfiAudioChoice {
+                    format_id: format.format_id.clone(),
+                    label: format
+                        .audio
+                        .as_ref()
+                        .and_then(|audio| audio.language.as_deref())
+                        .map_or_else(
+                            || match format.bitrate_bps {
+                                Some(bits) => format!("{} kbps {}", bits / 1000, format.container),
+                                None => format!("{} audio", format.container),
+                            },
+                            |language| format!("{language} · {}", format.container),
+                        ),
+                    container: format.container.clone(),
+                    bitrate_bps: format.bitrate_bps,
+                })
+                .collect(),
+            container_options: {
+                let mut containers = value
+                    .formats
+                    .iter()
+                    .filter(|format| format.video.is_some() && format.compatible_direct_play)
+                    .map(|format| format.container.clone())
+                    .collect::<Vec<_>>();
+                containers.sort();
+                containers.dedup();
+                containers
+            },
         }
     }
 }
@@ -380,6 +445,9 @@ mod tests {
             compatibility: Compatibility::Preferred,
         };
         assert_eq!(FfiQualityChoice::from(&choice).label, "720p");
+        assert!(summary.subtitle_options.is_empty());
+        assert!(summary.audio_options.is_empty());
+        assert_eq!(summary.container_options, vec!["mp4"]);
     }
 
     #[test]

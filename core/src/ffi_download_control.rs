@@ -1,7 +1,7 @@
 use crate::{
     CoreError, DownloadState, DownloadStateMachine, DurableDownloadSnapshot,
     DurableDownloadWorkStore, ErrorKind, LibraryStore,
-    build_download_work_if_supported_source_url_with_choice,
+    build_download_work_if_supported_source_url_with_options,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -42,7 +42,7 @@ impl FfiDownloadControlService {
     }
 
     pub fn enqueue(&self, job_id: String) -> FfiDownloadControlResult {
-        match self.enqueue_inner(&job_id, None) {
+        match self.enqueue_inner(&job_id, None, None, None) {
             Ok(updated) => FfiDownloadControlResult {
                 updated,
                 error: None,
@@ -59,7 +59,31 @@ impl FfiDownloadControlService {
         job_id: String,
         choice_id: String,
     ) -> FfiDownloadControlResult {
-        match self.enqueue_inner(&job_id, Some(&choice_id)) {
+        match self.enqueue_inner(&job_id, Some(&choice_id), None, None) {
+            Ok(updated) => FfiDownloadControlResult {
+                updated,
+                error: None,
+            },
+            Err(error) => FfiDownloadControlResult {
+                updated: false,
+                error: Some(crate::ffi::FfiError::from(&error)),
+            },
+        }
+    }
+
+    pub fn enqueue_with_options(
+        &self,
+        job_id: String,
+        choice_id: Option<String>,
+        subtitle_track_id: Option<String>,
+        audio_format_id: Option<String>,
+    ) -> FfiDownloadControlResult {
+        match self.enqueue_inner(
+            &job_id,
+            choice_id.as_deref(),
+            subtitle_track_id.as_deref(),
+            audio_format_id.as_deref(),
+        ) {
             Ok(updated) => FfiDownloadControlResult {
                 updated,
                 error: None,
@@ -98,7 +122,13 @@ impl FfiDownloadControlService {
 }
 
 impl FfiDownloadControlService {
-    fn enqueue_inner(&self, job_id: &str, choice_id: Option<&str>) -> Result<bool, CoreError> {
+    fn enqueue_inner(
+        &self,
+        job_id: &str,
+        choice_id: Option<&str>,
+        subtitle_track_id: Option<&str>,
+        audio_format_id: Option<&str>,
+    ) -> Result<bool, CoreError> {
         if job_id.trim().is_empty() {
             return Err(CoreError::new(
                 ErrorKind::InvalidInput,
@@ -110,8 +140,12 @@ impl FfiDownloadControlService {
         if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) {
             return Ok(false);
         }
-        let executable_work =
-            build_download_work_if_supported_source_url_with_choice(job_id, choice_id)?;
+        let executable_work = build_download_work_if_supported_source_url_with_options(
+            job_id,
+            choice_id,
+            subtitle_track_id,
+            audio_format_id,
+        )?;
         let work_store = match &executable_work {
             Some(_) => Some(DurableDownloadWorkStore::open(&self.database_path)?),
             None => None,

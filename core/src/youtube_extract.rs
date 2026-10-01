@@ -19,6 +19,7 @@ pub(crate) struct ExtractedYouTubeMedia {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ExtractedSubtitle {
     pub id: String,
+    pub url: String,
     pub language: String,
     pub label: Option<String>,
     pub auto_generated: bool,
@@ -261,6 +262,7 @@ mod tests {
             ],
             subtitles: vec![ExtractedSubtitle {
                 id: "en".into(),
+                url: "https://www.youtube.com/api/timedtext?v=x&lang=en".into(),
                 language: "en".into(),
                 label: Some("English".into()),
                 auto_generated: false,

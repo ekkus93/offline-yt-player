@@ -16,11 +16,25 @@ pub fn build_download_work_if_supported_source_url_with_choice(
     job_id: &str,
     choice_id: Option<&str>,
 ) -> Result<Option<DurableDownloadWorkItem>, CoreError> {
+    build_download_work_if_supported_source_url_with_options(job_id, choice_id, None, None)
+}
+
+pub fn build_download_work_if_supported_source_url_with_options(
+    job_id: &str,
+    choice_id: Option<&str>,
+    subtitle_track_id: Option<&str>,
+    audio_format_id: Option<&str>,
+) -> Result<Option<DurableDownloadWorkItem>, CoreError> {
     let registry = SourceRegistry::production();
     match registry.select(job_id) {
-        Ok(source) => {
-            build_download_work_with_source_and_choice(job_id, source.as_ref(), choice_id).map(Some)
-        }
+        Ok(source) => build_download_work_with_source_and_options(
+            job_id,
+            source.as_ref(),
+            choice_id,
+            subtitle_track_id,
+            audio_format_id,
+        )
+        .map(Some),
         Err(error) => {
             if matches!(
                 error.kind,
@@ -38,6 +52,16 @@ pub(crate) fn build_download_work_with_source_and_choice(
     job_id: &str,
     source: &dyn MediaSource,
     choice_id: Option<&str>,
+) -> Result<DurableDownloadWorkItem, CoreError> {
+    build_download_work_with_source_and_options(job_id, source, choice_id, None, None)
+}
+
+pub(crate) fn build_download_work_with_source_and_options(
+    job_id: &str,
+    source: &dyn MediaSource,
+    choice_id: Option<&str>,
+    subtitle_track_id: Option<&str>,
+    audio_format_id: Option<&str>,
 ) -> Result<DurableDownloadWorkItem, CoreError> {
     let media = block_on(source.resolve(job_id))?;
     let choices = block_on(source.choices(&media))?;
@@ -60,7 +84,12 @@ pub(crate) fn build_download_work_with_source_and_choice(
             )
         })?,
     };
-    let plan = block_on(source.download_plan(&media, &choice.choice_id))?;
+    let plan = block_on(source.download_plan_with_options(
+        &media,
+        &choice.choice_id,
+        subtitle_track_id,
+        audio_format_id,
+    ))?;
     Ok(DurableDownloadWorkItem {
         job_id: job_id.to_owned(),
         plan,

@@ -30,6 +30,16 @@ pub trait MediaSource: Send + Sync {
         media: &'a MediaInfo,
         choice_id: &'a str,
     ) -> SourceFuture<'a, DownloadPlan>;
+
+    fn download_plan_with_options<'a>(
+        &'a self,
+        media: &'a MediaInfo,
+        choice_id: &'a str,
+        _subtitle_track_id: Option<&'a str>,
+        _audio_format_id: Option<&'a str>,
+    ) -> SourceFuture<'a, DownloadPlan> {
+        self.download_plan(media, choice_id)
+    }
 }
 
 #[derive(Default)]

@@ -11,6 +11,7 @@ use crate::youtube_extract::{
 use crate::{
     Compatibility, CoreError, DownloadPlan, DownloadPlanAsset, ErrorKind, MediaInfo, MediaKind,
     MediaSource, QualityChoice, SourceFuture, StreamRole, recognize_youtube_video_url,
+    subtitle_download_asset,
 };
 use reqwest::blocking::Client;
 use serde_json::Value;
@@ -93,6 +94,16 @@ impl MediaSource for YouTubeSource {
         media: &'a MediaInfo,
         choice_id: &'a str,
     ) -> SourceFuture<'a, DownloadPlan> {
+        self.download_plan_with_options(media, choice_id, None, None)
+    }
+
+    fn download_plan_with_options<'a>(
+        &'a self,
+        media: &'a MediaInfo,
+        choice_id: &'a str,
+        subtitle_track_id: Option<&'a str>,
+        audio_format_id: Option<&'a str>,
+    ) -> SourceFuture<'a, DownloadPlan> {
         Box::pin(async move {
             let id = choice_id.strip_prefix("format:").ok_or_else(|| {
                 CoreError::new(
@@ -153,18 +164,39 @@ impl MediaSource for YouTubeSource {
                 &media.source.media_id,
             )?];
             if video.role == StreamRole::VideoOnly {
-                let audio = fresh
-                    .formats
-                    .iter()
-                    .filter(|f| f.role == StreamRole::AudioOnly && f.compatible_direct_play)
-                    .max_by_key(|f| (f.bitrate_bps.unwrap_or(0), f.format_id.clone()))
-                    .ok_or_else(|| {
-                        CoreError::new(
-                            ErrorKind::NoCompatibleFormat,
-                            "No compatible YouTube audio stream accompanies this video",
-                            false,
-                        )
-                    })?;
+                let audio = match audio_format_id {
+                    Some(requested) => fresh
+                        .formats
+                        .iter()
+                        .find(|format| {
+                            format.format_id == requested
+                                && format.role == StreamRole::AudioOnly
+                                && format.compatible_direct_play
+                        })
+                        .ok_or_else(|| {
+                            CoreError::new(
+                                ErrorKind::NoCompatibleFormat,
+                                "Selected YouTube audio track is unavailable",
+                                false,
+                            )
+                        })?,
+                    None => fresh
+                        .formats
+                        .iter()
+                        .filter(|format| {
+                            format.role == StreamRole::AudioOnly && format.compatible_direct_play
+                        })
+                        .max_by_key(|format| {
+                            (format.bitrate_bps.unwrap_or(0), format.format_id.clone())
+                        })
+                        .ok_or_else(|| {
+                            CoreError::new(
+                                ErrorKind::NoCompatibleFormat,
+                                "No compatible YouTube audio stream accompanies this video",
+                                false,
+                            )
+                        })?,
+                };
                 let audio_stream = extracted
                     .streams
                     .iter()
@@ -176,7 +208,38 @@ impl MediaSource for YouTubeSource {
                     MediaKind::Audio,
                     &media.source.media_id,
                 )?);
+            } else if audio_format_id.is_some() {
+                return Err(CoreError::new(
+                    ErrorKind::NoCompatibleFormat,
+                    "Separate audio selection is not applicable to the selected combined format",
+                    false,
+                ));
             }
+
+            if let Some(requested_track_id) = subtitle_track_id {
+                let track = fresh
+                    .subtitles
+                    .iter()
+                    .find(|track| track.track_id == requested_track_id)
+                    .ok_or_else(|| {
+                        CoreError::new(
+                            ErrorKind::NoCompatibleFormat,
+                            "Selected YouTube subtitle track is unavailable",
+                            false,
+                        )
+                    })?;
+                let extracted_track = extracted
+                    .subtitles
+                    .iter()
+                    .find(|track| track.id == requested_track_id)
+                    .ok_or_else(|| source_changed("Selected YouTube subtitle URL was absent"))?;
+                assets.push(subtitle_download_asset(
+                    &media.source.media_id,
+                    track,
+                    &extracted_track.url,
+                )?);
+            }
+
             Ok(DownloadPlan {
                 source: media.source.clone(),
                 title: media.title.clone(),
@@ -323,6 +386,7 @@ fn parse_subtitles(v: &Value) -> Result<Vec<ExtractedSubtitle>, CoreError> {
             .unwrap_or_else(|| format!("{language}-{index}"));
         subtitles.push(ExtractedSubtitle {
             id,
+            url: base_url.to_owned(),
             language: language.to_owned(),
             label,
             auto_generated,
@@ -462,6 +526,10 @@ mod tests {
         let tracks = parse_subtitles(&player).unwrap();
         assert_eq!(tracks.len(), 2);
         assert_eq!(tracks[0].language, "en");
+        assert_eq!(
+            tracks[0].url,
+            "https://www.youtube.com/api/timedtext?v=x&lang=en"
+        );
         assert!(!tracks[0].auto_generated);
         assert_eq!(tracks[1].language, "es");
         assert!(tracks[1].auto_generated);
