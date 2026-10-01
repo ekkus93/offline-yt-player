@@ -3,6 +3,7 @@ package com.ekkus.offlineytplayer.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
@@ -18,7 +19,7 @@ class Rmd1500AppPipelineFixtureTest {
     val compose = createComposeRule()
 
     @Test
-    fun sharedFixtureUrlEntersAppAnalyzeAndDownloadSetupPipeline() {
+    fun sharedFixtureUrlEntersAppAnalyzeDownloadSetupAndSchedulingPipeline() {
         val sharedUrl = "https" + "://www.youtube.com/watch?v=dQw4w9WgXcQ"
         val sourceGateway = RecordingSourceAnalysisGateway(
             CoreSourceAnalysis(
@@ -29,8 +30,8 @@ class Rmd1500AppPipelineFixtureTest {
                 qualityLabel = "720p",
                 estimatedBytes = 37,
                 qualityOptions = listOf(
-                    CoreSourceQualityChoice(label = "720p", estimatedBytes = 37),
-                    CoreSourceQualityChoice(label = "Audio only", estimatedBytes = 17),
+                    CoreSourceQualityChoice(label = "720p", estimatedBytes = 37, choiceId = "fixture-720p"),
+                    CoreSourceQualityChoice(label = "Audio only", estimatedBytes = 17, choiceId = "fixture-audio"),
                 ),
             ),
         )
@@ -55,6 +56,14 @@ class Rmd1500AppPipelineFixtureTest {
         assertEquals(listOf(sharedUrl), sourceGateway.analyzedUrls)
         compose.onNodeWithText("RMD-1500 app pipeline fixture", substring = true).assertIsDisplayed()
         compose.onNodeWithText("720p", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Download").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { downloadControl.enqueuedJobIds.isNotEmpty() }
+
+        compose.runOnIdle {
+            assertEquals(listOf(sharedUrl), downloadControl.enqueuedJobIds)
+            assertEquals(listOf("fixture-720p"), downloadControl.enqueuedChoiceIds)
+            assertEquals("fixture-720p", downloadControl.enqueuedSelections.single().qualityChoiceId)
+        }
     }
 }
 
