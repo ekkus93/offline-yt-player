@@ -27,17 +27,26 @@ class AddScreenPolicyTest {
     @Test
     fun setupPreviewDisplaysResolvedOptionsAndSchedulerStatus() {
         assertTrue(appShell.contains("Text(\"Quality options: \${AddWorkflowPolicy.optionSummary"))
+        assertTrue(appShell.contains("sourceProvider = analysis.sourceProvider"))
+        assertTrue(appShell.contains("sourceMediaId = analysis.sourceMediaId"))
+        assertTrue(appShell.contains("SetupThumbnailPreview"))
         assertTrue(appShell.contains("Scheduling \${setupState.qualityLabel} download"))
-        assertTrue(appShell.contains("gateway.enqueue(jobId, setupState.selectedQualityChoiceId)"))
+        assertTrue(appShell.contains("DownloadSelectionOptions("))
+        assertTrue(appShell.contains("qualityChoiceId = setupState.selectedQualityChoiceId"))
+        assertTrue(appShell.contains("subtitleTrackId = setupState.selectedSubtitleTrackId"))
+        assertTrue(appShell.contains("audioFormatId = setupState.selectedAudioFormatId"))
         assertTrue(appShell.contains("Download scheduled for \${setupState.qualityLabel}"))
     }
 
     @Test
     fun advancedOptionsReflectSourceDerivedSetupState() {
         assertTrue(appShell.contains("SettingValue(\"Quality choices\""))
-        assertTrue(appShell.contains("setup.qualityOptions.forEach"))
+        assertTrue(appShell.contains("edited.qualityOptions.forEach"))
         assertTrue(appShell.contains("Text(\"Select \$quality\")"))
-        assertTrue(appShell.contains("onApply(setupWithQuality(setup, quality))"))
+        assertTrue(appShell.contains("selectedAudioFormatId"))
+        assertTrue(appShell.contains("selectedSubtitleTrackId"))
+        assertTrue(appShell.contains("Text(\"Container follows the selected source quality"))
+        assertTrue(appShell.contains("onApply(edited)"))
         assertTrue(appShell.contains("Download options applied."))
     }
 }
