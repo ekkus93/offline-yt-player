@@ -16,6 +16,7 @@ class AppStateRefresher(
     private val onLibrary: (CoreGatewayResult<List<CoreLibraryItem>>) -> Unit,
     private val onDownloads: (CoreGatewayResult<List<CoreDownloadSnapshot>>) -> Unit,
     private val intervalMs: Long = 1_000L,
+    private val libraryQuery: () -> String? = { null },
 ) : Closeable {
     private var executor: ScheduledExecutorService? = null
     private val refreshInFlight = AtomicBoolean(false)
@@ -39,7 +40,7 @@ class AppStateRefresher(
     private fun refresh() {
         if (!refreshInFlight.compareAndSet(false, true)) return
         try {
-            onLibrary(gateway.listLibrary())
+            onLibrary(gateway.listLibrary(libraryQuery()))
             onDownloads(gateway.listDownloadQueue())
         } finally {
             refreshInFlight.set(false)

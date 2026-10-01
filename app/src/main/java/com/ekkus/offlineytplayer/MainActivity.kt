@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private var libraryState by mutableStateOf<LibraryScreenState>(LibraryScreenState.Loading)
     private var downloadsState by mutableStateOf<DownloadsScreenState>(DownloadsScreenState.Loading)
     private var settingsSnapshot by mutableStateOf(AppSettingsSnapshot())
+    @Volatile private var libraryQuery: String? = null
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -82,6 +83,7 @@ class MainActivity : ComponentActivity() {
                 downloadControlGateway = downloadControlGateway,
                 sourceAnalysisGateway = sourceAnalysisGateway,
                 libraryDetailsGatewayProvider = { libraryDetailsGateway },
+                onLibraryQueryChanged = { query -> libraryQuery = query.trim().takeIf { it.isNotEmpty() } },
                 settingsSnapshot = settingsSnapshot,
                 onUpdateSettings = { mutation -> settingsStore?.update(mutation) },
             )
@@ -175,6 +177,7 @@ class MainActivity : ComponentActivity() {
                             val titles = downloadPresentationGateway?.titlesByJobId().orEmpty()
                             runOnUiThread { if (!isDestroyed) downloadsState = result.toDownloadsScreenState(titles) }
                         },
+                        libraryQuery = { libraryQuery },
                     ).also { if (activityStarted) it.start() }
                 }
             }

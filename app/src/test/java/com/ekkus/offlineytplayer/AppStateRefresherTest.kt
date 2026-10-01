@@ -35,6 +35,30 @@ class AppStateRefresherTest {
         assertEquals(1, downloadCount.get())
     }
 
+
+    @Test
+    fun refresherForwardsObservedLibraryQueryToRepository() {
+        val gateway = FakeCoreGateway(
+            initialItems = listOf(
+                CoreLibraryItem("alpha", CoreSourceIdentity("fixture", "alpha", null), "Alpha", 1_000, "720p", 1, 0, true),
+                CoreLibraryItem("beta", CoreSourceIdentity("fixture", "beta", null), "Beta Lecture", 1_000, "720p", 2, 0, true),
+            ),
+        )
+        val latch = CountDownLatch(1)
+        var observedIds = emptyList<String>()
+        AppStateRefresher(
+            gateway = gateway,
+            onLibrary = { result -> observedIds = result.value.orEmpty().map { it.itemId }; latch.countDown() },
+            onDownloads = {},
+            intervalMs = 10_000,
+            libraryQuery = { "lecture" },
+        ).use { refresher ->
+            refresher.start()
+            assertTrue(latch.await(2, TimeUnit.SECONDS))
+        }
+        assertEquals(listOf("beta"), observedIds)
+    }
+
     @Test
     fun stopIsIdempotentAndPreventsRestartDuplication() {
         val gateway = FakeCoreGateway()

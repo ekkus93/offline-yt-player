@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -136,11 +137,13 @@ internal fun LibraryScreen(
     settings: AppSettingsSnapshot = AppSettingsSnapshot(),
     onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit = {},
     detailsGatewayProvider: () -> AppLibraryDetailsGateway? = { null },
+    onQueryChanged: (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     val layout = if (settings.libraryLayout == LibraryLayoutSetting.Grid) LibraryLayout.Grid else LibraryLayout.List
     var message by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(query) { onQueryChanged(query) }
     val readyRows = (state as? LibraryScreenState.Ready)?.rows.orEmpty()
     val visibleItems = readyRows.filter { it.matchesLibraryQuery(query) }
     Column(
