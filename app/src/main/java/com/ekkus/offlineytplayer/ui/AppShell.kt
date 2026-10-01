@@ -63,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -493,9 +494,16 @@ private fun loadBoundedSetupThumbnail(url: String): android.graphics.Bitmap? = r
         val declared = connection.contentLengthLong
         if (declared > SetupThumbnailPolicy.MaxBytes) return@runCatching null
         val bytes = connection.inputStream.use { stream ->
-            stream.readNBytes(SetupThumbnailPolicy.MaxBytes + 1)
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(8 * 1024)
+            while (true) {
+                val read = stream.read(buffer)
+                if (read == -1) break
+                if (output.size() + read > SetupThumbnailPolicy.MaxBytes) return@runCatching null
+                output.write(buffer, 0, read)
+            }
+            output.toByteArray()
         }
-        if (bytes.size > SetupThumbnailPolicy.MaxBytes) return@runCatching null
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
     } finally {
         connection.disconnect()
