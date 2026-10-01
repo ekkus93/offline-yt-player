@@ -221,6 +221,7 @@ class ProductionComposeBehaviorTest {
         compose.onNodeWithText("English").assertIsDisplayed()
         compose.onNodeWithText("Select English").performClick()
         compose.onNodeWithText("Select Audio only").performClick()
+        compose.onNodeWithText("Apply options").performClick()
         compose.onNodeWithText("0:42 · Audio only · 2.0 MB").assertIsDisplayed()
         compose.onNodeWithText("Download").performClick()
         compose.waitUntil(timeoutMillis = 5_000) { controls.enqueuedJobIds.isNotEmpty() }
