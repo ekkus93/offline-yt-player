@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway
+import com.ekkus.offlineytplayer.coregateway.AppLibraryMutationGateway
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetails
 import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
@@ -137,12 +138,18 @@ internal fun LibraryScreen(
     settings: AppSettingsSnapshot = AppSettingsSnapshot(),
     onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit = {},
     detailsGatewayProvider: () -> AppLibraryDetailsGateway? = { null },
+    mutationGatewayProvider: () -> AppLibraryMutationGateway? = { null },
+    libraryRootPath: String? = null,
     onQueryChanged: (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     val layout = if (settings.libraryLayout == LibraryLayoutSetting.Grid) LibraryLayout.Grid else LibraryLayout.List
     var message by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedDetails by remember { mutableStateOf<CoreLibraryDetails?>(null) }
+    var renameRow by remember { mutableStateOf<LibraryRowModel?>(null) }
+    var renameTitle by rememberSaveable { mutableStateOf("") }
+    var pendingRemove by remember { mutableStateOf<LibraryRowModel?>(null) }
     LaunchedEffect(query) { onQueryChanged(query) }
     val readyRows = (state as? LibraryScreenState.Ready)?.rows.orEmpty()
     val visibleItems = readyRows.filter { it.matchesLibraryQuery(query) }
@@ -175,6 +182,73 @@ internal fun LibraryScreen(
         }
         Text("Filter: All · ${layout.name}")
         message?.let { Text(it) }
+        selectedDetails?.let { details ->
+            LibraryDetailsPanel(details) { selectedDetails = null }
+        }
+        renameRow?.let { row ->
+            OutlinedTextField(
+                value = renameTitle,
+                onValueChange = { renameTitle = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Display title") },
+                singleLine = true,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+                OutlinedButton(
+                    onClick = { renameRow = null; renameTitle = "" },
+                    modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+                ) { Text("Cancel rename") }
+                Button(
+                    onClick = {
+                        val gateway = mutationGatewayProvider()
+                        if (gateway == null) {
+                            message = "Library rename is unavailable."
+                        } else {
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) { gateway.renameDisplayTitle(row.id, renameTitle) }
+                                message = result.error?.let { "Rename failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
+                                    ?: result.value?.let { "Renamed to $it." }
+                                    ?: "Rename did not change the item."
+                                if (result.error == null && result.value != null) {
+                                    renameRow = null
+                                    renameTitle = ""
+                                }
+                            }
+                        }
+                    },
+                    enabled = renameTitle.isNotBlank(),
+                    modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+                ) { Text("Save rename") }
+            }
+        }
+        pendingRemove?.let { row ->
+            Text("Remove ${row.title} and its owned local assets? This cannot be undone.")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+                OutlinedButton(
+                    onClick = { pendingRemove = null },
+                    modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+                ) { Text("Cancel remove") }
+                Button(
+                    onClick = {
+                        val gateway = mutationGatewayProvider()
+                        val root = libraryRootPath
+                        if (gateway == null || root == null) {
+                            message = "Library removal is unavailable."
+                        } else {
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    gateway.removeLibraryItem(root, row.id, confirmed = true)
+                                }
+                                message = result.error?.let { "Remove failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
+                                    ?: if (result.value == true) "Removed ${row.title} and its owned local assets." else "Remove did not change the item."
+                                if (result.error == null && result.value == true) pendingRemove = null
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+                ) { Text("Confirm remove") }
+            }
+        }
         when (state) {
             LibraryScreenState.Loading -> RepositoryStatus("Loading library repository state…")
             is LibraryScreenState.Unavailable -> RepositoryStatus(state.reason)
@@ -212,12 +286,13 @@ internal fun LibraryScreen(
                                     message = when {
                                         result.error != null -> "Library details failed: ${SourceMetadataPolicy.diagnostic(result.error.message)}"
                                         result.value == null -> "Library details are unavailable for ${row.title}."
-                                        else -> libraryDetailsSummary(result.value)
+                                        else -> libraryDetailsSummary(result.value).also { selectedDetails = result.value }
                                     }
                                 }
                             }
                         },
-                        { message = "Remove requires repository-backed deletion for ${it.title}." },
+                        { row -> renameRow = row; renameTitle = row.title; pendingRemove = null },
+                        { row -> pendingRemove = row; renameRow = null },
                     )
                 }
             }
@@ -236,19 +311,20 @@ private fun LibraryItems(
     rows: List<LibraryRowModel>,
     onPlay: (LocalPlaybackAsset) -> Unit,
     onDetails: (LibraryRowModel) -> Unit,
+    onRename: (LibraryRowModel) -> Unit,
     onRemove: (LibraryRowModel) -> Unit,
 ) {
     when (layout) {
         LibraryLayout.List -> LazyColumn(
             Modifier.weightedCollectionRegion(),
             verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
-        ) { items(rows, key = { it.id }) { LibraryItemRow(it, onPlay, onDetails, onRemove) } }
+        ) { items(rows, key = { it.id }) { LibraryItemRow(it, onPlay, onDetails, onRename, onRemove) } }
         LibraryLayout.Grid -> LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             modifier = Modifier.weightedCollectionRegion(),
             verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
             horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
-        ) { gridItems(rows, key = { it.id }) { LibraryItemRow(it, onPlay, onDetails, onRemove) } }
+        ) { gridItems(rows, key = { it.id }) { LibraryItemRow(it, onPlay, onDetails, onRename, onRemove) } }
     }
 }
 private fun Modifier.weightedCollectionRegion() = fillMaxWidth()
@@ -304,6 +380,7 @@ private fun LibraryItemRow(
     item: LibraryRowModel,
     onPlay: (LocalPlaybackAsset) -> Unit,
     onDetails: (LibraryRowModel) -> Unit,
+    onRename: (LibraryRowModel) -> Unit,
     onRemove: (LibraryRowModel) -> Unit,
 ) {
     val asset = LibraryPlaybackRoute.assetFor(item)
@@ -315,9 +392,46 @@ private fun LibraryItemRow(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             Button(onClick = { asset?.let(onPlay) }, enabled = asset != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Play") }
             OutlinedButton(onClick = { onDetails(item) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Details") }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
+            OutlinedButton(onClick = { onRename(item) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Rename") }
             OutlinedButton(onClick = { onRemove(item) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Remove") }
         }
     }
+}
+
+@Composable
+private fun LibraryDetailsPanel(details: CoreLibraryDetails, onClose: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+    ) {
+        Text("Library details")
+        Text(SourceMetadataPolicy.title(details.displayTitle))
+        Text("Source: ${details.provider} / ${details.mediaId}")
+        details.canonicalUrl?.takeIf { it.isNotBlank() }?.let { Text("Canonical source: $it") }
+        Text("Quality: ${SourceMetadataPolicy.qualityLabel(details.qualityLabel)}")
+        Text("Duration: ${details.durationMs?.let(::formatLibraryDuration) ?: "Unknown"}")
+        Text("Managed size: ${details.totalBytes} bytes")
+        Text("Resume position: ${details.playbackPositionMs} ms")
+        if (details.assets.isEmpty()) {
+            Text("No managed local assets are recorded.")
+        } else {
+            details.assets.forEach { asset ->
+                val integrity = if (asset.hasSha256) "SHA-256 recorded" else "size/path validation"
+                Text("Asset: ${asset.kind} · ${asset.relativePath} · ${asset.bytes} bytes · ${asset.mimeType ?: "unknown MIME"} · $integrity")
+            }
+        }
+        OutlinedButton(
+            onClick = onClose,
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+        ) { Text("Close details") }
+    }
+}
+
+private fun formatLibraryDuration(durationMs: Long): String {
+    val seconds = durationMs.coerceAtLeast(0L) / 1000L
+    return "%d:%02d".format(seconds / 60L, seconds % 60L)
 }
 
 @Composable

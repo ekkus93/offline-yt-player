@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.media3.common.MimeTypes
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway
+import com.ekkus.offlineytplayer.coregateway.AppLibraryMutationGateway
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetailAsset
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetails
@@ -82,6 +83,39 @@ class ProductionComposeBehaviorTest {
             }.isSuccess
         }
         compose.runOnIdle { assertEquals(listOf("item-1"), details.requestedIds) }
+    }
+
+
+    @Test
+    fun library_rename_and_remove_actions_use_repository_mutations_after_confirmation() {
+        val mutations = RecordingLibraryMutationGateway()
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
+                ),
+                mutationGatewayProvider = { mutations },
+                libraryRootPath = "/data/user/0/com.ekkus.offlineytplayer/files",
+            )
+        }
+
+        compose.onNodeWithText("Rename").performClick()
+        compose.onNodeWithText("Save rename").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { mutations.renamedIds.isNotEmpty() }
+        compose.runOnIdle {
+            assertEquals(listOf("item-1"), mutations.renamedIds)
+            assertEquals(listOf("Fixture video"), mutations.renamedTitles)
+        }
+
+        compose.onNodeWithText("Remove").performClick()
+        compose.onNodeWithText("Confirm remove").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { mutations.removedIds.isNotEmpty() }
+        compose.runOnIdle {
+            assertEquals(listOf("item-1"), mutations.removedIds)
+            assertEquals(listOf(true), mutations.removeConfirmations)
+        }
     }
 
     @Test
@@ -356,6 +390,31 @@ private class RecordingLibraryDetailsGateway : AppLibraryDetailsGateway {
             ),
             error = null,
         )
+    }
+
+    override fun close() = Unit
+}
+
+private class RecordingLibraryMutationGateway : AppLibraryMutationGateway {
+    val renamedIds = mutableListOf<String>()
+    val renamedTitles = mutableListOf<String>()
+    val removedIds = mutableListOf<String>()
+    val removeConfirmations = mutableListOf<Boolean>()
+
+    override fun renameDisplayTitle(itemId: String, displayTitle: String): CoreGatewayResult<String?> {
+        renamedIds += itemId
+        renamedTitles += displayTitle
+        return CoreGatewayResult(value = displayTitle, error = null)
+    }
+
+    override fun removeLibraryItem(
+        libraryRoot: String,
+        itemId: String,
+        confirmed: Boolean,
+    ): CoreGatewayResult<Boolean> {
+        removedIds += itemId
+        removeConfirmations += confirmed
+        return CoreGatewayResult(value = confirmed, error = null)
     }
 
     override fun close() = Unit
