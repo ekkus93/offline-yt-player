@@ -38,6 +38,8 @@ data class CoreSourceAnalysis(
     val subtitleOptions: List<CoreSourceSubtitleChoice> = emptyList(),
     val audioOptions: List<CoreSourceAudioChoice> = emptyList(),
     val containerOptions: List<String> = emptyList(),
+    val sourceProvider: String? = null,
+    val sourceMediaId: String? = null,
 )
 
 interface AppSourceAnalysisGateway : Closeable {
@@ -76,6 +78,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
                 separateAudio = readSourceRequired(choice, "separateAudio", "separate_audio") as Boolean,
             )
         }.distinctBy { it.label }
+        val sourceIdentity = readSourceRequired(media, "source")
         val subtitleOptions = readSourceList(media, "subtitleOptions", "subtitle_options").map { option ->
             CoreSourceSubtitleChoice(
                 trackId = readSourceString(option, "trackId", "track_id"),
@@ -107,6 +110,8 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
                 subtitleOptions = subtitleOptions,
                 audioOptions = audioOptions,
                 containerOptions = containerOptions.filterIsInstance<String>(),
+                sourceProvider = readSourceString(sourceIdentity, "provider"),
+                sourceMediaId = readSourceString(sourceIdentity, "mediaId", "media_id"),
             ),
             null,
         )

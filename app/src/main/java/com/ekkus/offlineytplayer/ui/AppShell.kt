@@ -1,7 +1,10 @@
 package com.ekkus.offlineytplayer.ui
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,10 +32,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +63,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 
 internal enum class AppDestination(val label: String, val accessibilityLabel: String) { Library("Library", "Open offline library"), Downloads("Downloads", "Open downloads"), Add("Add", "Add a video"), Settings("Settings", "Open settings") }
 internal enum class SettingsSection(val label: String) { Downloads("Downloads"), Playback("Playback"), Storage("Storage"), Appearance("Appearance"), About("About") }
@@ -236,6 +244,8 @@ private fun AddScreen(
                                 ?.let(::formatSetupBytes) ?: "Size unavailable",
                             readyForDownload = true,
                             thumbnailUrl = analysis.thumbnailUrl,
+                            sourceProvider = analysis.sourceProvider,
+                            sourceMediaId = analysis.sourceMediaId,
                             qualityOptions = qualityLabels,
                             subtitleOptions = subtitleTrackIdsByLabel.keys.toList(),
                             audioOptions = audioFormatIdsByLabel.keys.toList(),
@@ -325,8 +335,12 @@ private fun ColumnScope.DownloadSetupPreview(
         ) {
             Text("Download setup")
             Text(setup.title)
-            Text("Source: ${setup.sourceUrl}")
-            setup.thumbnailUrl?.takeIf { it.isNotBlank() }?.let { Text("Thumbnail: $it") }
+            val sourceIdentity = listOfNotNull(setup.sourceProvider, setup.sourceMediaId)
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString(" / ")
+            Text("Source: ${sourceIdentity ?: setup.sourceUrl}")
+            Text("Canonical URL: ${setup.sourceUrl}")
+            setup.thumbnailUrl?.let { SetupThumbnailPreview(it) }
             Text("Quality options: ${AddWorkflowPolicy.optionSummary(setup.qualityOptions, setup.qualityLabel)}")
             Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}")
         }
@@ -442,6 +456,52 @@ private fun AdvancedDownloadOptions(
         ) { Text("Apply options") }
     }
 }
+@Composable
+private fun SetupThumbnailPreview(thumbnailUrl: String) {
+    val accepted = SetupThumbnailPolicy.acceptedUrl(thumbnailUrl)
+    val bitmap by produceState<android.graphics.Bitmap?>(null, accepted) {
+        value = if (accepted == null) null else withContext(Dispatchers.IO) {
+            loadBoundedSetupThumbnail(accepted)
+        }
+    }
+    Text("Thumbnail preview")
+    val loaded = bitmap
+    if (loaded == null) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+            contentAlignment = Alignment.Center,
+        ) { Text("Preview unavailable") }
+    } else {
+        Image(
+            bitmap = loaded.asImageBitmap(),
+            contentDescription = "Video thumbnail",
+            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+            contentScale = ContentScale.Crop,
+        )
+    }
+}
+
+private fun loadBoundedSetupThumbnail(url: String): android.graphics.Bitmap? = runCatching {
+    val connection = URL(url).openConnection() as HttpURLConnection
+    connection.instanceFollowRedirects = false
+    connection.connectTimeout = SetupThumbnailPolicy.ConnectTimeoutMs
+    connection.readTimeout = SetupThumbnailPolicy.ReadTimeoutMs
+    connection.requestMethod = "GET"
+    try {
+        connection.connect()
+        if (connection.responseCode !in 200..299) return@runCatching null
+        val declared = connection.contentLengthLong
+        if (declared > SetupThumbnailPolicy.MaxBytes) return@runCatching null
+        val bytes = connection.inputStream.use { stream ->
+            stream.readNBytes(SetupThumbnailPolicy.MaxBytes + 1)
+        }
+        if (bytes.size > SetupThumbnailPolicy.MaxBytes) return@runCatching null
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    } finally {
+        connection.disconnect()
+    }
+}.getOrNull()
+
 private fun sourceSubtitleLabel(label: String?, language: String, autoGenerated: Boolean): String {
     val base = label?.takeIf { it.isNotBlank() } ?: language
     return if (autoGenerated) "$base (auto)" else base
