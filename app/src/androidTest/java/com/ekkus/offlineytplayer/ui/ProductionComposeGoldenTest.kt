@@ -85,7 +85,7 @@ class ProductionComposeGoldenTest {
         }
         compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(5_000) {
-            runCatching { compose.onNodeWithText("Invalid fixture URL").assertIsDisplayed() }.isSuccess
+            runCatching { compose.onNodeWithText("Enter a supported YouTube video URL").assertIsDisplayed() }.isSuccess
         }
         assertGolden("add_invalid")
     }
