@@ -19,10 +19,12 @@ import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryPlaybackAsset
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
+import com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway
 import com.ekkus.offlineytplayer.coregateway.DownloadPresentationGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryDetailsGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.downloads.AndroidDownloadExecutionScheduler
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private var coreGateway: GeneratedUniffiCoreGateway? = null
     private var downloadControlGateway: AppDownloadControlGateway? = null
     private var libraryPlaybackGateway: GeneratedUniffiLibraryPlaybackGateway? = null
+    private var libraryDetailsGateway: AppLibraryDetailsGateway? = null
     private var sourceAnalysisGateway: GeneratedUniffiSourceAnalysisGateway? = null
     private var downloadPresentationGateway: DownloadPresentationGateway? = null
     private var settingsStore: SharedPreferencesAppSettingsStore? = null
@@ -78,6 +81,7 @@ class MainActivity : ComponentActivity() {
                 downloadsState = downloadsState,
                 downloadControlGateway = downloadControlGateway,
                 sourceAnalysisGateway = sourceAnalysisGateway,
+                libraryDetailsGatewayProvider = { libraryDetailsGateway },
                 settingsSnapshot = settingsSnapshot,
                 onUpdateSettings = { mutation -> settingsStore?.update(mutation) },
             )
@@ -102,6 +106,7 @@ class MainActivity : ComponentActivity() {
         coreGateway?.close()
         downloadControlGateway?.close()
         libraryPlaybackGateway?.close()
+        libraryDetailsGateway?.close()
         sourceAnalysisGateway?.close()
         settingsSubscription?.close()
         settingsStore?.close()
@@ -116,6 +121,7 @@ class MainActivity : ComponentActivity() {
             val core = runCatching { GeneratedUniffiCoreGateway.open(databasePath) }
             val controls = runCatching { GeneratedUniffiDownloadControlGateway.open(databasePath) }
             val playback = runCatching { GeneratedUniffiLibraryPlaybackGateway.open(databasePath) }
+            val details = runCatching { GeneratedUniffiLibraryDetailsGateway.open(databasePath) }
             val sources = runCatching { GeneratedUniffiSourceAnalysisGateway.open() }
             val presentations = runCatching { DownloadPresentationGateway.open(databasePath) }
             val openedCore = core.getOrNull()
@@ -134,12 +140,12 @@ class MainActivity : ComponentActivity() {
                 else -> openedCore!!.listDownloadQueue().toDownloadsScreenState(initialTitles)
             }
             if (isFinishing || isDestroyed) {
-                core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); sources.getOrNull()?.close()
+                core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); details.getOrNull()?.close(); sources.getOrNull()?.close()
                 return@execute
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) {
-                    core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); sources.getOrNull()?.close()
+                    core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); details.getOrNull()?.close(); sources.getOrNull()?.close()
                     return@runOnUiThread
                 }
                 libraryState = initialLibrary
@@ -153,6 +159,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 libraryPlaybackGateway = playback.getOrNull()
+                libraryDetailsGateway = details.getOrNull()
                 sourceAnalysisGateway = sources.getOrNull()
                 downloadPresentationGateway = presentations.getOrNull()
                 coreGateway?.takeIf { startupFailure == null }?.let { gateway ->

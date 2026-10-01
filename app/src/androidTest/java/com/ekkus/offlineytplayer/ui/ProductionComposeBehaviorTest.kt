@@ -12,7 +12,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.media3.common.MimeTypes
 import androidx.test.platform.app.InstrumentationRegistry
+import com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
+import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetailAsset
+import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetails
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
 import com.ekkus.offlineytplayer.coregateway.CoreSourceQualityChoice
@@ -54,6 +57,31 @@ class ProductionComposeBehaviorTest {
         compose.onNodeWithText("Fixture video").assertIsDisplayed()
         compose.onNodeWithText("Details").performClick()
         compose.onNodeWithText("Fixture video: 720p · 0:42").assertIsDisplayed()
+    }
+
+
+    @Test
+    fun library_details_action_reads_repository_detail_gateway_off_main_thread() {
+        val details = RecordingLibraryDetailsGateway()
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
+                ),
+                detailsGatewayProvider = { details },
+            )
+        }
+
+        compose.onNodeWithText("Details").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { details.requestedIds.isNotEmpty() }
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                compose.onNodeWithText("Fixture video · 720p · 0:42 · 1234 bytes · 1 asset").assertIsDisplayed()
+            }.isSuccess
+        }
+        compose.runOnIdle { assertEquals(listOf("item-1"), details.requestedIds) }
     }
 
     @Test
@@ -293,6 +321,41 @@ private class FakeSourceAnalysisGateway(
     override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> {
         analyzedUrls += sourceUrl
         return CoreGatewayResult(value = analysis, error = null)
+    }
+
+    override fun close() = Unit
+}
+
+private class RecordingLibraryDetailsGateway : AppLibraryDetailsGateway {
+    val requestedIds = mutableListOf<String>()
+
+    override fun getDetails(itemId: String): CoreGatewayResult<CoreLibraryDetails?> {
+        requestedIds += itemId
+        return CoreGatewayResult(
+            value = CoreLibraryDetails(
+                itemId = itemId,
+                provider = "fixture",
+                mediaId = "fixture-1",
+                canonicalUrl = null,
+                displayTitle = "Fixture video",
+                durationMs = 42_000,
+                qualityLabel = "720p",
+                completed = true,
+                playbackPositionMs = 0,
+                totalBytes = 1_234,
+                assets = listOf(
+                    CoreLibraryDetailAsset(
+                        assetId = "video",
+                        kind = "video",
+                        relativePath = "media/fixture.mp4",
+                        bytes = 1_234,
+                        mimeType = "video/mp4",
+                        hasSha256 = true,
+                    ),
+                ),
+            ),
+            error = null,
+        )
     }
 
     override fun close() = Unit

@@ -23,12 +23,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
+import com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway
+import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetails
+import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 import com.ekkus.offlineytplayer.resilience.CorruptionRecoveryPolicy
@@ -37,6 +41,9 @@ import com.ekkus.offlineytplayer.resilience.RecoveryUiState
 import com.ekkus.offlineytplayer.settings.AppSettingsMutation
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.settings.LibraryLayoutSetting
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal enum class LibraryLayout { List, Grid }
 internal enum class DownloadUiState { Active, Paused, Failed, Completed }
@@ -128,7 +135,9 @@ internal fun LibraryScreen(
     state: LibraryScreenState = LibraryScreenState.Unavailable("Library repository is not connected yet; no empty-library claim is being made."),
     settings: AppSettingsSnapshot = AppSettingsSnapshot(),
     onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit = {},
+    detailsGatewayProvider: () -> AppLibraryDetailsGateway? = { null },
 ) {
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     val layout = if (settings.libraryLayout == LibraryLayoutSetting.Grid) LibraryLayout.Grid else LibraryLayout.List
     var message by rememberSaveable { mutableStateOf<String?>(null) }
@@ -189,7 +198,22 @@ internal fun LibraryScreen(
                         layout,
                         visibleItems,
                         onPlay,
-                        { message = "${it.title}: ${it.detail}" },
+                        { row ->
+                            val gateway = detailsGatewayProvider()
+                            if (gateway == null) {
+                                message = "${row.title}: ${row.detail}"
+                            } else {
+                                message = "Loading details for ${row.title}…"
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) { gateway.getDetails(row.id) }
+                                    message = when {
+                                        result.error != null -> "Library details failed: ${SourceMetadataPolicy.diagnostic(result.error.message)}"
+                                        result.value == null -> "Library details are unavailable for ${row.title}."
+                                        else -> libraryDetailsSummary(result.value)
+                                    }
+                                }
+                            }
+                        },
                         { message = "Remove requires repository-backed deletion for ${it.title}." },
                     )
                 }
@@ -356,4 +380,14 @@ internal fun DownloadsScreen(
             OutlinedButton(onClick = { onDetails(row) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Details") }
         }
     }
+}
+
+private fun libraryDetailsSummary(details: CoreLibraryDetails): String {
+    val title = SourceMetadataPolicy.title(details.displayTitle)
+    val duration = details.durationMs?.let { durationMs ->
+        val seconds = durationMs.coerceAtLeast(0L) / 1000L
+        "%d:%02d".format(seconds / 60L, seconds % 60L)
+    } ?: "Unknown duration"
+    val assetCount = details.assets.size
+    return "$title · ${details.qualityLabel} · $duration · ${details.totalBytes} bytes · $assetCount ${if (assetCount == 1) "asset" else "assets"}"
 }
