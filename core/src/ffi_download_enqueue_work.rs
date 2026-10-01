@@ -130,15 +130,14 @@ mod tests {
     #[test]
     fn explicit_choice_id_is_persisted_into_the_executable_plan() {
         let (source_url, source) = fixture_source();
-        let work =
-            build_download_work_with_source_and_options(
-                &source_url,
-                &source,
-                Some("fixture-720p"),
-                None,
-                None,
-            )
-            .unwrap();
+        let work = build_download_work_with_source_and_options(
+            &source_url,
+            &source,
+            Some("fixture-720p"),
+            None,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(work.plan.quality.choice_id, "fixture-720p");
         assert_eq!(work.plan.quality.label, "720p");
