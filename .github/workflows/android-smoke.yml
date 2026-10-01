@@ -64,12 +64,13 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
           # Keep this acceleration tier intentionally small while extending it with deterministic
           # Compose goldens. The smoke set proves instrumentation health, packaged Rust/UniFFI
-          # runtime loading, platform runtime paths, behavioral Compose coverage, RMD-1403
+          # runtime loading, platform runtime paths, behavioral Compose coverage, the deterministic
+          # RMD-1500 Add/Share -> Analyze -> Download Setup -> scheduling UI pipeline, RMD-1403
           # exact-raster screenshot regression coverage, and RMD-508 Android connectivity mapping.
           script: >-
             sh -c 'mkdir -p app/build/reports/androidSmokeLogs;
             status=0;
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest,com.ekkus.offlineytplayer.playback.PlaybackSessionBehaviorInstrumentedTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest > app/build/reports/androidSmokeLogs/base-smoke-gradle.log 2>&1 || status=$?;
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest,com.ekkus.offlineytplayer.playback.PlaybackSessionBehaviorInstrumentedTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest,com.ekkus.offlineytplayer.ui.Rmd1500AppPipelineFixtureTest > app/build/reports/androidSmokeLogs/base-smoke-gradle.log 2>&1 || status=$?;
             if [ "$status" -ne 0 ]; then echo "Base smoke failure summary:"; python3 scripts/summarize_android_test_failures.py || true; fi;
             python3 scripts/register_download_setup_golden_variant.py;
             golden_status=0;
