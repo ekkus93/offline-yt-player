@@ -420,7 +420,7 @@ pub fn ffi_bounded_download_concurrency(requested: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Compatibility, SourceIdentity};
+    use crate::{Compatibility, MediaFormat, SourceIdentity, StreamRole, VideoFormat};
 
     #[test]
     fn representative_types_round_trip_through_ffi_records() {
@@ -433,7 +433,22 @@ mod tests {
             title: "One".into(),
             duration_ms: Some(42),
             thumbnail_url: None,
-            formats: Vec::new(),
+            formats: vec![MediaFormat {
+                format_id: "video-720p".into(),
+                container: "mp4".into(),
+                mime_type: Some("video/mp4".into()),
+                role: StreamRole::Combined,
+                bitrate_bps: Some(1_000_000),
+                content_length: Some(1024),
+                video: Some(VideoFormat {
+                    width: 1280,
+                    height: 720,
+                    fps: Some(30),
+                    codec: "h264".into(),
+                }),
+                audio: None,
+                compatible_direct_play: true,
+            }],
             subtitles: Vec::new(),
         };
         let summary = FfiMediaSummary::from(&media);
