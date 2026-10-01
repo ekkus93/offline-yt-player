@@ -16,7 +16,12 @@ internal data class DownloadSetupState(
     val containerOptions: List<String> = emptyList(),
     val qualityChoiceIdsByLabel: Map<String, String> = emptyMap(),
     val qualityEstimatedBytesByLabel: Map<String, Long?> = emptyMap(),
+    val qualitySeparateAudioByLabel: Map<String, Boolean> = emptyMap(),
+    val subtitleTrackIdsByLabel: Map<String, String> = emptyMap(),
+    val audioFormatIdsByLabel: Map<String, String> = emptyMap(),
     val selectedQualityChoiceId: String? = null,
+    val selectedSubtitleTrackId: String? = null,
+    val selectedAudioFormatId: String? = null,
 )
 
 internal object DownloadSetupRoute {

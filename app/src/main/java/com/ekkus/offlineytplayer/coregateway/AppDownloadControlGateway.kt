@@ -4,9 +4,17 @@ import java.io.Closeable
 import java.lang.reflect.Method
 import java.util.concurrent.Future
 
+data class DownloadSelectionOptions(
+    val qualityChoiceId: String?,
+    val subtitleTrackId: String? = null,
+    val audioFormatId: String? = null,
+)
+
 interface AppDownloadControlGateway : Closeable {
     fun enqueue(jobId: String): CoreGatewayResult<Boolean>
     fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> = enqueue(jobId)
+    fun enqueue(jobId: String, options: DownloadSelectionOptions): CoreGatewayResult<Boolean> =
+        enqueue(jobId, options.qualityChoiceId)
     fun pause(jobId: String): CoreGatewayResult<Boolean>
     fun resume(jobId: String): CoreGatewayResult<Boolean>
     fun cancel(jobId: String): CoreGatewayResult<Boolean>
@@ -34,6 +42,21 @@ class GeneratedUniffiDownloadControlGateway private constructor(
 
     override fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> =
         if (choiceId.isNullOrBlank()) enqueue(jobId) else controlWithChoice(jobId, choiceId)
+
+    override fun enqueue(jobId: String, options: DownloadSelectionOptions): CoreGatewayResult<Boolean> {
+        checkNotMainThread()
+        val result = callFfi(
+            "enqueueWithOptions",
+            jobId,
+            options.qualityChoiceId,
+            options.subtitleTrackId,
+            options.audioFormatId,
+        )
+        return CoreGatewayResult(
+            value = readBoolean(result, "updated"),
+            error = readError(result),
+        )
+    }
 
     override fun pause(jobId: String): CoreGatewayResult<Boolean> = control("pause", jobId)
 
@@ -65,19 +88,11 @@ class GeneratedUniffiDownloadControlGateway private constructor(
         )
     }
 
-    private fun callFfi(methodName: String, argument: String): Any {
+    private fun callFfi(methodName: String, vararg arguments: Any?): Any {
         val method = ffiService.javaClass.methods.firstOrNull { method ->
-            method.name == methodName && method.parameterTypes.contentEquals(arrayOf(String::class.java))
-        } ?: error("Generated FFI download-control service does not expose $methodName")
-        return method.invoke(ffiService, argument)
-            ?: error("Generated FFI download-control service returned null for $methodName")
-    }
-
-    private fun callFfi(methodName: String, first: String, second: String): Any {
-        val method = ffiService.javaClass.methods.firstOrNull { method ->
-            method.name == methodName && method.parameterTypes.size == 2
-        } ?: error("Generated FFI download-control service does not expose $methodName")
-        return method.invoke(ffiService, first, second)
+            method.name == methodName && method.parameterTypes.size == arguments.size
+        } ?: error("Generated FFI download-control service does not expose $methodName/${arguments.size}")
+        return method.invoke(ffiService, *arguments)
             ?: error("Generated FFI download-control service returned null for $methodName")
     }
 
@@ -111,6 +126,7 @@ class GeneratedUniffiDownloadControlGateway private constructor(
 class FakeDownloadControlGateway : AppDownloadControlGateway {
     val enqueuedJobIds = mutableListOf<String>()
     val enqueuedChoiceIds = mutableListOf<String?>()
+    val enqueuedSelections = mutableListOf<DownloadSelectionOptions>()
     val pausedJobIds = mutableListOf<String>()
     val resumedJobIds = mutableListOf<String>()
     val canceledJobIds = mutableListOf<String>()
@@ -125,6 +141,13 @@ class FakeDownloadControlGateway : AppDownloadControlGateway {
     override fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> {
         enqueuedJobIds += jobId
         enqueuedChoiceIds += choiceId
+        return CoreGatewayResult(value = true, error = null)
+    }
+
+    override fun enqueue(jobId: String, options: DownloadSelectionOptions): CoreGatewayResult<Boolean> {
+        enqueuedJobIds += jobId
+        enqueuedChoiceIds += options.qualityChoiceId
+        enqueuedSelections += options
         return CoreGatewayResult(value = true, error = null)
     }
 

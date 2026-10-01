@@ -3,6 +3,7 @@ package com.ekkus.offlineytplayer.downloads
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayError
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
+import com.ekkus.offlineytplayer.coregateway.DownloadSelectionOptions
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 
 internal class SchedulingDownloadControlGateway(
@@ -12,8 +13,16 @@ internal class SchedulingDownloadControlGateway(
 ) : AppDownloadControlGateway {
     override fun enqueue(jobId: String): CoreGatewayResult<Boolean> = enqueue(jobId, null)
 
-    override fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> {
-        val result = delegate.enqueue(jobId, choiceId)
+    override fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> =
+        scheduleAfterEnqueue(jobId, delegate.enqueue(jobId, choiceId))
+
+    override fun enqueue(jobId: String, options: DownloadSelectionOptions): CoreGatewayResult<Boolean> =
+        scheduleAfterEnqueue(jobId, delegate.enqueue(jobId, options))
+
+    private fun scheduleAfterEnqueue(
+        jobId: String,
+        result: CoreGatewayResult<Boolean>,
+    ): CoreGatewayResult<Boolean> {
         if (result.error != null || result.value != true) return result
 
         val settings = settingsSnapshot()

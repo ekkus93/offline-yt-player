@@ -53,6 +53,7 @@ pub struct FfiQualityChoice {
     pub estimated_bytes: Option<u64>,
     pub video_height: Option<u32>,
     pub audio_only: bool,
+    pub separate_audio: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -321,6 +322,7 @@ impl From<&QualityChoice> for FfiQualityChoice {
             estimated_bytes: value.estimated_bytes,
             video_height: value.video_height,
             audio_only: value.audio_only,
+            separate_audio: value.compatibility == crate::Compatibility::RequiresSeparateAssets,
         }
     }
 }
