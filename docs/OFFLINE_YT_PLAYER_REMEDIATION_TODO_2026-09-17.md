@@ -252,6 +252,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 
 
+
 - [x] Add tests where provider order is intentionally adversarial.
 
 ### RMD-408 — Reconcile concurrency/resource-policy duplication
@@ -498,6 +499,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-905 — Implement audio-track controls if applicable
 
+
 - [x] Populate actual audio tracks when multiple are supported.
 
 - [x] Connect UI selection to Media3 track selection.
@@ -529,13 +531,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1001 — Operational Library screen
 
-- [ ] Render real repository items.
-- [ ] Search actual persisted records.
-- [ ] Implement list/grid behavior if both remain advertised.
+- [x] Render real repository items.
+- [x] Search actual persisted records.
+- [x] Implement list/grid behavior if both remain advertised.
 
-- [ ] Preserve selected layout setting.
-- [ ] Provide empty/loading/error states.
+- [x] Preserve selected layout setting.
+- [x] Provide empty/loading/error states.
 
+**Evidence (RMD-1001):** production Library state is repository-backed through `MainActivity.bootstrapProductionUi()`, `GeneratedUniffiCoreGateway.listLibrary()`, and `AppStateRefresher`; persisted records are mapped to `LibraryRowModel`, and the active Library query is forwarded to the repository rather than filtering fabricated data. `LibraryScreen` consumes the durable `LibraryLayoutSetting` from the typed settings store for advertised list/grid presentation, and the setting persists across reopen. The production surface represents loading, failed, empty, and populated states, with behavioral Compose/golden/accessibility qualification under RMD-1402 through RMD-1405. Detailed reconciliation is `docs/RMD_1001_OPERATIONAL_LIBRARY_RECONCILIATION_2026-10-07.md`. The documentation/evidence head `516cb4ae03516b0a085ffb8ed06ae1b727cc6aae` passed CI `37680961218`, Android smoke `37680961234`, Android FGS timeout `37680961176`, Supply chain `37680961237`, CI evidence `37680961299`, and Deterministic E2E fixture `37680961326`. RMD-1002 through RMD-1005 remain separate action requirements.
 
 ### RMD-1002 — Library Play action
 
@@ -748,6 +751,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Capture Player.
 - [x] Capture Settings hub.
 - [x] Capture at least one smallest-supported portrait case.
+
 - [x] Capture representative large-font cases.
 - [x] Fail tests on unintended golden changes.
 
@@ -998,6 +1002,7 @@ All items below must be true before engineering closeout:
 - [ ] External policy/legal release approval is still treated as a separate gate.
 
 ---
+
 
 ## Suggested execution order
 
