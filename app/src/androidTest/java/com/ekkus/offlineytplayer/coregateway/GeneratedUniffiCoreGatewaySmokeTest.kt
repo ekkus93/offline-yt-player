@@ -1,13 +1,20 @@
 package com.ekkus.offlineytplayer.coregateway
 
+import android.content.ComponentName
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
+import android.net.Uri
+import android.os.SystemClock
+import androidx.media3.common.MediaItem
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.downloads.AndroidDownloadExecutionScheduler
 import com.ekkus.offlineytplayer.downloads.DownloadNetworkPreference
 import com.ekkus.offlineytplayer.downloads.DownloadScheduleRequest
 import com.ekkus.offlineytplayer.downloads.DownloadSchedulerKind
+import com.ekkus.offlineytplayer.playback.PlaybackSessionService
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
@@ -128,6 +135,19 @@ class GeneratedUniffiCoreGatewaySmokeTest {
                 assertEquals(true, item.value?.completed)
             }
             assertEquals(payload.size.toLong(), itemDir.resolve("video.mp4").length())
+
+            val playbackAssets = GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+                playback.listPlaybackAssetsAsync().get(10, TimeUnit.SECONDS)
+            }
+            assertNull(playbackAssets.error)
+            val playbackAsset = playbackAssets.value.orEmpty().single { it.itemId == jobId }
+            assertTrue(playbackAsset.playable)
+            assertEquals("items/rmd-502a-foreground/video.mp4", playbackAsset.videoRelativePath)
+            assertNull(playbackAsset.audioRelativePath)
+            assertNull(playbackAsset.unavailableReason)
+            val localVideoPath = context.filesDir.resolve(playbackAsset.videoRelativePath!!).absolutePath
+            assertEquals(itemDir.resolve("video.mp4").absolutePath, localVideoPath)
+            assertCompletedLibraryItemRoutesToMediaSession(context, jobId, localVideoPath)
         } finally {
             server.close()
             serverThread.join(1_000)
@@ -211,5 +231,40 @@ class GeneratedUniffiCoreGatewaySmokeTest {
             Thread.sleep(250)
         }
         throw AssertionError("Fixture job did not complete; last=$last")
+    }
+
+    private fun assertCompletedLibraryItemRoutesToMediaSession(
+        context: android.content.Context,
+        jobId: String,
+        localVideoPath: String,
+    ) {
+        assertFalse(localVideoPath.startsWith("http://"))
+        assertFalse(localVideoPath.startsWith("https://"))
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(jobId)
+                .setUri(Uri.fromFile(context.filesDir.resolve(localVideoPath).takeUnless { it.isAbsolute } ?: java.io.File(localVideoPath)))
+                .build()
+            instrumentation.runOnMainSync {
+                controller.setMediaItem(mediaItem)
+                controller.prepare()
+                controller.play()
+            }
+            val deadline = SystemClock.elapsedRealtime() + 5_000
+            while (SystemClock.elapsedRealtime() < deadline) {
+                var currentMediaId: String? = null
+                instrumentation.runOnMainSync { currentMediaId = controller.currentMediaItem?.mediaId }
+                if (currentMediaId == jobId) return
+                SystemClock.sleep(50)
+            }
+            instrumentation.runOnMainSync {
+                assertEquals(jobId, controller.currentMediaItem?.mediaId)
+            }
+        } finally {
+            instrumentation.runOnMainSync { controller.release() }
+        }
     }
 }
