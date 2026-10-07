@@ -250,6 +250,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Add deterministic tie-breakers for codec/bitrate/fps/format ID.
 
 
+
 - [x] Add tests where provider order is intentionally adversarial.
 
 ### RMD-408 — Reconcile concurrency/resource-policy duplication
@@ -396,21 +397,23 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-703 — Make Download Setup operational
 
-- [ ] Display real title/duration/thumbnail/source identity.
-- [ ] Display actual curated quality options.
-- [ ] Display estimated size only when known/derivable.
-- [ ] Persist selected options.
-- [ ] Download button schedules real durable work.
+- [x] Display real title/duration/thumbnail/source identity.
+- [x] Display actual curated quality options.
+- [x] Display estimated size only when known/derivable.
+- [x] Persist selected options.
+- [x] Download button schedules real durable work.
 
 ### RMD-704 — Make Advanced Options operational
 
 
-- [ ] Populate actual subtitle languages/tracks.
-- [ ] Populate audio choices where multiple tracks are supported.
-- [ ] Limit container/format choices to real supported paths.
+- [x] Populate actual subtitle languages/tracks.
+- [x] Populate audio choices where multiple tracks are supported.
+- [x] Limit container/format choices to real supported paths.
 
-- [ ] Apply changes back to Download Setup state.
+- [x] Apply changes back to Download Setup state.
 
+
+**Evidence (RMD-703/RMD-704):** production `AddScreen` builds `DownloadSetupState` exclusively from `CoreSourceAnalysis`: real title/duration/thumbnail/source identity, curated quality choices, source-reported subtitle/audio/container options, and nullable estimated sizes. `AdvancedDownloadOptions` edits the active setup state, limits audio selection to split-A/V choices, exposes source subtitle tracks, treats container as source-quality-derived rather than offering unsupported conversion, and applies the edited state back through `onApply(edited)`. The Download action passes selected quality/subtitle/audio IDs through `DownloadSelectionOptions` to the real `AppDownloadControlGateway.enqueue` path on `Dispatchers.IO`. `AddScreenPolicyTest` guards production use-case wiring, resolved setup presentation, selected-option propagation, scheduling, and advanced-option application; source option mapping is implemented in `GeneratedUniffiSourceAnalysisGateway`. These production paths/tests were present on exact master `f62aa7aa5d72d3dccd87b9d4e50f60ec62ce7754`, which passed CI `37675821415`, Android smoke `37675821448`, Android FGS timeout `37675821387`, Supply chain `37675821421`, CI evidence `37675821384`, and Deterministic E2E fixture `37675821443`.
 
 ### RMD-705 — Make Android Share enter the same pipeline
 
@@ -497,6 +500,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Populate actual audio tracks when multiple are supported.
 - [ ] Connect UI selection to Media3 track selection.
 - [ ] Hide/disable control when only one track exists.
+
 
 ### RMD-906 — Playback position persistence
 
@@ -748,6 +752,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Render each primary screen at compact supported dimensions.
 - [x] Assert primary actions are visible/reachable without horizontal scrolling.
 - [x] Allow bounded vertical content scrolling only where designed.
+
 - [x] Remove/replace existing all-boolean policy as the sole acceptance proof.
 
 ### RMD-1405 — Accessibility qualification
@@ -998,6 +1003,7 @@ The dependency-aware implementation order is:
 3. **RMD-400** core correctness fixes while integration foundations settle.
 4. **RMD-300** production YouTube source.
 5. **RMD-600 + RMD-1100** repositories, ViewModels, durable settings.
+
 6. **RMD-500** real download scheduling/orchestration and controls.
 7. **RMD-700 + RMD-800** Add/Share and asset pipelines.
 8. **RMD-900** unified playback.
