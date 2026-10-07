@@ -251,6 +251,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 
 
+
 - [x] Add tests where provider order is intentionally adversarial.
 
 ### RMD-408 — Reconcile concurrency/resource-policy duplication
@@ -469,48 +470,51 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-901 — Make `PlaybackSessionService` own the canonical player
 
-- [ ] Move canonical ExoPlayer ownership to `PlaybackSessionService`.
-- [ ] Create one `MediaSession` over that player.
-- [ ] Configure audio focus/noisy handling on the canonical player.
-- [ ] Ensure service lifecycle releases player/session correctly.
+- [x] Move canonical ExoPlayer ownership to `PlaybackSessionService`.
+- [x] Create one `MediaSession` over that player.
+- [x] Configure audio focus/noisy handling on the canonical player.
+- [x] Ensure service lifecycle releases player/session correctly.
 
 ### RMD-902 — Connect Compose through `MediaController`
 
-- [ ] Remove independent player construction from production `PlaybackScreen`.
-- [ ] Connect/disconnect MediaController lifecycle-safely.
-- [ ] Render controller/session state.
-- [ ] Send play/pause/seek/speed actions through controller.
+- [x] Remove independent player construction from production `PlaybackScreen`.
+- [x] Connect/disconnect MediaController lifecycle-safely.
+- [x] Render controller/session state.
+- [x] Send play/pause/seek/speed actions through controller.
 
 ### RMD-903 — Implement local split A/V playback
 
-- [ ] Use both `videoPath` and `audioPath` when an item has separate assets.
-- [ ] Build the appropriate merged Media3 source.
-- [ ] Keep all URIs local for completed offline items.
-- [ ] Add deterministic split-A/V fixture playback test.
+- [x] Use both `videoPath` and `audioPath` when an item has separate assets.
+- [x] Build the appropriate merged Media3 source.
+- [x] Keep all URIs local for completed offline items.
+- [x] Add deterministic split-A/V fixture playback test.
 
 ### RMD-904 — Implement subtitle playback controls
 
-- [ ] Attach persisted local subtitle tracks.
-- [ ] Expose actual available subtitle tracks in UI.
-- [ ] Switch/disable subtitle selection through Media3 track APIs.
-- [ ] Test offline subtitle rendering/selection where automation permits.
+- [x] Attach persisted local subtitle tracks.
+- [x] Expose actual available subtitle tracks in UI.
+- [x] Switch/disable subtitle selection through Media3 track APIs.
+- [x] Test offline subtitle rendering/selection where automation permits.
 
 ### RMD-905 — Implement audio-track controls if applicable
 
-- [ ] Populate actual audio tracks when multiple are supported.
-- [ ] Connect UI selection to Media3 track selection.
-- [ ] Hide/disable control when only one track exists.
+- [x] Populate actual audio tracks when multiple are supported.
+
+- [x] Connect UI selection to Media3 track selection.
+- [x] Hide/disable control when only one track exists.
 
 
 ### RMD-906 — Playback position persistence
 
-- [ ] Load persisted position before starting an item.
+- [x] Load persisted position before starting an item.
 
-- [ ] Persist periodically at bounded cadence.
+- [x] Persist periodically at bounded cadence.
 
-- [ ] Persist on appropriate stop/session transitions.
-- [ ] Apply documented completion threshold/reset behavior.
-- [ ] Add restart/resume tests.
+- [x] Persist on appropriate stop/session transitions.
+- [x] Apply documented completion threshold/reset behavior.
+- [x] Add restart/resume tests.
+
+**Evidence (RMD-901 through RMD-906):** `PlaybackSessionService` is the sole production `ExoPlayer` owner, builds one `MediaSession`, enables audio-focus handling and audio-becoming-noisy handling, and releases both player/session in service destruction. Production `PortraitPlayerScreen` constructs no `ExoPlayer`; it connects to the service through `SessionToken`/`MediaController.Builder`, binds `PlayerView` to that controller, routes seek/play-pause/speed and Media3 text/audio track selection through the controller, and releases/cancels the controller lifecycle-safely. `SplitAudioMediaSourceFactory` creates a `MergingMediaSource` when the local playback request carries a separate audio asset, while `LocalPlaybackPolicy` rejects remote playback URIs. Persisted subtitle/audio tracks are carried in `LocalPlaybackAsset`, exposed as real labels, selected through Media3 track parameters, and audio selection is disabled unless multiple tracks exist. Playback position is restored from persisted library state, periodically persisted at `PositionPersistCadenceMs`, persisted on disposal, and reset at the documented near-end completion threshold through `persistedPositionForStop`. `LocalPlaybackPolicyTest` covers split A/V, local-only paths, subtitle/audio track propagation, selection eligibility, restored position, bounded persistence cadence, and completion reset; `OfflinePlaybackQualificationTest` covers cold-start/local-only playback planning. These paths/tests were present on exact master `f62aa7aa5d72d3dccd87b9d4e50f60ec62ce7754`, which passed CI `37675821415`, Android smoke `37675821448`, Android FGS timeout `37675821387`, Supply chain `37675821421`, CI evidence `37675821384`, and Deterministic E2E fixture `37675821443`. RMD-907 remains unchecked because controller/system-command behavioral qualification is a distinct device-level acceptance boundary.
 
 ### RMD-907 — MediaSession behavioral qualification
 
@@ -748,6 +752,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Fail tests on unintended golden changes.
 
 ### RMD-1404 — No-hidden-controls behavioral gate
+
 
 - [x] Render each primary screen at compact supported dimensions.
 - [x] Assert primary actions are visible/reachable without horizontal scrolling.
@@ -997,6 +1002,7 @@ All items below must be true before engineering closeout:
 ## Suggested execution order
 
 The dependency-aware implementation order is:
+
 
 1. **RMD-000** truthful baseline/tracking.
 2. **RMD-100 + RMD-200** platform and actual Rust/Android integration.
