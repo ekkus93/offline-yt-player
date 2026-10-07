@@ -542,39 +542,41 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1002 — Library Play action
 
-- [ ] Open canonical playback session for selected completed item.
+- [x] Open canonical playback session for selected completed item.
 - [x] Reject/disable play for incomplete/corrupt items with explanation.
 
-**Evidence (RMD-1002 partial):** `LibraryPlaybackRoute` now fail-closes invalid/incomplete/remote playback rows, exposes an unavailable reason, and the Library UI renders that explanation. JVM policy coverage and the intentionally changed Library goldens were qualified on current master `fecfdf48ccbe419caca9c20af18a8dbaef4bdc9d` with all six exact-head workflows green. The separate requirement to open the canonical playback session remains unchecked pending RMD-901/RMD-902 completion.
+**Evidence (RMD-1002 partial):** `LibraryPlaybackRoute` now fail-closes invalid/incomplete/remote playback rows, exposes an unavailable reason, and the Library UI renders that explanation. JVM policy coverage and the intentionally changed Library goldens were qualified on current master `fecfdf48ccbe419caca9c20af18a8dbaef4bdc9d` with all six exact-head workflows green. The canonical playback launch requirement is now reconciled from current-master production wiring and exact-head qualification; see `docs/RMD_1002_1006_LIBRARY_DOWNLOADS_UX_RECONCILIATION_2026-10-07.md`.
 
 
 
 ### RMD-1003 — Library Details action
 
-- [ ] Add real details screen/sheet.
-- [ ] Show local assets, source identity, duration, size, subtitle info, and integrity/recovery state as appropriate.
+- [x] Add real details screen/sheet.
+- [x] Show local assets, source identity, duration, size, subtitle info, and integrity/recovery state as appropriate.
 
 ### RMD-1004 — Library Rename action
 
-- [ ] Implement bounded rename in persistence.
-- [ ] Decide whether rename changes display title only or filename; prefer metadata-only unless product requires file rename.
-- [ ] Add validation/tests.
+- [x] Implement bounded rename in persistence.
+- [x] Decide whether rename changes display title only or filename; prefer metadata-only unless product requires file rename.
+- [x] Add validation/tests.
 
 ### RMD-1005 — Library Remove action
 
-- [ ] Add destructive confirmation.
-- [ ] Invoke real delete/asset lifecycle path.
-- [ ] Update list only after durable outcome.
-- [ ] Surface partial failure/recovery state.
+- [x] Add destructive confirmation.
+- [x] Invoke real delete/asset lifecycle path.
+- [x] Update list only after durable outcome.
+- [x] Surface partial failure/recovery state.
 
 
 ### RMD-1006 — Operational Downloads screen
 
-- [ ] Render durable queue.
-- [ ] Apply real filters.
-- [ ] Show actual progress/state/error/speed/ETA.
-- [ ] Wire pause/resume/cancel/retry.
-- [ ] Disable actions illegal for current state.
+- [x] Render durable queue.
+- [x] Apply real filters.
+- [x] Show actual progress/state/error/speed/ETA.
+- [x] Wire pause/resume/cancel/retry.
+- [x] Disable actions illegal for current state.
+
+**Evidence (RMD-1002 through RMD-1006):** `docs/RMD_1002_1006_LIBRARY_DOWNLOADS_UX_RECONCILIATION_2026-10-07.md` records current-master production wiring and behavioral evidence for canonical Library playback launch, real details presentation, bounded metadata-only rename with validation, confirmed durable remove/delete lifecycle behavior, and the durable Downloads queue with real filters/progress/error/speed/ETA and state-legal pause/resume/cancel/retry controls. The reconciliation documentation head `467d7d56345e0a63814212fd2932cecd9f9aae67` passed all six exact-head workflows: CI `37688172137`, Android smoke `37688172353`, Android FGS timeout `37688171876`, Supply chain `37688172055`, CI evidence `37688171914`, and Deterministic E2E fixture `37688172625`. This reconciliation does not close RMD-907, RMD-1500, RMD-1800, or the external policy/legal release gate.
 
 ---
 
