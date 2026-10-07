@@ -248,6 +248,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Prefer direct-play combined streams where product policy says so.
 - [x] Prefer compatible split A/V over mux-required variants where appropriate.
 - [x] Add deterministic tie-breakers for codec/bitrate/fps/format ID.
+
 - [x] Add tests where provider order is intentionally adversarial.
 
 ### RMD-408 — Reconcile concurrency/resource-policy duplication
@@ -342,10 +343,10 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-601 — Library repository wiring
 
-- [ ] Replace `emptyList<LibraryRowModel>()` production data with repository-backed state.
-- [ ] Implement list/search/detail observation.
-- [ ] Map persisted metadata/assets to UI models.
-- [ ] Provide loading/empty/error/populated states.
+- [x] Replace `emptyList<LibraryRowModel>()` production data with repository-backed state.
+- [x] Implement list/search/detail observation.
+- [x] Map persisted metadata/assets to UI models.
+- [x] Provide loading/empty/error/populated states.
 
 ### RMD-602 — Download repository wiring
 
@@ -498,6 +499,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 - [ ] Load persisted position before starting an item.
 - [ ] Persist periodically at bounded cadence.
+
 - [ ] Persist on appropriate stop/session transitions.
 - [ ] Apply documented completion threshold/reset behavior.
 - [ ] Add restart/resume tests.
@@ -748,6 +750,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 - [x] Verify semantic labels on actionable icons/controls.
 - [x] Verify logical traversal/focus order.
+
 - [x] Verify minimum touch target behavior.
 - [x] Verify state is not communicated by color alone.
 - [x] Verify representative TalkBack semantics using Compose semantics tests and documented manual checks where automation is insufficient.
@@ -997,5 +1000,6 @@ The dependency-aware implementation order is:
 10. **RMD-1400 + RMD-1500** real Android qualification and E2E.
 11. **RMD-1600 + RMD-1700** CI/supply chain/docs reconciliation.
 12. **RMD-1800** independent re-review, exact-head qualification, merge, and final verification.
+
 
 Parallel work is allowed when dependencies are respected, but no downstream acceptance checkbox may be checked using a fake gateway/policy object in place of the production path it claims to qualify.
