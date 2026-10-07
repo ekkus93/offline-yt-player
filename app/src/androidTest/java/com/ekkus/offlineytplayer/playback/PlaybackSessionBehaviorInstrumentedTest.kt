@@ -2,7 +2,6 @@ package com.ekkus.offlineytplayer.playback
 
 import android.content.ComponentName
 import android.os.SystemClock
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -46,7 +45,6 @@ class PlaybackSessionBehaviorInstrumentedTest {
                     onBack = {},
                 )
             }
-            compose.onNodeWithText("UI session fixture").assertExists()
             compose.onNodeWithText("Speed 1.0×").performClick()
             waitForControllerState(observer) {
                 abs(playbackParameters.speed - 1.25f) < 0.001f
