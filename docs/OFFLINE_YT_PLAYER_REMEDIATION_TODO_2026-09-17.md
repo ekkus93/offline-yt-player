@@ -249,6 +249,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Prefer compatible split A/V over mux-required variants where appropriate.
 - [x] Add deterministic tie-breakers for codec/bitrate/fps/format ID.
 
+
 - [x] Add tests where provider order is intentionally adversarial.
 
 ### RMD-408 — Reconcile concurrency/resource-policy duplication
@@ -358,9 +359,11 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-603 — Source-analysis repository/use case
 
-- [ ] Centralize URL validation + source registry resolution.
-- [ ] Expose loading/resolved/unsupported/network/source-changed states.
-- [ ] Cancel superseded analysis requests safely.
+- [x] Centralize URL validation + source registry resolution.
+- [x] Expose loading/resolved/unsupported/network/source-changed states.
+- [x] Cancel superseded analysis requests safely.
+
+**Evidence (RMD-603):** `SourceAnalysisUseCase` centralizes `SupportedUrlPolicy` validation, delegates resolution through `AppSourceAnalysisGateway`, exposes explicit `Loading`, `Resolved`, `Unsupported`, `NetworkFailure`, `SourceChanged`, `Failed`, and `Superseded` states, and prevents stale/superseded tickets from publishing. Production `AddScreen` owns the use case, performs blocking analysis on `Dispatchers.IO`, cancels active work on input replacement/disposal, and ignores `Superseded` completion. `SourceAnalysisUseCaseTest` behaviorally covers pre-gateway validation, resolved source choices, structured error-state classification, and stale-result suppression. The production path and these tests were present on exact master `f62aa7aa5d72d3dccd87b9d4e50f60ec62ce7754`, which passed CI `37675821415`, Android smoke `37675821448`, Android FGS timeout `37675821387`, Supply chain `37675821421`, CI evidence `37675821384`, and Deterministic E2E fixture `37675821443`. RMD-604 remains separate and unchecked because lifecycle-aware screen state ownership/process recreation requires independent qualification.
 
 ### RMD-604 — ViewModel architecture
 
@@ -498,6 +501,7 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-906 — Playback position persistence
 
 - [ ] Load persisted position before starting an item.
+
 - [ ] Persist periodically at bounded cadence.
 
 - [ ] Persist on appropriate stop/session transitions.
@@ -747,6 +751,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Remove/replace existing all-boolean policy as the sole acceptance proof.
 
 ### RMD-1405 — Accessibility qualification
+
 
 - [x] Verify semantic labels on actionable icons/controls.
 - [x] Verify logical traversal/focus order.
@@ -998,6 +1003,7 @@ The dependency-aware implementation order is:
 8. **RMD-900** unified playback.
 9. **RMD-1000 + RMD-1200 + RMD-1300** operational UX, recovery, security.
 10. **RMD-1400 + RMD-1500** real Android qualification and E2E.
+
 11. **RMD-1600 + RMD-1700** CI/supply chain/docs reconciliation.
 12. **RMD-1800** independent re-review, exact-head qualification, merge, and final verification.
 
