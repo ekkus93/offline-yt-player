@@ -2,24 +2,62 @@ package com.ekkus.offlineytplayer.playback
 
 import android.content.ComponentName
 import android.os.SystemClock
+import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.media3.common.MediaItem
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
+import com.ekkus.offlineytplayer.ui.PortraitPlayerScreen
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class PlaybackSessionBehaviorInstrumentedTest {
+    @get:Rule
+    val compose = createComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+
+    @Test
+    fun composeSpeedControlManipulatesTheCanonicalSessionPlayer() {
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            compose.setContent {
+                PortraitPlayerScreen(
+                    asset = LocalPlaybackAsset(
+                        videoPath = File(context.cacheDir, "ui-session-fixture.mp4").absolutePath,
+                        title = "UI session fixture",
+                    ),
+                    settings = AppSettingsSnapshot(),
+                    onUpdateSettings = {},
+                    onBack = {},
+                )
+            }
+            compose.onNodeWithText("UI session fixture").assertExists()
+            compose.onNodeWithText("Speed 1.0×").performClick()
+            waitForControllerState(observer) {
+                abs(playbackParameters.speed - 1.25f) < 0.001f
+            }
+            instrumentation.runOnMainSync {
+                assertTrue(abs(observer.playbackParameters.speed - 1.25f) < 0.001f)
+            }
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+        }
+    }
 
     @Test
     fun independentControllersObserveAndManipulateTheSameServiceOwnedPlayer() {
