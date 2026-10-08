@@ -38,7 +38,10 @@ impl DownloadState {
                     Paused | RetryWait | Failed | Verifying | Canceled
                 )
                 | (Paused, Queued | Canceled)
-                | (RetryWait, Resolving | Downloading | Paused | Failed | Canceled)
+                | (
+                    RetryWait,
+                    Resolving | Downloading | Paused | Failed | Canceled
+                )
                 | (Failed, Queued | Resolving | Canceled)
                 | (
                     Verifying,
