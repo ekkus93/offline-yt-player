@@ -199,7 +199,6 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
         }
     }
 
-
     @Test
     fun coldStartSeedPersistsSubtitleAsset() {
         assumeTrue(coldStartPhase() == "seed")
@@ -503,3 +502,15 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
         }
 
         fun joinAndRethrow() {
+            thread.join(20_000)
+            assertTrue("fixture server thread should finish", !thread.isAlive)
+            failure.get()?.let { throw AssertionError("fixture server failed", it) }
+        }
+    }
+
+    private companion object {
+        const val DATABASE_NAME = "offline-yt-player.sqlite3"
+        const val VIDEO_RELATIVE_PATH = "items/rmd-1503-subtitle-offline/offline.wav"
+        const val SUBTITLE_RELATIVE_PATH = "items/rmd-1503-subtitle-offline/captions.vtt"
+    }
+}
