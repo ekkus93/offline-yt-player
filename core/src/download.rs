@@ -498,6 +498,7 @@ fn visit_partials(
         {
             visitor(&path)?;
         }
+
     }
     Ok(())
 }
@@ -517,7 +518,6 @@ fn map_reqwest_error(error: reqwest::Error) -> CoreError {
             "Network request failed before a response was received",
             true,
         )
-
     }
 }
 
@@ -974,7 +974,10 @@ mod tests {
 
         assert_eq!(error.kind, ErrorKind::InsufficientStorage);
         assert!(!error.retryable);
-        assert!(!final_path.exists(), "write failure must not promote a final asset");
+        assert!(
+            !final_path.exists(),
+            "write failure must not promote a final asset"
+        );
         assert_eq!(
             fs::metadata(&partial).unwrap().len(),
             17,
@@ -986,11 +989,12 @@ mod tests {
         );
 
         let retry = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
-        let completed = retry
-            .transfer(&request, &AtomicBool::new(false))
-            .unwrap();
+        let completed = retry.transfer(&request, &AtomicBool::new(false)).unwrap();
 
-        assert!(completed.resumed, "retry should reuse the proven partial range");
+        assert!(
+            completed.resumed,
+            "retry should reuse the proven partial range"
+        );
         assert_eq!(fs::read(&final_path).unwrap(), data);
         assert!(!partial.exists());
         assert_eq!(load_resume_representation(&partial).unwrap(), None);
@@ -998,6 +1002,7 @@ mod tests {
 
     #[test]
     fn storage_preflight_rejects_insufficient_space() {
+
         let temp = tempfile::tempdir().unwrap();
         let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
         let error = engine.preflight_space(Some(100), Some(99)).unwrap_err();
