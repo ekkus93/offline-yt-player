@@ -48,8 +48,29 @@ jobs:
       - name: Generate Gradle dependency review artifact
         run: |
           mkdir -p build/reports/supply-chain
-          ./gradlew --no-daemon :app:dependencies --configuration debugRuntimeClasspath > build/reports/supply-chain/debugRuntimeClasspath.txt
-          ./gradlew --no-daemon :app:dependencies --configuration debugAndroidTestRuntimeClasspath > build/reports/supply-chain/debugAndroidTestRuntimeClasspath.txt
+          gradle_dependencies_with_retry() {
+            configuration="$1"
+            output="$2"
+            attempt=1
+            while [ "$attempt" -le 3 ]; do
+              refresh_flag=""
+              if [ "$attempt" -gt 1 ]; then
+                refresh_flag="--refresh-dependencies"
+              fi
+              if ./gradlew --no-daemon $refresh_flag :app:dependencies --configuration "$configuration" > "$output" 2>&1; then
+                return 0
+              fi
+              echo "Gradle dependency resolution attempt $attempt failed for $configuration" >&2
+              cat "$output" >&2
+              if [ "$attempt" -eq 3 ]; then
+                return 1
+              fi
+              sleep $((attempt * 5))
+              attempt=$((attempt + 1))
+            done
+          }
+          gradle_dependencies_with_retry debugRuntimeClasspath build/reports/supply-chain/debugRuntimeClasspath.txt
+          gradle_dependencies_with_retry debugAndroidTestRuntimeClasspath build/reports/supply-chain/debugAndroidTestRuntimeClasspath.txt
       - name: Verify third-party notices are reconciled
         run: python3 scripts/generate_third_party_notices.py --check
       - name: Upload supply-chain evidence
