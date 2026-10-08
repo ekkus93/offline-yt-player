@@ -498,7 +498,6 @@ fn visit_partials(
         {
             visitor(&path)?;
         }
-
     }
     Ok(())
 }
@@ -1002,7 +1001,6 @@ mod tests {
 
     #[test]
     fn storage_preflight_rejects_insufficient_space() {
-
         let temp = tempfile::tempdir().unwrap();
         let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
         let error = engine.preflight_space(Some(100), Some(99)).unwrap_err();
