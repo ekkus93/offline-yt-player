@@ -398,6 +398,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Call production source-analysis gateway.
 - [x] Show real metadata/quality/error state.
 
+
 **Evidence (RMD-702):** production `MainActivity.bootstrapProductionUi()` opens `GeneratedUniffiSourceAnalysisGateway` and passes it into `OfflineYTPlayerApp`; `AddScreen` executes `gateway.analyze(requestUrl)` on `Dispatchers.IO`, cancels/suppresses superseded requests, and renders the returned source URL, bounded title, duration, thumbnail, quality choices, estimated bytes, and structured error state. `GeneratedUniffiSourceAnalysisGateway.analyze` normalizes input through the shared `SupportedUrlPolicy`, calls the generated `FfiYouTubeSourceService.resolve/listChoices` boundary, and maps provider output through `SourceMetadataPolicy` rather than fixture/preview data. JVM coverage includes the source-analysis gateway/policy tests and `AddWorkflowPolicyTest`; production consumption is guarded by source-shape/runtime-consumption tests. Qualified exact master `a9564e7eac154d0ba7383308bc949063fa33c792` passed CI `36387320305`, Android smoke `36387320281`, Android FGS timeout `36387320226`, Supply chain `36387320273`, and CI evidence `36387320255`. RMD-703/RMD-704 remain unchecked because setup option persistence/selection and advanced-option mutation are not yet complete.
 
 ### RMD-703 — Make Download Setup operational
@@ -798,30 +799,31 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Download real fixture assets.
 - [ ] Verify completed Library item.
 - [ ] Disable network.
+
 - [ ] Kill/cold-start app.
 - [ ] Play completed local item through MediaSession-owned player.
 - [ ] Assert no network request is needed for completed playback.
 
 ### RMD-1502 — Split A/V offline E2E
 
-- [ ] Download separate local video/audio fixture assets.
-- [ ] Persist both assets.
+- [x] Download separate local video/audio fixture assets.
+- [x] Persist both assets.
 - [ ] Cold-start offline.
-- [ ] Play synchronized merged A/V through canonical session.
+- [x] Play synchronized merged A/V through canonical session.
 
-**RMD-1502 packaged split-A/V E2E increment (pending exact-head qualification):** The instrumented test now includes a deterministic four-second H.264 Baseline MP4 video-only asset (16×16, 2 fps, base64 embedded in test source) and a separate four-second PCM WAV audio asset. The test is enabled, not ignored.  `Rmd1502SplitAvOfflineInstrumentedTest` schedules distinct deterministic H.264 MP4 video and WAV audio assets through the production API-29 background scheduler and generated core worker, shuts down the fixture server after both assets persist, verifies the production Library playback descriptor retains distinct local video/audio paths, opens the item through production `MainActivity`, and verifies the canonical MediaSession selects both local video and audio tracks while the source server is unavailable. This can qualify separate download, persistence, and merged offline session playback after exact-head CI passes; true OS process-kill/cold-start remains open.
+**RMD-1502 packaged split-A/V E2E increment (qualified partial path):** `Rmd1502SplitAvOfflineInstrumentedTest` uses deterministic four-second H.264 Baseline MP4 video-only and PCM WAV audio assets, schedules both through the production API-29 background scheduler and generated core worker, shuts down the fixture server after both assets persist, verifies the production Library playback descriptor retains distinct local video/audio paths, opens the item through production `MainActivity`, and verifies the canonical MediaSession reaches `STATE_READY` with both persisted local video and audio tracks selected while the source server is unavailable. Exact master `61ede07f770ed1283b3cf1b2fa514b544895ed70` passed CI `37777571178`, Android smoke `37777571126`, Android FGS timeout `37777571176`, Supply chain `37777571113`, CI evidence `37777571166`, and Deterministic E2E fixture `37777571246`. The download, persistence, and synchronized merged-offline-playback subtasks are qualified; true OS process-kill/cold-start remains open.
 
 ### RMD-1503 — Subtitle offline E2E
 
-- [ ] Download fixture subtitle track.
+- [x] Download fixture subtitle track.
 
-- [ ] Persist language/format.
+- [x] Persist language/format.
 - [ ] Cold-start offline.
-- [ ] Select/display local subtitle track.
+- [x] Select/display local subtitle track.
 
 **RMD-1503 production playback-descriptor repair (pending exact-head qualification):** remediation review found that persisted subtitle assets retained provider-neutral identity in Rust (`subtitle:<language>:<track_id>` plus MIME) but `FfiLibraryPlaybackAsset` exported only video/audio paths, so production Android Library playback silently dropped subtitles before constructing `LocalPlaybackAsset`. The playback descriptor now exports validated local subtitle path/language/format/track/MIME records, Android maps them to app-private `LocalSubtitleTrack` entries, and `LibraryPlaybackRoute` carries them into the canonical player. Rust and JVM tests cover the descriptor and route. RMD-1503 remains unchecked until packaged Android offline download/reopen/player evidence qualifies the behavior.
 
-**RMD-1503 packaged offline subtitle E2E increment (pending exact-head qualification):** `Rmd1503SubtitleOfflineInstrumentedTest` schedules a two-asset WAV + WebVTT fixture through the production API-29 background scheduler and generated core worker, shuts down the only HTTP fixture server, reopens persisted Library/playback descriptors, verifies subtitle path/language/format/track/MIME identity, launches production `MainActivity`, opens the canonical MediaSession-owned player, verifies the local subtitle configuration is exposed offline, and verifies the player applies the persisted `en` selection to Media3 before allowing the UI to disable it. This increment can qualify download, persisted identity, and select/display behavior after exact-head CI passes; actual OS process-kill/cold-start evidence remains open.
+**RMD-1503 packaged offline subtitle E2E increment (qualified partial path):** `Rmd1503SubtitleOfflineInstrumentedTest` schedules a two-asset WAV + WebVTT fixture through the production API-29 background scheduler and generated core worker, shuts down the only HTTP fixture server, reopens persisted Library/playback descriptors, verifies subtitle path/language/format/track/MIME identity, launches production `MainActivity`, opens the canonical MediaSession-owned player, verifies the local subtitle configuration is exposed offline, and verifies Media3 selects the persisted `en` text track before the UI disables it. Exact master `61ede07f770ed1283b3cf1b2fa514b544895ed70` passed CI `37777571178`, Android smoke `37777571126`, Android FGS timeout `37777571176`, Supply chain `37777571113`, CI evidence `37777571166`, and Deterministic E2E fixture `37777571246`. The subtitle download, persisted language/format, and local select/display subtasks are qualified; actual OS process-kill/cold-start evidence remains open.
 
 ### RMD-1504 — Share E2E
 
