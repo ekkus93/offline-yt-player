@@ -59,17 +59,7 @@ jobs:
           # Software-emulated API 35 may signal boot completion before ADB properties respond.
           # Wait for a readable SDK property before Gradle enumerates instrumentation devices.
           script: >-
-            attempt=0;
-            sdk=;
-            while [ "$attempt" -lt 30 ]; do
-              sdk=$(timeout 8s adb shell getprop ro.build.version.sdk 2>/dev/null || true);
-              if [ "$sdk" = "35" ]; then break; fi;
-              attempt=$((attempt + 1));
-              sleep 4;
-            done;
-            test "$sdk" = "35" || { echo "API 35 emulator never became ADB-ready"; exit 1; };
-            ./gradlew --no-daemon connectedDebugAndroidTest
-            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutAdbInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest
+            attempt=0; sdk=; while [ "$attempt" -lt 30 ]; do sdk=$(timeout 8s adb shell getprop ro.build.version.sdk 2>/dev/null || true); if [ "$sdk" = "35" ]; then break; fi; attempt=$((attempt + 1)); sleep 4; done; test "$sdk" = "35" || { echo "API 35 emulator never became ADB-ready"; exit 1; }; ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutAdbInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest
       - name: Upload timeout qualification evidence
         if: always()
         uses: actions/upload-artifact@v4
