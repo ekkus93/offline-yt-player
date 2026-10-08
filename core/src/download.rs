@@ -83,6 +83,8 @@ pub struct DownloadEngine {
     client: Client,
     root: PathBuf,
     policy: DownloadPolicy,
+    #[cfg(test)]
+    test_write_failure_after_bytes: Option<u64>,
 }
 
 impl DownloadEngine {
@@ -97,6 +99,8 @@ impl DownloadEngine {
             client,
             root: root.into(),
             policy,
+            #[cfg(test)]
+            test_write_failure_after_bytes: None,
         })
     }
 
@@ -235,6 +239,21 @@ impl DownloadEngine {
             if count == 0 {
                 break;
             }
+            #[cfg(test)]
+            if let Some(fail_after) = self.test_write_failure_after_bytes {
+                if total < fail_after && total.saturating_add(count as u64) >= fail_after {
+                    let writable = usize::try_from(fail_after.saturating_sub(total))
+                        .unwrap_or(usize::MAX)
+                        .min(count);
+                    file.write_all(&buffer[..writable]).map_err(io_error)?;
+                    file.sync_all().map_err(io_error)?;
+                    return Err(io_error(std::io::Error::from_raw_os_error(28)));
+                }
+                if total >= fail_after {
+                    return Err(io_error(std::io::Error::from_raw_os_error(28)));
+                }
+            }
+
             total = total.saturating_add(count as u64);
             if total > self.policy.max_asset_bytes {
                 return Err(CoreError::new(
@@ -498,6 +517,7 @@ fn map_reqwest_error(error: reqwest::Error) -> CoreError {
             "Network request failed before a response was received",
             true,
         )
+
     }
 }
 
@@ -933,6 +953,50 @@ mod tests {
     }
 
     #[test]
+    fn write_time_enospc_preserves_partial_and_next_attempt_resumes_to_completion() {
+        let data = b"write-time ENOSPC fixture".repeat(128);
+        let server = FixtureServer::start(data.clone());
+        let temp = tempfile::tempdir().unwrap();
+        let request = TransferRequest {
+            url: format!("{}/media", server.address),
+            relative_path: "items/enospc/video.mp4".into(),
+            expected_bytes: Some(data.len() as u64),
+            expected_sha256: None,
+        };
+        let final_path = temp.path().join(&request.relative_path);
+        let partial = partial_path(&final_path);
+
+        let mut failing = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+        failing.test_write_failure_after_bytes = Some(17);
+        let error = failing
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::InsufficientStorage);
+        assert!(!error.retryable);
+        assert!(!final_path.exists(), "write failure must not promote a final asset");
+        assert_eq!(
+            fs::metadata(&partial).unwrap().len(),
+            17,
+            "real partial bytes must remain recoverable after ENOSPC",
+        );
+        assert!(
+            load_resume_representation(&partial).unwrap().is_some(),
+            "the retained partial must preserve its remote representation identity",
+        );
+
+        let retry = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+        let completed = retry
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap();
+
+        assert!(completed.resumed, "retry should reuse the proven partial range");
+        assert_eq!(fs::read(&final_path).unwrap(), data);
+        assert!(!partial.exists());
+        assert_eq!(load_resume_representation(&partial).unwrap(), None);
+    }
+
+    #[test]
     fn storage_preflight_rejects_insufficient_space() {
         let temp = tempfile::tempdir().unwrap();
         let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
@@ -998,6 +1062,7 @@ mod tests {
         use std::os::unix::fs::symlink;
 
         let root = tempfile::tempdir().unwrap();
+
         let outside = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join("items")).unwrap();
         symlink(outside.path(), root.path().join("items/one")).unwrap();
