@@ -5,6 +5,10 @@ import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
 import android.database.sqlite.SQLiteDatabase
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.test.core.app.ActivityScenario
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -12,6 +16,7 @@ import androidx.media3.session.SessionToken
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ekkus.offlineytplayer.MainActivity
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
@@ -34,11 +39,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val database = File(context.filesDir, DATABASE_NAME)
 
@@ -220,6 +227,19 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
         assertEquals(jobId, LocalPlaybackPolicy.persistableItemId(
             LocalPlaybackAsset(videoPath = localAsset.absolutePath, title = "RMD-1501 Android runtime fixture", itemId = jobId),
         ))
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            fun assertLibraryVisible() {
+                compose.waitUntil(15_000) {
+                    runCatching {
+                        compose.onNodeWithText("RMD-1501 Android runtime fixture").assertIsDisplayed()
+                    }.isSuccess
+                }
+            }
+            assertLibraryVisible()
+            scenario.recreate()
+            assertLibraryVisible()
+        }
 
         // The production MediaSessionService/ExoPlayer must prepare and play the
         // downloaded local file after the fixture server has been shut down.
