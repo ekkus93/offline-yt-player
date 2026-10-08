@@ -30,7 +30,7 @@ class ShareIntentPolicyTest {
         assertTrue(activity.contains("GeneratedUniffiSourceAnalysisGateway.open()"))
         assertTrue(activity.contains("DownloadPresentationGateway.open(databasePath)"))
         assertTrue(activity.contains("bootstrapExecutor.execute"))
-        assertTrue(activity.contains("listLibrary(libraryQuery).toLibraryScreenState(libraryRoot, initialPlaybackAssets)"))
+        assertTrue(activity.contains("listLibrary(uiState.libraryQuery).toLibraryScreenState(libraryRoot, initialPlaybackAssets)"))
         assertTrue(activity.contains("titlesByJobId().orEmpty()"))
         assertTrue(activity.contains("listDownloadQueue().toDownloadsScreenState(initialTitles)"))
         assertTrue(activity.contains("result.toDownloadsScreenState(titles)"))
