@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -99,6 +100,10 @@ class Rmd1504ShareE2EInstrumentedTest {
         }
 
         ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+            compose.waitUntil(20_000) {
+                runCatching { compose.onNodeWithText("Analyze").assertIsEnabled() }.isSuccess
+            }
+            compose.onNodeWithText("Analyze").performClick()
             compose.waitUntil(20_000) {
                 runCatching { compose.onNodeWithText(title, substring = true).assertIsDisplayed() }.isSuccess
             }

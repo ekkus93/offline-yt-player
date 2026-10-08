@@ -82,6 +82,7 @@ class Rmd1500AppPipelineFixtureTest {
             )
         }
 
+        compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(timeoutMillis = 5_000) {
             sourceGateway.analyzedUrls.isNotEmpty()
         }

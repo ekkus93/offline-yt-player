@@ -279,7 +279,7 @@ private fun AddScreen(
                         status = null
                     }
                 },
-                enabled = url.isNotBlank() && !analyzing && !scheduling,
+                enabled = url.isNotBlank() && sourceAnalysisUseCase != null && !analyzing && !scheduling,
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text(if (analyzing) "Analyzing…" else "Analyze") }
         }

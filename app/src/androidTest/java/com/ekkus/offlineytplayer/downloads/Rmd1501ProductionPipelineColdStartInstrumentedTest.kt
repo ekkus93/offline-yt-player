@@ -8,6 +8,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -137,6 +138,10 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             )
         }
 
+        compose.waitUntil(60_000) {
+            runCatching { compose.onNodeWithText("Analyze").assertIsEnabled() }.isSuccess
+        }
+        compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(60_000) {
             runCatching { compose.onNodeWithText(TITLE, substring = true).assertIsDisplayed() }.isSuccess
         }
