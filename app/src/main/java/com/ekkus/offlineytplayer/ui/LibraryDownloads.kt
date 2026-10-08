@@ -38,6 +38,7 @@ import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetails
 import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
+import com.ekkus.offlineytplayer.playback.LocalSubtitleTrack
 import com.ekkus.offlineytplayer.resilience.CorruptionRecoveryPolicy
 import com.ekkus.offlineytplayer.resilience.RecoveryUiAction
 import com.ekkus.offlineytplayer.resilience.RecoveryUiState
@@ -57,6 +58,7 @@ internal data class LibraryRowModel(
     val completed: Boolean = true,
     val videoPath: String? = null,
     val audioPath: String? = null,
+    val subtitleTracks: List<LocalSubtitleTrack> = emptyList(),
     val resumePositionMs: Long = 0,
 )
 internal data class DownloadRowModel(
@@ -109,6 +111,7 @@ internal object LibraryPlaybackRoute {
             audioPath = row.audioPath,
             title = row.title,
             startPositionMs = row.resumePositionMs,
+            subtitleTracks = row.subtitleTracks,
             itemId = row.id,
         )
     }

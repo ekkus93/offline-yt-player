@@ -12,6 +12,10 @@ class LibraryPlaybackGatewayBoundaryTest {
         assertTrue(source.contains("libraryPlaybackAssets"))
         assertTrue(source.contains("videoRelativePath"))
         assertTrue(source.contains("audioRelativePath"))
+        assertTrue(source.contains("subtitleTracks"))
+        assertTrue(source.contains("relativePath"))
+        assertTrue(source.contains("language"))
+        assertTrue(source.contains("mimeType"))
         assertTrue(source.contains("unavailableReason"))
     }
 
@@ -22,6 +26,8 @@ class LibraryPlaybackGatewayBoundaryTest {
         assertTrue(source.contains("playbackByItemId[item.itemId]"))
         assertTrue(source.contains("videoRelativePath?.let { libraryRoot.resolve(it).absolutePath }"))
         assertTrue(source.contains("audioRelativePath?.let { libraryRoot.resolve(it).absolutePath }"))
+        assertTrue(source.contains("subtitleTracks.orEmpty().map"))
+        assertTrue(source.contains("LocalSubtitleTrack("))
         assertTrue(source.contains("item.completed && playback?.playable == true"))
     }
 }

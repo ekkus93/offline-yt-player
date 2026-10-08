@@ -4,12 +4,21 @@ import java.io.Closeable
 import java.lang.reflect.Method
 import java.util.concurrent.Future
 
+data class CoreLibraryPlaybackSubtitleTrack(
+    val relativePath: String,
+    val language: String,
+    val format: String,
+    val trackId: String,
+    val mimeType: String,
+)
+
 data class CoreLibraryPlaybackAsset(
     val itemId: String,
     val videoRelativePath: String?,
     val audioRelativePath: String?,
     val playable: Boolean,
     val unavailableReason: String?,
+    val subtitleTracks: List<CoreLibraryPlaybackSubtitleTrack> = emptyList(),
 )
 
 interface AppLibraryPlaybackGateway : Closeable {
@@ -94,7 +103,17 @@ private fun mapPlaybackAsset(record: Any): CoreLibraryPlaybackAsset = CoreLibrar
     audioRelativePath = readNullable(record, "audioRelativePath", "audio_relative_path") as String?,
     playable = readBoolean(record, "playable"),
     unavailableReason = readNullable(record, "unavailableReason", "unavailable_reason") as String?,
+    subtitleTracks = readList(record, "subtitleTracks", "subtitle_tracks").map(::mapPlaybackSubtitleTrack),
 )
+
+private fun mapPlaybackSubtitleTrack(record: Any): CoreLibraryPlaybackSubtitleTrack =
+    CoreLibraryPlaybackSubtitleTrack(
+        relativePath = readString(record, "relativePath", "relative_path"),
+        language = readString(record, "language"),
+        format = readString(record, "format"),
+        trackId = readString(record, "trackId", "track_id"),
+        mimeType = readString(record, "mimeType", "mime_type"),
+    )
 
 private fun readPlaybackError(result: Any): CoreGatewayError? {
     val message = readNullable(result, "errorMessage", "error_message") as String? ?: return null

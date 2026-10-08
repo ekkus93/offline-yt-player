@@ -1,11 +1,24 @@
-use crate::{LibraryItem, LibraryStore, MediaKind, validate_relative_library_path};
+use crate::{
+    LibraryItem, LibraryStore, MediaKind, local_subtitle_asset_identity, local_subtitle_assets,
+    validate_relative_library_path,
+};
 use std::sync::Arc;
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiLibraryPlaybackSubtitleTrack {
+    pub relative_path: String,
+    pub language: String,
+    pub format: String,
+    pub track_id: String,
+    pub mime_type: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FfiLibraryPlaybackAsset {
     pub item_id: String,
     pub video_relative_path: Option<String>,
     pub audio_relative_path: Option<String>,
+    pub subtitle_tracks: Vec<FfiLibraryPlaybackSubtitleTrack>,
     pub playable: bool,
     pub unavailable_reason: Option<String>,
 }
@@ -78,10 +91,25 @@ fn playback_asset(item: &LibraryItem) -> FfiLibraryPlaybackAsset {
         return unavailable(item, "Local audio asset path is invalid");
     }
 
+    let subtitle_tracks = local_subtitle_assets(&item.assets)
+        .into_iter()
+        .filter_map(|asset| {
+            let identity = local_subtitle_asset_identity(asset)?;
+            Some(FfiLibraryPlaybackSubtitleTrack {
+                relative_path: asset.relative_path.clone(),
+                language: identity.language,
+                format: identity.format,
+                track_id: identity.track_id,
+                mime_type: asset.mime_type.clone()?,
+            })
+        })
+        .collect();
+
     FfiLibraryPlaybackAsset {
         item_id: item.item_id.clone(),
         video_relative_path: Some(video.relative_path.clone()),
         audio_relative_path: audio.map(|asset| asset.relative_path.clone()),
+        subtitle_tracks,
         playable: true,
         unavailable_reason: None,
     }
@@ -92,6 +120,7 @@ fn unavailable(item: &LibraryItem, reason: &str) -> FfiLibraryPlaybackAsset {
         item_id: item.item_id.clone(),
         video_relative_path: None,
         audio_relative_path: None,
+        subtitle_tracks: Vec::new(),
         playable: false,
         unavailable_reason: Some(reason.into()),
     }
@@ -146,6 +175,32 @@ mod tests {
             Some("items/item-1/audio.m4a")
         );
         assert!(descriptor.unavailable_reason.is_none());
+    }
+
+    #[test]
+    fn completed_item_exports_safe_persisted_subtitle_identity() {
+        let mut subtitle = asset(
+            "subtitle:en:human-en",
+            MediaKind::Subtitle,
+            "items/item-1/subtitles/en.vtt",
+        );
+        subtitle.mime_type = Some("text/vtt".into());
+        let descriptor = playback_asset(&item(
+            true,
+            vec![
+                asset("video", MediaKind::Video, "items/item-1/video.mp4"),
+                subtitle,
+            ],
+        ));
+
+        assert!(descriptor.playable);
+        assert_eq!(descriptor.subtitle_tracks.len(), 1);
+        let track = &descriptor.subtitle_tracks[0];
+        assert_eq!(track.relative_path, "items/item-1/subtitles/en.vtt");
+        assert_eq!(track.language, "en");
+        assert_eq!(track.format, "vtt");
+        assert_eq!(track.track_id, "human-en");
+        assert_eq!(track.mime_type, "text/vtt");
     }
 
     #[test]

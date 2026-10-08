@@ -817,6 +817,8 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Cold-start offline.
 - [ ] Select/display local subtitle track.
 
+**RMD-1503 production playback-descriptor repair (pending exact-head qualification):** remediation review found that persisted subtitle assets retained provider-neutral identity in Rust (`subtitle:<language>:<track_id>` plus MIME) but `FfiLibraryPlaybackAsset` exported only video/audio paths, so production Android Library playback silently dropped subtitles before constructing `LocalPlaybackAsset`. The playback descriptor now exports validated local subtitle path/language/format/track/MIME records, Android maps them to app-private `LocalSubtitleTrack` entries, and `LibraryPlaybackRoute` carries them into the canonical player. Rust and JVM tests cover the descriptor and route. RMD-1503 remains unchecked until packaged Android offline download/reopen/player evidence qualifies the behavior.
+
 ### RMD-1504 — Share E2E
 
 - [ ] Send `ACTION_SEND text/plain` fixture/supported input.

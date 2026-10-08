@@ -34,6 +34,7 @@ import com.ekkus.offlineytplayer.downloads.AndroidDownloadExecutionScheduler
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionPolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionStateStore
 import com.ekkus.offlineytplayer.downloads.SchedulingDownloadControlGateway
+import com.ekkus.offlineytplayer.playback.LocalSubtitleTrack
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.settings.SettingsSubscription
 import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
@@ -249,6 +250,14 @@ private fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
             completed = item.completed && playback?.playable == true,
             videoPath = playback?.takeIf { it.playable }?.videoRelativePath?.let { libraryRoot.resolve(it).absolutePath },
             audioPath = playback?.takeIf { it.playable }?.audioRelativePath?.let { libraryRoot.resolve(it).absolutePath },
+            subtitleTracks = playback?.takeIf { it.playable }?.subtitleTracks.orEmpty().map { track ->
+                LocalSubtitleTrack(
+                    path = libraryRoot.resolve(track.relativePath).absolutePath,
+                    language = track.language,
+                    label = track.language,
+                    mimeType = track.mimeType,
+                )
+            },
             resumePositionMs = item.playbackPositionMs,
         )
     })
