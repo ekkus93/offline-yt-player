@@ -63,6 +63,7 @@ internal fun PortraitPlayerScreen(
     var selectedAudioIndex by remember(validated) { mutableIntStateOf(if (audioLabels.isEmpty()) -1 else 0) }
     var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
     var displayedTitle by remember(asset) { mutableStateOf(validated.title) }
+    var mediaReady by remember(asset) { mutableStateOf(false) }
     var displayedPositionMs by remember(asset) { mutableLongStateOf(validated.startPositionMs) }
 
     DisposableEffect(context, validated.videoPath, validated.audioPath, validated.subtitleTracks, validated.audioTracks, validated.startPositionMs, validated.itemId, settings.rememberPlaybackPosition) {
@@ -95,6 +96,7 @@ internal fun PortraitPlayerScreen(
             override fun run() {
                 if (disposed) return
                 acquiredController?.let { active ->
+                    mediaReady = active.playbackState == androidx.media3.common.Player.STATE_READY
                     displayedPositionMs = active.currentPosition.coerceAtLeast(0L)
                     displayedTitle = active.currentMediaItem?.mediaMetadata?.title?.toString()
                         ?.takeIf { it.isNotBlank() } ?: validated.title
@@ -110,7 +112,7 @@ internal fun PortraitPlayerScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(displayedTitle); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }
         AndroidView(modifier = Modifier.fillMaxWidth().aspectRatio(PlayerLayoutPolicy.VideoAspectRatio), factory = { viewContext -> PlayerView(viewContext).apply { layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT); useController = false; player = controller } }, update = { it.player = controller })
         Text(if (controller == null) "Connecting to playback session…" else "Offline local playback")
-        Text("Position ${formatPlaybackPosition(displayedPositionMs)}")
+        if (mediaReady) Text("Position ${formatPlaybackPosition(displayedPositionMs)}")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = { controller?.seekBack() }, enabled = controller != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("-10s") }
             Button(onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } }, enabled = controller != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Play/Pause") }
