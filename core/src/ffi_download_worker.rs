@@ -42,12 +42,12 @@ impl FfiDownloadWorkerService {
         let database_path = PathBuf::from(database_path);
         LibraryStore::open(&database_path).map_err(|error| {
             FfiCoreServiceOpenError::Persistence {
-                message: error.message,
+                details: error.message,
             }
         })?;
         DurableDownloadWorkStore::open(&database_path).map_err(|error| {
             FfiCoreServiceOpenError::Persistence {
-                message: error.message,
+                details: error.message,
             }
         })?;
         let library_root = database_path

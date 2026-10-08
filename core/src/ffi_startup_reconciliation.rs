@@ -33,7 +33,7 @@ impl FfiStartupReconciliationService {
                 })
             })
             .map_err(|error| FfiCoreServiceOpenError::Persistence {
-                message: error.message,
+                details: error.message,
             })
     }
 
