@@ -134,7 +134,7 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
                 INSERT OR REPLACE INTO download_work_items(job_id, plan_json, created_at_epoch_ms)
                 VALUES(?, ?, ?)
                 """.trimIndent(),
-                arrayOf(jobId, planJson, 1_700_000_000_000L),
+                arrayOf<Any>(jobId, planJson, 1_700_000_000_000L),
             )
             db.execSQL(
                 """
