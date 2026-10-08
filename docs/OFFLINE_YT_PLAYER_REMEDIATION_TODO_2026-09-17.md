@@ -828,13 +828,13 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1505 — Storage failure E2E
 
-- [ ] Exercise insufficient-space preflight.
+- [x] Exercise insufficient-space preflight.
 - [ ] Exercise write failure/ENOSPC path where infrastructure permits.
 - [ ] Verify partial cleanup/recoverability.
-- [ ] Verify user-visible actionable failure.
-- [ ] Verify no false completed library record.
+- [x] Verify user-visible actionable failure.
+- [x] Verify no false completed library record.
 
-**RMD-1505 storage-preflight production repair (pending exact-head qualification):** independent review found that `DownloadEngine.preflight_space(...)` existed but the production transfer path never called it. The transfer engine now checks actual filesystem availability with `statvfs` before opening the network request, subtracts any resumable partial bytes from the required capacity, and returns permanent `InsufficientStorage` before writing when the remaining expected bytes exceed available space. Rust coverage proves this preflight wins over an unreachable-network URL. `Rmd1505StorageFailureInstrumentedTest` drives the packaged generated worker with a deliberately oversized deterministic plan, verifies durable `FAILED` state plus a non-retryable storage diagnostic, verifies no partial/final asset and no completed Library item, and verifies production Downloads UI shows the actionable failure. The real ENOSPC write-injection subtask remains open where infrastructure permits.
+**RMD-1505 storage-preflight production repair (pending exact-head qualification):** independent review found that `DownloadEngine.preflight_space(...)` existed but the production transfer path never called it. The transfer engine now checks actual filesystem availability with `statvfs` before opening the network request, subtracts any resumable partial bytes from the required capacity, and returns permanent `InsufficientStorage` before writing when the remaining expected bytes exceed available space. Rust coverage proves this preflight wins over an unreachable-network URL. `Rmd1505StorageFailureInstrumentedTest` drives the packaged generated worker with a deliberately oversized deterministic plan, verifies durable `FAILED` state plus a non-retryable storage diagnostic, verifies no partial/final asset and no completed Library item, and verifies production Downloads UI shows the actionable failure. Exact implementation `bcd298d7e87db55dee16d3ab485c9214998c8033` passed CI `37767072682`, Android smoke `37767072673`, Android FGS timeout `37767072664`, Supply chain `37767072641`, CI evidence `37767072745`, and deterministic fixture `37767072764`; see `docs/RMD_1505_1507_EXACT_HEAD_QUALIFICATION_2026-10-08.md`. The real ENOSPC/write-failure injection and mid-transfer partial recovery remain open.
 
 
 ### RMD-1506 — Connectivity E2E
@@ -849,14 +849,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1507 — Notification-control E2E
 
-- [ ] Pause from notification.
-- [ ] Resume from notification.
-- [ ] Cancel from notification.
-- [ ] Verify durable state/UI mirrors each action.
+- [x] Pause from notification.
+- [x] Resume from notification.
+- [x] Cancel from notification.
+- [x] Verify durable state/UI mirrors each action.
 
 **RMD-1507 correctness repair (pending exact-head qualification):** independent review found that durable `CoreDownloadState.CANCELED` fell through `MainActivity.toUiState()` to `DownloadUiState.Active`, so a successful Cancel could be misrepresented as active work. Production mapping now has a dedicated `Canceled` UI/filter state with no legal row actions, with JVM coverage in `CollectionLayoutTest` and `DownloadsOperationalScreenTest`. The RMD-1507 E2E checkboxes remain open until the actual notification `PendingIntent` actions are exercised against the durable queue and observed through production UI state.
 
-**RMD-1507 notification-control E2E increment (pending exact-head qualification):** `Rmd1507NotificationControlInstrumentedTest` obtains the production foreground-download notification on API 29 and invokes its real Pause, Resume, and Cancel `PendingIntent` actions. It verifies the generated UniFFI/core durable queue transitions `QUEUED → PAUSED → QUEUED → CANCELED`, launches production `MainActivity`, and verifies Downloads UI presentation changes from `Paused` to `Active` to `Canceled`. The smoke workflow includes this test. RMD-1507 remains unchecked until this exact implementation head passes the required CI matrix.
+**RMD-1507 notification-control E2E increment (pending exact-head qualification):** `Rmd1507NotificationControlInstrumentedTest` obtains the production foreground-download notification on API 29 and invokes its real Pause, Resume, and Cancel `PendingIntent` actions. It verifies the generated UniFFI/core durable queue transitions `QUEUED → PAUSED → QUEUED → CANCELED`, launches production `MainActivity`, and verifies Downloads UI presentation changes from `Paused` to `Active` to `Canceled`. The smoke workflow includes this test. Exact implementation `bcd298d7e87db55dee16d3ab485c9214998c8033` passed CI `37767072682`, Android smoke `37767072673`, Android FGS timeout `37767072664`, Supply chain `37767072641`, CI evidence `37767072745`, and deterministic fixture `37767072764`; see `docs/RMD_1505_1507_EXACT_HEAD_QUALIFICATION_2026-10-08.md`. The four RMD-1507 notification-control E2E subtasks are qualified and reconciled.
 
 **Acceptance for RMD-1500:** policy enum sequence tests may remain, but they cannot be cited as the E2E evidence for these tasks.
 
