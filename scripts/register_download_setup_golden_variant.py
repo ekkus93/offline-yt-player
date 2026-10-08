@@ -16,6 +16,7 @@ still fail closed.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import subprocess
 
 TARGET = Path("app/src/androidTest/java/com/ekkus/offlineytplayer/ui/ProductionComposeGoldenTest.kt")
@@ -23,8 +24,7 @@ REVIEWED_HASHES = (
     "9cfd346c4254a4510e5a363212d9e8d0992813e45c2c749007c6cd62b0facd72",
     "577c0cb6e2d2d0ca32722243d648184a44a75b2b6ae14d9fb14077656fee00d0",
 )
-ANCHOR = '            "download_setup" to setOf('
-INSERT_AFTER = '                "afb9a1a883beadc48b61658c6d43f7cc96819db7bb0705453d4a7bb5f5651476",\n'
+DOWNLOAD_SETUP_BLOCK = re.compile(r'(?P<start>^[ \\t]*"download_setup"\\s+to\\s+setOf\\()(?P<values>[^)]*)(?P<end>\\),)', re.MULTILINE)
 DOWNLOAD_SETUP_READY = '        compose.onNodeWithText("Quality choices").assertIsDisplayed()\n'
 DOWNLOAD_SETUP_SETTLED = '        compose.waitForIdle()\n'
 
@@ -38,20 +38,20 @@ def disable_platform_animations() -> None:
 
 
 def patch_reviewed_hashes(content: str) -> str:
-    if ANCHOR not in content:
+    match = DOWNLOAD_SETUP_BLOCK.search(content)
+    if match is None:
         raise SystemExit("download_setup golden hash block not found")
-    if INSERT_AFTER not in content:
-        raise SystemExit("expected download_setup insertion anchor not found")
 
-    insertion = "".join(
-        f'                "{hash_value}",\n'
-        for hash_value in REVIEWED_HASHES
-        if hash_value not in content
-    )
-    if not insertion:
+    values = match.group("values")
+    registered = set(re.findall(r'"([0-9a-f]{64})"', values))
+    missing = [hash_value for hash_value in REVIEWED_HASHES if hash_value not in registered]
+    if not missing:
         return content
-    print("Registered reviewed download_setup golden hashes: " + ", ".join(REVIEWED_HASHES))
-    return content.replace(INSERT_AFTER, INSERT_AFTER + insertion, 1)
+
+    separator = ", " if values.strip() and not values.rstrip().endswith(",") else " "
+    added = separator + ", ".join(f'"{hash_value}"' for hash_value in missing)
+    print("Registered reviewed download_setup golden hashes: " + ", ".join(missing))
+    return content[:match.start("values")] + values + added + content[match.end("values"):]
 
 
 def patch_download_setup_settle(content: str) -> str:
