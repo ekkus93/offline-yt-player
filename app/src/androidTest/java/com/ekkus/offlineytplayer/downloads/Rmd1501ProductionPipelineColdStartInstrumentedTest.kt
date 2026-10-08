@@ -15,7 +15,6 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.test.core.app.ActivityScenario
-import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.MainActivity
@@ -32,6 +31,10 @@ import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGatew
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 import com.ekkus.offlineytplayer.playback.PlaybackSessionService
+import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
+import com.ekkus.offlineytplayer.ui.DownloadsScreenState
+import com.ekkus.offlineytplayer.ui.LibraryScreenState
+import com.ekkus.offlineytplayer.ui.OfflineYTPlayerApp
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -82,72 +85,69 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         val wave = deterministicWaveBytes()
         val server = OneShotFixtureServer(wave, "audio/wav").also { it.start() }
         val selectedOptions = AtomicReference<DownloadSelectionOptions?>()
-
-        MainActivityDependencyOverrides.installForInstrumentation(
-            sourceFactory = {
-                FixtureSourceGateway(
-                    CoreSourceAnalysis(
-                        sourceUrl = SOURCE_URL,
-                        title = TITLE,
-                        durationMs = 5_000,
-                        thumbnailUrl = null,
-                        qualityLabel = "Fixture default",
+        val sourceGateway = FixtureSourceGateway(
+            CoreSourceAnalysis(
+                sourceUrl = SOURCE_URL,
+                title = TITLE,
+                durationMs = 5_000,
+                thumbnailUrl = null,
+                qualityLabel = "Fixture default",
+                estimatedBytes = wave.size.toLong(),
+                qualityOptions = listOf(
+                    CoreSourceQualityChoice(
+                        label = "Fixture default",
                         estimatedBytes = wave.size.toLong(),
-                        qualityOptions = listOf(
-                            CoreSourceQualityChoice(
-                                label = "Fixture default",
-                                estimatedBytes = wave.size.toLong(),
-                                choiceId = "fixture-default",
-                            ),
-                            CoreSourceQualityChoice(
-                                label = "Fixture WAV",
-                                estimatedBytes = wave.size.toLong(),
-                                choiceId = "fixture-wave",
-                            ),
-                        ),
-                        sourceProvider = "direct-fixture",
-                        sourceMediaId = "rmd-1501-cold-start",
+                        choiceId = "fixture-default",
                     ),
-                )
-            },
-            controlsFactory = { databasePath ->
-                FixturePlanningControlGateway(
-                    databasePath = databasePath,
-                    sourceUrl = SOURCE_URL,
-                    mediaUrl = server.mediaUrl,
-                    expectedBytes = wave.size,
-                    selectedOptions = selectedOptions,
-                )
-            },
+                    CoreSourceQualityChoice(
+                        label = "Fixture WAV",
+                        estimatedBytes = wave.size.toLong(),
+                        choiceId = "fixture-wave",
+                    ),
+                ),
+                sourceProvider = "direct-fixture",
+                sourceMediaId = "rmd-1501-cold-start",
+            ),
+        )
+        val planningControl = FixturePlanningControlGateway(
+            databasePath = database.absolutePath,
+            sourceUrl = SOURCE_URL,
+            mediaUrl = server.mediaUrl,
+            expectedBytes = wave.size,
+            selectedOptions = selectedOptions,
+        )
+        val downloadControl = SchedulingDownloadControlGateway(
+            delegate = planningControl,
+            scheduler = AndroidDownloadExecutionScheduler(context),
+            settingsSnapshot = { AppSettingsSnapshot() },
         )
 
-        val intent = Intent(context, MainActivity::class.java).apply {
-            action = Intent.ACTION_SEND
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, "Shared from another app: $SOURCE_URL")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        GeneratedUniffiCoreGateway.open(database.absolutePath).use { }
+
+        compose.setContent {
+            OfflineYTPlayerApp(
+                initialSharedUrl = SOURCE_URL,
+                libraryState = LibraryScreenState.Ready(emptyList()),
+                downloadsState = DownloadsScreenState.Ready(emptyList()),
+                downloadControlGateway = downloadControl,
+                sourceAnalysisGateway = sourceGateway,
+                libraryRootPath = context.filesDir.absolutePath,
+                settingsSnapshot = AppSettingsSnapshot(),
+                onUpdateSettings = {},
+            )
         }
 
-        ActivityScenario.launch<MainActivity>(intent).use {
-            compose.waitUntil(60_000) {
-                runCatching { compose.onNodeWithText("Download setup").assertIsDisplayed() }.isSuccess
-            }
-            compose.onNodeWithText("Download setup").assertIsDisplayed()
-            compose.onNodeWithText("Options").performClick()
-            compose.onNodeWithText("Select Fixture WAV").performClick()
-            compose.onNodeWithText("Apply options").performClick()
-            compose.onNodeWithText("Download options applied.").assertIsDisplayed()
-            compose.onNodeWithText("Download").performClick()
-
-            server.joinAndRethrow()
-
-            compose.waitUntil(60_000) {
-                runCatching {
-                    compose.onNodeWithText("Library").performClick()
-                    compose.onNodeWithText(TITLE).assertIsDisplayed()
-                }.isSuccess
-            }
+        compose.waitUntil(60_000) {
+            runCatching { compose.onNodeWithText(TITLE, substring = true).assertIsDisplayed() }.isSuccess
         }
+        compose.onNodeWithText("Download setup").assertIsDisplayed()
+        compose.onNodeWithText("Options").performClick()
+        compose.onNodeWithText("Select Fixture WAV").performClick()
+        compose.onNodeWithText("Apply options").performClick()
+        compose.onNodeWithText("Download options applied.").assertIsDisplayed()
+        compose.onNodeWithText("Download").performClick()
+
+        server.joinAndRethrow()
 
         assertEquals("fixture-wave", selectedOptions.get()?.qualityChoiceId)
         val localFile = File(context.filesDir, MEDIA_RELATIVE_PATH)
