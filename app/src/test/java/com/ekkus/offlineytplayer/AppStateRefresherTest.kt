@@ -8,6 +8,7 @@ import com.ekkus.offlineytplayer.coregateway.FakeCoreGateway
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -72,5 +73,43 @@ class AppStateRefresherTest {
             refresher.stop()
         }
         assertEquals(1, callbacks.get())
+    }
+
+    @Test
+    fun lifecycleRestartReobservesLatestQueryOffTheCallingThread() {
+        val gateway = FakeCoreGateway(
+            initialItems = listOf(
+                CoreLibraryItem("alpha", CoreSourceIdentity("fixture", "alpha", null), "Alpha", 1_000, "720p", 1, 0, true),
+                CoreLibraryItem("beta", CoreSourceIdentity("fixture", "beta", null), "Beta", 1_000, "720p", 2, 0, true),
+            ),
+        )
+        val query = AtomicReference("alpha")
+        val first = CountDownLatch(1)
+        val second = CountDownLatch(1)
+        val observedThreads = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val callerThread = Thread.currentThread().name
+        AppStateRefresher(
+            gateway = gateway,
+            onLibrary = { result ->
+                observedThreads.add(Thread.currentThread().name)
+                when (result.value.orEmpty().map { it.itemId }) {
+                    listOf("alpha") -> first.countDown()
+                    listOf("beta") -> second.countDown()
+                }
+            },
+            onDownloads = {},
+            intervalMs = 100L,
+            libraryQuery = { query.get() },
+        ).use { refresher ->
+            refresher.start()
+            assertTrue(first.await(2, TimeUnit.SECONDS))
+            refresher.stop()
+            query.set("beta")
+            refresher.start()
+            assertTrue(second.await(2, TimeUnit.SECONDS))
+            refresher.stop()
+        }
+        assertTrue(observedThreads.isNotEmpty())
+        assertTrue(observedThreads.all { it != callerThread })
     }
 }
