@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.os.SystemClock
 import android.view.KeyEvent
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -132,10 +133,17 @@ class PlaybackSessionBehaviorInstrumentedTest {
                     playbackState == androidx.media3.common.Player.STATE_READY
             }
             compose.waitForIdle()
+            compose.onNodeWithText("Seek fixture").assertIsDisplayed()
+            instrumentation.runOnMainSync { assertEquals("Seek fixture", observer.currentMediaItem?.mediaMetadata?.title?.toString()) }
             compose.onNodeWithText("+10s").performClick()
             waitForControllerState(observer) { currentPosition in 9_000L..12_000L }
+            compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Position 0:10").assertIsDisplayed() }.isSuccess }
             compose.onNodeWithText("-10s").performClick()
             waitForControllerState(observer) { currentPosition in 0L..2_000L }
+            compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Position 0:00").assertIsDisplayed() }.isSuccess }
+            instrumentation.runOnMainSync { observer.seekTo(20_000L) }
+            waitForControllerState(observer) { currentPosition in 19_000L..21_000L }
+            compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Position 0:20").assertIsDisplayed() }.isSuccess }
             instrumentation.runOnMainSync {
                 assertEquals(audio.absolutePath, observer.currentMediaItem?.localConfiguration?.uri?.path)
             }
