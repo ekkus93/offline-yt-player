@@ -956,11 +956,23 @@ mod tests {
             expected_sha256: None,
         };
 
-        let error = engine.transfer(&request, &AtomicBool::new(false)).unwrap_err();
+        let error = engine
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap_err();
 
         assert_eq!(error.kind, ErrorKind::InsufficientStorage);
-        assert!(!temp.path().join("items/storage-preflight/.video.mp4.partial").exists());
-        assert!(!temp.path().join("items/storage-preflight/video.mp4").exists());
+        assert!(
+            !temp
+                .path()
+                .join("items/storage-preflight/.video.mp4.partial")
+                .exists()
+        );
+        assert!(
+            !temp
+                .path()
+                .join("items/storage-preflight/video.mp4")
+                .exists()
+        );
     }
 
     #[test]

@@ -17,7 +17,6 @@ import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -62,7 +61,7 @@ class Rmd1505StorageFailureInstrumentedTest {
             assertNull(queue.error)
             val snapshot = requireNotNull(queue.value).single { it.jobId == jobId }
             assertEquals(CoreDownloadState.FAILED, snapshot.state)
-            val error = assertNotNull(snapshot.lastError)
+            val error = requireNotNull(snapshot.lastError)
             assertFalse(error.retryable)
             assertTrue(error.message.contains("Not enough free storage"))
 

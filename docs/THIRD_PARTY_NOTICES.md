@@ -35,6 +35,7 @@ It is a dependency inventory for engineering, release, and legal review; it does
 
 | Manifest | Scope | Crate | Version |
 | --- | --- | --- | --- |
+| `core/Cargo.toml` | `dependencies` | `fs2` | `0.4` |
 | `core/Cargo.toml` | `dependencies` | `futures` | `0.3` |
 | `core/Cargo.toml` | `dependencies` | `reqwest` | `0.12` |
 | `core/Cargo.toml` | `dependencies` | `rusqlite` | `0.37` |
