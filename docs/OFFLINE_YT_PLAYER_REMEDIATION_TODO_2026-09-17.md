@@ -809,6 +809,8 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Cold-start offline.
 - [ ] Play synchronized merged A/V through canonical session.
 
+**RMD-1502 packaged split-A/V E2E increment (pending exact-head qualification):** `Rmd1502SplitAvOfflineInstrumentedTest` schedules distinct deterministic H.264 MP4 video and WAV audio assets through the production API-29 background scheduler and generated core worker, shuts down the fixture server after both assets persist, verifies the production Library playback descriptor retains distinct local video/audio paths, opens the item through production `MainActivity`, and verifies the canonical MediaSession selects both local video and audio tracks while the source server is unavailable. This can qualify separate download, persistence, and merged offline session playback after exact-head CI passes; true OS process-kill/cold-start remains open.
+
 ### RMD-1503 — Subtitle offline E2E
 
 - [ ] Download fixture subtitle track.
