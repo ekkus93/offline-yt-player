@@ -8,6 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
         const val SAVED_LIBRARY_QUERY = "library_query"
         const val MAX_LIBRARY_QUERY_CHARS = 256
     }
+    private val uiState: AppUiStateViewModel by viewModels()
     private val bootstrapExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "offline-yt-production-bootstrap").apply { isDaemon = true }
     }
@@ -66,10 +68,7 @@ class MainActivity : ComponentActivity() {
     private var stateRefresher: AppStateRefresher? = null
     private var activityStarted = false
     private val statePublicationGate = LifecyclePublicationGate()
-    private var libraryState by mutableStateOf<LibraryScreenState>(LibraryScreenState.Loading)
-    private var downloadsState by mutableStateOf<DownloadsScreenState>(DownloadsScreenState.Loading)
     private var settingsSnapshot by mutableStateOf(AppSettingsSnapshot())
-    @Volatile private var libraryQuery: String? = null
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -79,7 +78,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Compose restores the visible search draft; restore the matching repository query too.
         // Otherwise the UI can display a filter that the reopened repository does not apply.
-        libraryQuery = savedInstanceState?.getString(SAVED_LIBRARY_QUERY)
+        uiState.libraryQuery = savedInstanceState?.getString(SAVED_LIBRARY_QUERY)
             ?.trim()?.take(MAX_LIBRARY_QUERY_CHARS)?.takeIf { it.isNotEmpty() }
         val settings = SharedPreferencesAppSettingsStore.open(this)
         settingsStore = settings
@@ -90,14 +89,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             OfflineYTPlayerApp(
                 initialSharedUrl = sharedUrl,
-                libraryState = libraryState,
-                downloadsState = downloadsState,
+                libraryState = uiState.libraryState,
+                downloadsState = uiState.downloadsState,
                 downloadControlGateway = downloadControlGateway,
                 sourceAnalysisGateway = sourceAnalysisGateway,
                 libraryDetailsGatewayProvider = { libraryDetailsGateway },
                 libraryMutationGatewayProvider = { libraryMutationGateway },
                 libraryRootPath = filesDir.absolutePath,
-                onLibraryQueryChanged = { query -> libraryQuery = query.trim().take(MAX_LIBRARY_QUERY_CHARS).takeIf { it.isNotEmpty() } },
+                onLibraryQueryChanged = { query -> uiState.libraryQuery = query.trim().take(MAX_LIBRARY_QUERY_CHARS).takeIf { it.isNotEmpty() } },
                 settingsSnapshot = settingsSnapshot,
                 onUpdateSettings = { mutation -> settingsStore?.update(mutation) },
             )
@@ -106,7 +105,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString(SAVED_LIBRARY_QUERY, libraryQuery)
+        outState.putString(SAVED_LIBRARY_QUERY, uiState.libraryQuery)
         super.onSaveInstanceState(outState)
     }
 
@@ -157,7 +156,7 @@ class MainActivity : ComponentActivity() {
             val initialLibrary = when {
                 core.isFailure -> LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> LibraryScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
-                else -> openedCore!!.listLibrary(libraryQuery).toLibraryScreenState(libraryRoot, initialPlaybackAssets)
+                else -> openedCore!!.listLibrary(uiState.libraryQuery).toLibraryScreenState(libraryRoot, initialPlaybackAssets)
             }
             val initialDownloads = when {
                 core.isFailure -> DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
@@ -173,8 +172,8 @@ class MainActivity : ComponentActivity() {
                     core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); details.getOrNull()?.close(); mutations.getOrNull()?.close(); sources.getOrNull()?.close()
                     return@runOnUiThread
                 }
-                libraryState = initialLibrary
-                downloadsState = initialDownloads
+                uiState.libraryState = initialLibrary
+                uiState.downloadsState = initialDownloads
                 coreGateway = core.getOrNull()
                 downloadControlGateway = controls.getOrNull()?.let { controlsGateway ->
                     SchedulingDownloadControlGateway(
@@ -198,7 +197,7 @@ class MainActivity : ComponentActivity() {
                                 val playbackResult = libraryPlaybackGateway?.listPlaybackAssets()
                                 runOnUiThread {
                                     if (!isDestroyed && statePublicationGate.permits(token)) {
-                                        libraryState = result.toLibraryScreenState(libraryRoot, playbackResult)
+                                        uiState.libraryState = result.toLibraryScreenState(libraryRoot, playbackResult)
                                     }
                                 }
                             }
@@ -209,12 +208,12 @@ class MainActivity : ComponentActivity() {
                                 val titles = downloadPresentationGateway?.titlesByJobId().orEmpty()
                                 runOnUiThread {
                                     if (!isDestroyed && statePublicationGate.permits(token)) {
-                                        downloadsState = result.toDownloadsScreenState(titles)
+                                        uiState.downloadsState = result.toDownloadsScreenState(titles)
                                     }
                                 }
                             }
                         },
-                        libraryQuery = { libraryQuery },
+                        libraryQuery = { uiState.libraryQuery },
                     ).also { if (activityStarted) it.start() }
                 }
             }
