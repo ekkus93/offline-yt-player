@@ -104,7 +104,7 @@ private fun AddScreen(
     val scope = rememberCoroutineScope()
     val sourceAnalysisUseCase = remember(sourceGateway) { sourceGateway?.let(::SourceAnalysisUseCase) }
     var url by rememberSaveable(initialSharedUrl) { mutableStateOf(initialSharedUrl.orEmpty()) }
-    var setup by remember { mutableStateOf<DownloadSetupState?>(null) }
+    var setup by rememberSaveable(initialSharedUrl) { mutableStateOf<DownloadSetupState?>(null) }
     var advanced by rememberSaveable { mutableStateOf(false) }
     var analyzing by remember { mutableStateOf(false) }
     var scheduling by remember { mutableStateOf(false) }

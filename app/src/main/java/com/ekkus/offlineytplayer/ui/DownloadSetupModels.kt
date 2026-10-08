@@ -24,7 +24,7 @@ internal data class DownloadSetupState(
     val selectedAudioFormatId: String? = null,
     val sourceProvider: String? = null,
     val sourceMediaId: String? = null,
-)
+) : java.io.Serializable
 
 internal object SetupThumbnailPolicy {
     const val MaxBytes = 2 * 1024 * 1024

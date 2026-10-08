@@ -1,6 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -68,7 +69,8 @@ class Rmd1500AppPipelineFixtureTest {
         )
         val downloadControl = FakeDownloadControlGateway()
 
-        compose.setContent {
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
             OfflineYTPlayerApp(
                 initialSharedUrl = sharedUrl,
                 libraryState = LibraryScreenState.Ready(emptyList()),
@@ -93,6 +95,11 @@ class Rmd1500AppPipelineFixtureTest {
         compose.onNodeWithText("Select English").performClick()
         compose.onNodeWithText("Select English audio").performClick()
         compose.onNodeWithText("Apply options").performClick()
+        compose.onNodeWithText("Download options applied.").assertIsDisplayed()
+
+        // Simulate Activity saved-state recreation while keeping the selected real setup options.
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("RMD-1500 app pipeline fixture", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Download options applied.").assertIsDisplayed()
 
         compose.onNodeWithText("Download").performClick()
