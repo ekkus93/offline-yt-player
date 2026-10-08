@@ -47,6 +47,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -66,6 +67,24 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val database: File
         get() = File(context.filesDir, DATABASE_NAME)
+
+    // Each host-driven phase runs in a fresh instrumentation process, unlike the
+
+
+    // packaged smoke suite which initializes the native UniFFI runtime earlier.
+
+
+    @Before
+
+
+    fun loadNativeCore() {
+
+
+        System.loadLibrary("offline_yt_core")
+
+
+    }
+
 
     @After
     fun cleanAfter() {

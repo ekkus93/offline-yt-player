@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -49,6 +50,24 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val database = File(context.filesDir, DATABASE_NAME)
+
+    // Each host-driven phase runs in a fresh instrumentation process, unlike the
+
+
+    // packaged smoke suite which initializes the native UniFFI runtime earlier.
+
+
+    @Before
+
+
+    fun loadNativeCore() {
+
+
+        System.loadLibrary("offline_yt_core")
+
+
+    }
+
 
     @After
     fun cleanRuntimeState() {
