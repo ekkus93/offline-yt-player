@@ -8,12 +8,8 @@ use reqwest::blocking::{Client, Response};
 use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use sha2::{Digest, Sha256};
 use std::error::Error as StdError;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom, Write};
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -314,31 +310,9 @@ impl DownloadEngine {
     }
 }
 
-#[cfg(unix)]
 fn available_space_bytes(path: &Path) -> Result<u64, CoreError> {
-    let canonical = canonical_library_root(path)?;
-    let c_path = CString::new(canonical.as_os_str().as_bytes()).map_err(|_| {
-        CoreError::new(
-            ErrorKind::InvalidInput,
-            "library root contains an invalid NUL byte",
-            false,
-        )
-    })?;
-    let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
-    // SAFETY: c_path is a live NUL-terminated filesystem path and stats points to valid
-    // writable storage for statvfs to initialize on success.
-    let status = unsafe { libc::statvfs(c_path.as_ptr(), stats.as_mut_ptr()) };
-    if status != 0 {
-        return Err(io_error(std::io::Error::last_os_error()));
-    }
-    // SAFETY: statvfs returned success, so the structure was initialized.
-    let stats = unsafe { stats.assume_init() };
-    Ok(stats.f_bavail.saturating_mul(stats.f_frsize))
-}
-
-#[cfg(not(unix))]
-fn available_space_bytes(_path: &Path) -> Result<u64, CoreError> {
-    Ok(u64::MAX)
+    canonical_library_root(path)?;
+    fs2::available_space(path).map_err(io_error)
 }
 
 fn ensure_success(response: &Response) -> Result<(), CoreError> {
