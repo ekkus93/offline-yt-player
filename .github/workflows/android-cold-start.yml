@@ -59,8 +59,8 @@ jobs:
             sh -c 'set -eu;
             mkdir -p app/build/reports/androidColdStart;
             bootstrap_status=0;
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest > app/build/reports/androidColdStart/bootstrap-smoke.log 2>&1 || bootstrap_status=$?;
-            if [ "$bootstrap_status" -ne 0 ]; then echo "Cold-start bootstrap smoke failed:"; cat app/build/reports/androidColdStart/bootstrap-smoke.log; exit "$bootstrap_status"; fi;
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest#packagedRustLibraryAndGeneratedGatewayRoundTripAppPrivateDatabase > app/build/reports/androidColdStart/bootstrap-smoke.log 2>&1 || bootstrap_status=$?;
+            if [ "$bootstrap_status" -ne 0 ]; then echo "Cold-start bootstrap smoke failed:"; cat app/build/reports/androidColdStart/bootstrap-smoke.log; find app/build/outputs/androidTest-results app/build/reports/androidTests -type f \( -name "*.xml" -o -name "*.html" \) -print 2>/dev/null || true; exit "$bootstrap_status"; fi;
             INSTRUMENTATION=$(adb shell pm list instrumentation | tr -d "\r" | sed -n "s/^instrumentation:\([^ ]*\) (target=com\.ekkus\.offlineytplayer)$/\1/p" | head -n 1);
             test -n "$INSTRUMENTATION";
             run_phase() { class_method="$1"; phase="$2"; log="$3"; adb shell am instrument -w -e rmdColdStartPhase "$phase" -e class "$class_method" "$INSTRUMENTATION" > "$log" 2>&1; cat "$log"; grep -q "OK (1 test)" "$log"; };
