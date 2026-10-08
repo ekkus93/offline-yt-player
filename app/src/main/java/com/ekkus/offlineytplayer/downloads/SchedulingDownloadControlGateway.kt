@@ -26,18 +26,22 @@ internal class SchedulingDownloadControlGateway(
         if (result.error != null || result.value != true) return result
 
         val settings = settingsSnapshot()
-        val scheduleResult = scheduler.schedule(
-            DownloadScheduleRequest(
-                queueItemId = jobId,
-                estimatedDownloadBytes = null,
-                networkPreference = if (settings.wifiOnlyDownloads) {
-                    DownloadNetworkPreference.WifiOnly
-                } else {
-                    DownloadNetworkPreference.AnyNetwork
-                },
-            ),
-        )
-        if (scheduleResult.accepted) return result
+        val scheduleResult = try {
+            scheduler.schedule(
+                DownloadScheduleRequest(
+                    queueItemId = jobId,
+                    estimatedDownloadBytes = null,
+                    networkPreference = if (settings.wifiOnlyDownloads) {
+                        DownloadNetworkPreference.WifiOnly
+                    } else {
+                        DownloadNetworkPreference.AnyNetwork
+                    },
+                ),
+            )
+        } catch (_: RuntimeException) {
+            null
+        }
+        if (scheduleResult?.accepted == true) return result
 
         return CoreGatewayResult(
             value = false,
