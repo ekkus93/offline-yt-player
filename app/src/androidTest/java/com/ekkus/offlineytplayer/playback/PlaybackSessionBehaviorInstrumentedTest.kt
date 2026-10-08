@@ -1,7 +1,10 @@
 package com.ekkus.offlineytplayer.playback
 
 import android.content.ComponentName
+import android.content.Context
+import android.media.AudioManager
 import android.os.SystemClock
+import android.view.KeyEvent
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -138,6 +141,40 @@ class PlaybackSessionBehaviorInstrumentedTest {
             }
         } finally {
             instrumentation.runOnMainSync { observer.release() }
+            audio.delete()
+        }
+    }
+
+
+    @Test
+    fun systemMediaButtonsPauseResumeAndSeekTheCanonicalSession() {
+        val audio = createLocalWaveFixture()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            instrumentation.runOnMainSync {
+                controller.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
+                controller.prepare()
+                controller.play()
+            }
+            waitForControllerState(controller) {
+                playbackState == androidx.media3.common.Player.STATE_READY && playWhenReady
+            }
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            fun sendMediaKey(code: Int) {
+                audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+            }
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
+            waitForControllerState(controller) { !playWhenReady }
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
+            waitForControllerState(controller) { playWhenReady }
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
+            waitForControllerState(controller) { currentPosition >= 9_000L }
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND)
+            waitForControllerState(controller) { currentPosition in 0L..3_000L }
+        } finally {
+            instrumentation.runOnMainSync { controller.release() }
             audio.delete()
         }
     }
