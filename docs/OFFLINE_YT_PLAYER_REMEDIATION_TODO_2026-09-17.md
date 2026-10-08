@@ -348,6 +348,7 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-601 — Library repository wiring
 
 - [x] Replace `emptyList<LibraryRowModel>()` production data with repository-backed state.
+
 - [x] Implement list/search/detail observation.
 - [x] Map persisted metadata/assets to UI models.
 - [x] Provide loading/empty/error/populated states.
@@ -698,6 +699,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Audit Rust logs/errors.
 - [x] Audit notifications/user-visible diagnostics.
 - [x] Inject synthetic tokens/signed query parameters in tests.
+
 - [x] Assert they never appear in CI-visible outputs.
 
 **Evidence (RMD-1302):** Rust/core diagnostic redaction is implemented in `core/src/security.rs` and covered by `core/tests/network_diagnostic_redaction.rs`; Android gateway/user-visible diagnostic sanitization is implemented through `app/src/main/java/com/ekkus/offlineytplayer/coregateway/SourceMetadataPolicy.kt` and related diagnostic paths, with synthetic signed URL/token marker tests to prove sensitive material is not emitted in user-visible diagnostics or CI-visible regression output. Qualified/merged evidence: PR #310 merged as `726beb739c9c01f5f8cedfb6bd58877dc7d9a12f` from exact implementation head `cefb16438c0b97f00e6c5445cb83771c70541db2`, with push CI `35784983375` passing; supporting reconciliation is recorded in `docs/RMD_1302_SECRET_LOG_HYGIENE_RECONCILIATION_2026-09-22.md`. The Android qualification acceleration plan was then merged through PR #311 as `c6766239ddd549b05283946bb2bddbd94db7683b` from exact documentation head `7a835f4f4aa5fb0738cc9adedd8005d16aa34e62`, with push CI `35787557579` and PR CI `35788158549` passing.
@@ -852,6 +854,9 @@ This checklist repairs the implementation and qualification gaps found during th
 
 
 **Evidence (RMD-1500 incremental qualification):** Exact master `43847bddef7e710854bb8ff248fb4f7227ba1696` adds `Rmd1500AppPipelineFixtureTest`, which drives `OfflineYTPlayerApp(initialSharedUrl=...)` with a deterministic fixture source through the production Compose Add/Share → Analyze → Download Setup surface and app-owned gateway boundary without live-provider access. The same exact head passed CI `36473005897`, Android smoke `36473005880`, Android FGS timeout `36473005836`, Supply chain `36473005927`, CI evidence `36473005988`, and Deterministic E2E fixture `36473005955`. The existing deterministic core fixture lane separately proves real fixture download, durable Library persistence, cold-start reopen, playback-asset export, and no post-download network dependency. RMD-1501 through RMD-1507 remain unchecked until the required Android production-path scheduler/runtime, MediaSession playback, split A/V, subtitle, share, failure, connectivity, and notification-control flows are proven end-to-end.
+
+
+**RMD-1501 Android runtime fixture increment (qualified, not E2E closeout):** `app/src/androidTest/java/com/ekkus/offlineytplayer/downloads/Rmd1501AndroidRuntimeFixtureInstrumentedTest.kt` executes deterministic loopback media work in a packaged Android app through the production `DownloadWorkerExecutor`, generated UniFFI/core worker, durable queue, persisted Library, and exported local playback descriptor. It verifies downloaded bytes and the stored asset path. Exact master `9f201842eb257b6b62d32d5d9fb146abee5f86a2` passed CI `37743139720`, Android smoke `37743139397`, API-35 FGS timeout `37743139461`, Supply chain `37743139572`, CI evidence `37743139391`, and Deterministic E2E fixture `37743139388`. The fixture seeds executable work directly into the durable database, so it does **not** prove production Add/Share analysis, quality selection, Android scheduler dispatch, offline process restart, or MediaSession playback. All RMD-1501 subtasks remain unchecked until their complete production-path E2E acceptance is qualified. The API-35 workflow readiness-shell correction was qualified in the same exact-head matrix.
 
 ---
 
