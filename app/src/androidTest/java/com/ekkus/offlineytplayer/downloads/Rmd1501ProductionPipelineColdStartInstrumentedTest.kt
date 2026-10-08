@@ -175,9 +175,9 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         assumeTrue(coldStartPhase() == "verify")
         assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
         assertEquals(
+            "host qualification must explicitly disable external network before cold-start verification",
             "true",
             InstrumentationRegistry.getArguments().getString("rmdNetworkDisabled"),
-            "host qualification must explicitly disable external network before cold-start verification",
         )
 
         MainActivityDependencyOverrides.clearForInstrumentation()
