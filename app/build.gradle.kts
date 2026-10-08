@@ -92,7 +92,8 @@ android {
     }
 
     sourceSets.getByName("main").jniLibs.srcDir(generatedJniLibsDir)
-    sourceSets.getByName("main").java.srcDir(generatedUniffiKotlinDir)
+    // AGP 9 built-in Kotlin ignores .kt directories registered as Java sources.
+    sourceSets.getByName("main").kotlin.directories += generatedUniffiKotlinDir.absolutePath
 
     buildFeatures {
         compose = true
