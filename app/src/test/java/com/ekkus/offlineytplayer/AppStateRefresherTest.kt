@@ -63,6 +63,49 @@ class AppStateRefresherTest {
     }
 
     @Test
+    fun queryChangeDuringBlockingReadDoesNotPublishStaleLibraryResults() {
+        val base = FakeCoreGateway(
+            initialItems = listOf(
+                CoreLibraryItem("alpha", CoreSourceIdentity("fixture", "alpha", null), "Alpha", 1_000, "720p", 1, 0, true),
+                CoreLibraryItem("beta", CoreSourceIdentity("fixture", "beta", null), "Beta", 1_000, "720p", 2, 0, true),
+            ),
+        )
+        val activeQuery = AtomicReference("alpha")
+        val firstReadEntered = CountDownLatch(1)
+        val releaseFirstRead = CountDownLatch(1)
+        val freshObserved = CountDownLatch(1)
+        val stalePublications = AtomicInteger()
+        val gateway = object : AppCoreGateway by base {
+            override fun listLibrary(query: String?): CoreGatewayResult<List<CoreLibraryItem>> {
+                if (query == "alpha") {
+                    firstReadEntered.countDown()
+                    releaseFirstRead.await(2, TimeUnit.SECONDS)
+                }
+                return base.listLibrary(query)
+            }
+        }
+        AppStateRefresher(
+            gateway = gateway,
+            onLibrary = { result ->
+                when (result.value.orEmpty().map { it.itemId }) {
+                    listOf("alpha") -> stalePublications.incrementAndGet()
+                    listOf("beta") -> freshObserved.countDown()
+                }
+            },
+            onDownloads = {},
+            intervalMs = 25L,
+            libraryQuery = { activeQuery.get() },
+        ).use { refresher ->
+            refresher.start()
+            assertTrue(firstReadEntered.await(2, TimeUnit.SECONDS))
+            activeQuery.set("beta")
+            releaseFirstRead.countDown()
+            assertTrue(freshObserved.await(2, TimeUnit.SECONDS))
+        }
+        assertEquals(0, stalePublications.get())
+    }
+
+    @Test
     fun stopIsIdempotentAndPreventsRestartDuplication() {
         val gateway = FakeCoreGateway()
         val callbacks = AtomicInteger()

@@ -45,9 +45,14 @@ class AppStateRefresher(
     private fun refresh(epoch: Long) {
         if (epoch != lifecycleEpoch.get() || !refreshInFlight.compareAndSet(false, true)) return
         try {
-            val library = readSafely("Library") { gateway.listLibrary(libraryQuery()) }
+            // A search edit may happen while the blocking FFI query is executing.
+            // Never publish results for a query that is no longer visible.
+            val requestedQuery = libraryQuery()
+            val library = readSafely("Library") { gateway.listLibrary(requestedQuery) }
             if (epoch != lifecycleEpoch.get()) return
-            try { onLibrary(library) } catch (_: RuntimeException) { /* Retry on the next poll. */ }
+            if (requestedQuery == libraryQuery()) {
+                try { onLibrary(library) } catch (_: RuntimeException) { /* Retry on the next poll. */ }
+            }
             val downloads = readSafely("Downloads") { gateway.listDownloadQueue() }
             if (epoch != lifecycleEpoch.get()) return
             try { onDownloads(downloads) } catch (_: RuntimeException) { /* Retry on the next poll. */ }
