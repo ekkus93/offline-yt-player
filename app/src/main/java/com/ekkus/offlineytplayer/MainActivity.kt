@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private var settingsSubscription: SettingsSubscription? = null
     private var stateRefresher: AppStateRefresher? = null
     private var activityStarted = false
+    private val statePublicationGate = LifecyclePublicationGate()
     private var libraryState by mutableStateOf<LibraryScreenState>(LibraryScreenState.Loading)
     private var downloadsState by mutableStateOf<DownloadsScreenState>(DownloadsScreenState.Loading)
     private var settingsSnapshot by mutableStateOf(AppSettingsSnapshot())
@@ -99,11 +100,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         activityStarted = true
+        statePublicationGate.start()
         stateRefresher?.start()
     }
 
     override fun onStop() {
         activityStarted = false
+        statePublicationGate.stop()
         stateRefresher?.stop()
         super.onStop()
     }
@@ -176,14 +179,27 @@ class MainActivity : ComponentActivity() {
                     stateRefresher = AppStateRefresher(
                         gateway = gateway,
                         onLibrary = { result ->
-                            val playbackResult = libraryPlaybackGateway?.listPlaybackAssets()
-                            runOnUiThread {
-                                if (!isDestroyed) libraryState = result.toLibraryScreenState(libraryRoot, playbackResult)
+                            // Capture before blocking FFI so a stop/restart cannot publish an old result.
+                            val token = statePublicationGate.capture()
+                            if (token != null) {
+                                val playbackResult = libraryPlaybackGateway?.listPlaybackAssets()
+                                runOnUiThread {
+                                    if (!isDestroyed && statePublicationGate.permits(token)) {
+                                        libraryState = result.toLibraryScreenState(libraryRoot, playbackResult)
+                                    }
+                                }
                             }
                         },
                         onDownloads = { result ->
-                            val titles = downloadPresentationGateway?.titlesByJobId().orEmpty()
-                            runOnUiThread { if (!isDestroyed) downloadsState = result.toDownloadsScreenState(titles) }
+                            val token = statePublicationGate.capture()
+                            if (token != null) {
+                                val titles = downloadPresentationGateway?.titlesByJobId().orEmpty()
+                                runOnUiThread {
+                                    if (!isDestroyed && statePublicationGate.permits(token)) {
+                                        downloadsState = result.toDownloadsScreenState(titles)
+                                    }
+                                }
+                            }
                         },
                         libraryQuery = { libraryQuery },
                     ).also { if (activityStarted) it.start() }
