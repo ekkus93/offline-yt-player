@@ -371,12 +371,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-604 — ViewModel architecture
 
-- [ ] Add ViewModels for main feature screens or an equivalent lifecycle-aware state holder.
-- [ ] Collect repository flows lifecycle-safely.
-- [ ] Keep blocking FFI/network work off main thread.
-- [ ] Restore relevant UI state across configuration/process recreation where appropriate.
+- [x] Add ViewModels for main feature screens or an equivalent lifecycle-aware state holder.
+- [x] Collect repository flows lifecycle-safely.
+- [x] Keep blocking FFI/network work off main thread.
+- [x] Restore relevant UI state across configuration/process recreation where appropriate.
 
-**RMD-604 incremental repair (pending exact-head qualification):** `AppUiStateViewModel` is now the lifecycle-retained owner of production Library/Downloads presentation state and the active Library query. MainActivity still saves/restores the query in Activity instance state for compatibility, while the ViewModel also persists it through `SavedStateHandle` for process recreation. `MainActivityQueryRecreationInstrumentedTest` exercises real Activity recreation in the API-29 Android smoke lane; `LifecycleStateRestorationComposeTest` covers Compose saved-state behavior; `AppUiStateViewModelTest` covers SavedStateHandle restoration; and `AppStateRefresherTest` covers lifecycle stop/restart, stale-result suppression, and off-calling-thread repository refresh. All RMD-604 checkboxes remain unchecked until this implementation passes exact-head qualification and the evidence is reconciled.
+**Evidence (RMD-604):** `AppUiStateViewModel` owns lifecycle-retained production Library/Downloads Compose presentation state and the bounded Library search query; `MainActivity` obtains the holder through AndroidX `by viewModels()`. The query is persisted through `SavedStateHandle` and Activity instance state, and production durable Library/queue state is rehydrated from SQLite on process recreation instead of persisting transient presentation snapshots. `AppStateRefresher` starts/stops with Activity lifecycle, runs blocking gateway/FFI reads on a dedicated executor, suppresses stale lifecycle epochs and stale query results, and uses `LifecyclePublicationGate` to reject queued UI publications after stop/restart; `SourceAnalysisUseCase` performs blocking analysis on `Dispatchers.IO`. Behavioral coverage: `AppUiStateViewModelTest` (state ownership and SavedStateHandle rehydration), `AppStateRefresherTest` (off-calling-thread refresh, stop/restart, stale-query and stale-lifecycle suppression), `LifecyclePublicationGateTest`, `MainActivityQueryRecreationInstrumentedTest` (real Activity recreation with preserved visible search), and `LifecycleStateRestorationComposeTest` (Compose saved-state restoration). This proves the relevant state-restoration contract through unit plus real Activity recreation, not a literal OS process-kill E2E; RMD-1500 separately retains its explicit kill/cold-start acceptance. Exact implementation master `0f2c40e2e436735f6ef771ad7c96e111d2ff3eff` passed CI `37756514845`, Android smoke `37756514811`, Android FGS timeout `37756514765`, Supply chain `37756514854`, CI evidence `37756514812`, and Deterministic E2E fixture `37756514869`. No external policy/legal gate is implied.
 
 ---
 
