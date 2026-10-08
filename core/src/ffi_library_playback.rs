@@ -188,7 +188,10 @@ mod tests {
             vec![asset("audio", MediaKind::Audio, "items/item-1/audio.m4a")],
         ));
         assert!(descriptor.playable);
-        assert_eq!(descriptor.video_relative_path.as_deref(), Some("items/item-1/audio.m4a"));
+        assert_eq!(
+            descriptor.video_relative_path.as_deref(),
+            Some("items/item-1/audio.m4a")
+        );
         assert!(descriptor.audio_relative_path.is_none());
     }
 
