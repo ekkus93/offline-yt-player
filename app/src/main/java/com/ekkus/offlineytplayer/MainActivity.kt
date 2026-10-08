@@ -20,6 +20,7 @@ import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryPlaybackAsset
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
+import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway
 import com.ekkus.offlineytplayer.coregateway.AppLibraryMutationGateway
 import com.ekkus.offlineytplayer.coregateway.DownloadPresentationGateway
@@ -62,7 +63,7 @@ class MainActivity : ComponentActivity() {
     private var libraryPlaybackGateway: GeneratedUniffiLibraryPlaybackGateway? = null
     private var libraryDetailsGateway: AppLibraryDetailsGateway? = null
     private var libraryMutationGateway: AppLibraryMutationGateway? = null
-    private var sourceAnalysisGateway: GeneratedUniffiSourceAnalysisGateway? = null
+    private var sourceAnalysisGateway: AppSourceAnalysisGateway? = null
     private var downloadPresentationGateway: DownloadPresentationGateway? = null
     private var settingsStore: SharedPreferencesAppSettingsStore? = null
     private var settingsSubscription: SettingsSubscription? = null
@@ -145,11 +146,17 @@ class MainActivity : ComponentActivity() {
         val libraryRoot = filesDir
         bootstrapExecutor.execute {
             val core = runCatching { GeneratedUniffiCoreGateway.open(databasePath) }
-            val controls = runCatching { GeneratedUniffiDownloadControlGateway.open(databasePath) }
+            val controls = runCatching {
+                MainActivityDependencyOverrides.createDownloadControl(databasePath)
+                    ?: GeneratedUniffiDownloadControlGateway.open(databasePath)
+            }
             val playback = runCatching { GeneratedUniffiLibraryPlaybackGateway.open(databasePath) }
             val details = runCatching { GeneratedUniffiLibraryDetailsGateway.open(databasePath) }
             val mutations = runCatching { GeneratedUniffiLibraryMutationGateway.open(databasePath) }
-            val sources = runCatching { GeneratedUniffiSourceAnalysisGateway.open() }
+            val sources = runCatching {
+                MainActivityDependencyOverrides.createSourceAnalysis()
+                    ?: GeneratedUniffiSourceAnalysisGateway.open()
+            }
             val presentations = runCatching { DownloadPresentationGateway.open(databasePath) }
             val openedCore = core.getOrNull()
             val startupReconciliation = openedCore?.reconcileStartup()
