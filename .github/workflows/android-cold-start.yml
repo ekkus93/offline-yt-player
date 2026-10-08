@@ -58,7 +58,7 @@ jobs:
           script: >-
             sh -c 'set -eu;
             mkdir -p app/build/reports/androidColdStart;
-            ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest > app/build/reports/androidColdStart/install-build.log 2>&1;
+            ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest > app/build/reports/androidColdStart/install-build.log 2>&1 || { tail -n 160 app/build/reports/androidColdStart/install-build.log; exit 1; };
             APP_APK=$(find app/build/outputs/apk/debug -type f -name "*.apk" | head -n 1);
             TEST_APK=$(find app/build/outputs/apk/androidTest/debug -type f -name "*.apk" | head -n 1);
             test -n "$APP_APK";
@@ -82,10 +82,25 @@ jobs:
             sleep 3;
             run_phase "com.ekkus.offlineytplayer.downloads.Rmd1502SplitAvOfflineInstrumentedTest#coldStartSeedPersistsSeparateVideoAndAudio" seed false app/build/reports/androidColdStart/rmd1502-seed.log;
             adb shell am force-stop com.ekkus.offlineytplayer;
-            run_phase "com.ekkus.offlineytplayer.downloads.Rmd1502SplitAvOfflineInstrumentedTest#coldStartVerificationReopensPersistedSplitAvOffline" verify false app/build/reports/androidColdStart/rmd1502-verify.log;
+            adb shell svc wifi disable || true;
+            adb shell svc data disable || true;
+            adb shell settings put global airplane_mode_on 1 || true;
+            adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true > app/build/reports/androidColdStart/rmd1502-network-disable.log 2>&1 || true;
+            sleep 3;
+            run_phase "com.ekkus.offlineytplayer.downloads.Rmd1502SplitAvOfflineInstrumentedTest#coldStartVerificationReopensPersistedSplitAvOffline" verify true app/build/reports/androidColdStart/rmd1502-verify.log;
+            adb shell settings put global airplane_mode_on 0 || true;
+            adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false > app/build/reports/androidColdStart/rmd1502-network-enable.log 2>&1 || true;
+            adb shell svc wifi enable || true;
+            adb shell svc data enable || true;
+            sleep 3;
             run_phase "com.ekkus.offlineytplayer.downloads.Rmd1503SubtitleOfflineInstrumentedTest#coldStartSeedPersistsSubtitleAsset" seed false app/build/reports/androidColdStart/rmd1503-seed.log;
             adb shell am force-stop com.ekkus.offlineytplayer;
-            run_phase "com.ekkus.offlineytplayer.downloads.Rmd1503SubtitleOfflineInstrumentedTest#coldStartVerificationReopensPersistedSubtitleOffline" verify false app/build/reports/androidColdStart/rmd1503-verify.log'
+            adb shell svc wifi disable || true;
+            adb shell svc data disable || true;
+            adb shell settings put global airplane_mode_on 1 || true;
+            adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true > app/build/reports/androidColdStart/rmd1503-network-disable.log 2>&1 || true;
+            sleep 3;
+            run_phase "com.ekkus.offlineytplayer.downloads.Rmd1503SubtitleOfflineInstrumentedTest#coldStartVerificationReopensPersistedSubtitleOffline" verify true app/build/reports/androidColdStart/rmd1503-verify.log'
       - name: Upload cold-start evidence
         if: always()
         uses: actions/upload-artifact@v4

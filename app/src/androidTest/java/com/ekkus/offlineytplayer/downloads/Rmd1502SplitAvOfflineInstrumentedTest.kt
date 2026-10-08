@@ -226,6 +226,11 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
     fun coldStartVerificationReopensPersistedSplitAvOffline() {
         assumeTrue(coldStartPhase() == "verify")
         assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
+        assertEquals(
+            "host must disable external network before split A/V cold-start verification",
+            "true",
+            InstrumentationRegistry.getArguments().getString("rmdNetworkDisabled"),
+        )
 
         val jobId = "rmd-1502-split-av"
         val title = "RMD-1502 split A/V fixture"

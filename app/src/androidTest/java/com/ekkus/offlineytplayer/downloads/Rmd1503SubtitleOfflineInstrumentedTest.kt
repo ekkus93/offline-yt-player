@@ -262,6 +262,11 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
     fun coldStartVerificationReopensPersistedSubtitleOffline() {
         assumeTrue(coldStartPhase() == "verify")
         assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
+        assertEquals(
+            "host must disable external network before subtitle cold-start verification",
+            "true",
+            InstrumentationRegistry.getArguments().getString("rmdNetworkDisabled"),
+        )
 
         val jobId = "rmd-1503-subtitle-offline"
         val title = "RMD-1503 offline subtitle fixture"
@@ -498,15 +503,3 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
         }
 
         fun joinAndRethrow() {
-            thread.join(20_000)
-            assertTrue("fixture server thread should finish", !thread.isAlive)
-            failure.get()?.let { throw AssertionError("fixture server failed", it) }
-        }
-    }
-
-    private companion object {
-        const val DATABASE_NAME = "offline-yt-player.sqlite3"
-        const val VIDEO_RELATIVE_PATH = "items/rmd-1503-subtitle/offline.wav"
-        const val SUBTITLE_RELATIVE_PATH = "items/rmd-1503-subtitle/subtitles/en.vtt"
-    }
-}
