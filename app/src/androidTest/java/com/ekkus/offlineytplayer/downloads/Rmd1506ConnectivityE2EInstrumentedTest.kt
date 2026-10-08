@@ -2,8 +2,10 @@ package com.ekkus.offlineytplayer.downloads
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.os.SystemClock
+import androidx.core.content.ContextCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
@@ -117,6 +119,54 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         } finally {
             server.close()
         }
+    }
+
+    @Test
+    fun secondScheduleIntentDispatchesWorkWithAlreadyRegisteredConnectivityObserver() {
+        deleteRuntimeState()
+        val jobId = "rmd-1506-observer-reuse"
+        val payload = ByteArray(16 * 1024) { index -> (index % 251).toByte() }
+        val relativePath = "items/rmd-1506-observer-reuse/video.mp4"
+        val server = SlowRangeFixtureServer(payload).also { it.start() }
+        val serviceIntent = Intent(context, DownloadForegroundService::class.java)
+        try {
+            // Register the observer before the fixture is enqueued. A second start command
+            // must dispatch work even when Android sends no new connectivity callback.
+            ContextCompat.startForegroundService(
+                context,
+                Intent(serviceIntent).setAction(DownloadForegroundService.ACTION_CONNECTIVITY_RETRY),
+            )
+            waitForServiceNotification()
+            SystemClock.sleep(500)
+
+            GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { controls ->
+                val result = controls.enqueue(jobId)
+                assertNull(result.error)
+                assertEquals(true, result.value)
+            }
+            seedDurableWork(jobId, server.mediaUrl, relativePath, payload.size)
+            ContextCompat.startForegroundService(
+                context,
+                Intent(serviceIntent)
+                    .setAction(DownloadForegroundService.ACTION_SCHEDULE_WORK)
+                    .putExtra(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, jobId),
+            )
+            waitForState(jobId, CoreDownloadState.COMPLETED)
+            assertEquals(payload.toList(), File(context.filesDir, relativePath).readBytes().toList())
+        } finally {
+            context.stopService(serviceIntent)
+            server.close()
+        }
+    }
+
+    private fun waitForServiceNotification() {
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        val deadline = SystemClock.elapsedRealtime() + 10_000L
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (manager.activeNotifications.any { it.id == DownloadServicePolicy.NotificationId }) return
+            SystemClock.sleep(50)
+        }
+        throw AssertionError("foreground service did not register its notification")
     }
 
     private fun seedDurableWork(
@@ -248,6 +298,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                         }
                         client.use { socket ->
                             try {
+
                                 val input = socket.getInputStream().bufferedReader(StandardCharsets.US_ASCII)
                                 val requestLine = input.readLine() ?: return@use
                                 val headers = mutableMapOf<String, String>()

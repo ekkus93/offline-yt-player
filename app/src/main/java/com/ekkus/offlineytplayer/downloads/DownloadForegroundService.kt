@@ -196,7 +196,12 @@ class DownloadForegroundService : Service() {
     }
 
     private fun ensureConnectivityObserver() {
-        if (connectivityObserver != null) return
+        if (connectivityObserver != null) {
+            // A registered callback does not replay its current network state for a new
+            // schedule/resume intent. Kick durable work using the last observed state.
+            Thread { handleConnectivityChange(lastConnectivity) }.start()
+            return
+        }
         connectivityObserver = AndroidDownloadConnectivityObserver(
             context = this,
             onConnectivityChanged = { connectivity ->
@@ -248,6 +253,7 @@ class DownloadForegroundService : Service() {
             try {
                 DownloadWorkerExecutor.execute(this, queueItemId)
             } finally {
+
                 workerRunning.set(false)
                 settleWorkerAfterExecution(queueItemId)
             }
