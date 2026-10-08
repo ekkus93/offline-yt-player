@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -14,6 +15,7 @@ import java.net.SocketTimeoutException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -74,6 +76,15 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
         val localAsset = File(context.filesDir, "items/rmd-1501-android-runtime/rmd-1501-android-runtime.mp4")
         assertTrue("worker should persist the fixture asset under the production library root", localAsset.isFile)
         assertEquals(mediaBytes.size.toLong(), localAsset.length())
+        assertArrayEquals(mediaBytes, localAsset.readBytes())
+
+        GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+            val assets = playback.listPlaybackAssets()
+            assertNull(assets.error)
+            val descriptor = requireNotNull(assets.value).single { it.itemId == jobId }
+            assertTrue("completed fixture must be exported as a local playback asset", descriptor.playable)
+            assertEquals("items/rmd-1501-android-runtime/rmd-1501-android-runtime.mp4", descriptor.videoRelativePath)
+        }
     }
 
     private fun seedDurableWork(
