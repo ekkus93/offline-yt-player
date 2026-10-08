@@ -14,12 +14,12 @@ internal class SchedulingDownloadControlGateway(
     override fun enqueue(jobId: String): CoreGatewayResult<Boolean> = enqueue(jobId, null)
 
     override fun enqueue(jobId: String, choiceId: String?): CoreGatewayResult<Boolean> =
-        scheduleAfterEnqueue(jobId, delegate.enqueue(jobId, choiceId))
+        scheduleAfterMutation(jobId, delegate.enqueue(jobId, choiceId))
 
     override fun enqueue(jobId: String, options: DownloadSelectionOptions): CoreGatewayResult<Boolean> =
-        scheduleAfterEnqueue(jobId, delegate.enqueue(jobId, options))
+        scheduleAfterMutation(jobId, delegate.enqueue(jobId, options))
 
-    private fun scheduleAfterEnqueue(
+    private fun scheduleAfterMutation(
         jobId: String,
         result: CoreGatewayResult<Boolean>,
     ): CoreGatewayResult<Boolean> {
@@ -43,7 +43,7 @@ internal class SchedulingDownloadControlGateway(
             value = false,
             error = CoreGatewayError(
                 kind = "scheduler_rejected",
-                message = "Download was queued but the Android runtime scheduler rejected it",
+                message = "Download state changed but Android runtime scheduling was rejected",
                 retryable = true,
             ),
         )
@@ -51,11 +51,13 @@ internal class SchedulingDownloadControlGateway(
 
     override fun pause(jobId: String): CoreGatewayResult<Boolean> = delegate.pause(jobId)
 
-    override fun resume(jobId: String): CoreGatewayResult<Boolean> = delegate.resume(jobId)
+    override fun resume(jobId: String): CoreGatewayResult<Boolean> =
+        scheduleAfterMutation(jobId, delegate.resume(jobId))
 
     override fun cancel(jobId: String): CoreGatewayResult<Boolean> = delegate.cancel(jobId)
 
-    override fun retry(jobId: String): CoreGatewayResult<Boolean> = delegate.retry(jobId)
+    override fun retry(jobId: String): CoreGatewayResult<Boolean> =
+        scheduleAfterMutation(jobId, delegate.retry(jobId))
 
     override fun close() = delegate.close()
 }
