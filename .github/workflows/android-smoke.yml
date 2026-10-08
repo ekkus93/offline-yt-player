@@ -71,7 +71,7 @@ jobs:
             sh -c 'mkdir -p app/build/reports/androidSmokeLogs;
             status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest,com.ekkus.offlineytplayer.NetworkCapabilityInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.DownloadNotificationPermissionInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest,com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest,com.ekkus.offlineytplayer.downloads.Rmd1501AndroidRuntimeFixtureInstrumentedTest,com.ekkus.offlineytplayer.downloads.Rmd1502SplitAvOfflineInstrumentedTest,com.ekkus.offlineytplayer.downloads.Rmd1503SubtitleOfflineInstrumentedTest,com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest,com.ekkus.offlineytplayer.downloads.Rmd1505StorageFailureInstrumentedTest,com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest,com.ekkus.offlineytplayer.downloads.Rmd1507NotificationControlInstrumentedTest,com.ekkus.offlineytplayer.playback.PlaybackSessionBehaviorInstrumentedTest,com.ekkus.offlineytplayer.ui.ProductionComposeBehaviorTest,com.ekkus.offlineytplayer.ui.LifecycleStateRestorationComposeTest,com.ekkus.offlineytplayer.ui.MainActivityQueryRecreationInstrumentedTest,com.ekkus.offlineytplayer.ui.Rmd1500AppPipelineFixtureTest > app/build/reports/androidSmokeLogs/base-smoke-gradle.log 2>&1 || status=$?;
-            if [ "$status" -ne 0 ]; then echo "Base smoke failure summary:"; python3 scripts/summarize_android_test_failures.py || true; fi;
+            if [ "$status" -ne 0 ]; then echo "Base smoke Gradle log:"; cat app/build/reports/androidSmokeLogs/base-smoke-gradle.log || true; echo "Base smoke failure summary:"; python3 scripts/summarize_android_test_failures.py || true; fi;
             python3 scripts/register_download_setup_golden_variant.py || exit $?;
             golden_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest > app/build/reports/androidSmokeLogs/golden-gradle.log 2>&1 || golden_status=$?;
@@ -79,10 +79,10 @@ jobs:
             if ! adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ > app/build/reports/androidSmokeLogs/golden-pull.log 2>&1; then adb pull /sdcard/Download/offline-yt-player-goldens/. app/build/reports/androidGoldens/ >> app/build/reports/androidSmokeLogs/golden-pull.log 2>&1 || true; fi;
             echo "Golden raster SHA-256 manifest:";
             cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true;
-            if [ "$golden_status" -ne 0 ]; then echo "Golden failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$golden_status; fi;
+            if [ "$golden_status" -ne 0 ]; then echo "Golden Gradle log:"; cat app/build/reports/androidSmokeLogs/golden-gradle.log || true; echo "Golden failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$golden_status; fi;
             layout_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest > app/build/reports/androidSmokeLogs/layout-accessibility-gradle.log 2>&1 || layout_status=$?;
-            if [ "$layout_status" -ne 0 ]; then echo "Layout/accessibility failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$layout_status; fi;
+            if [ "$layout_status" -ne 0 ]; then echo "Layout/accessibility Gradle log:"; cat app/build/reports/androidSmokeLogs/layout-accessibility-gradle.log || true; echo "Layout/accessibility failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$layout_status; fi;
             exit $status'
       - name: Upload instrumentation evidence
         if: always()
