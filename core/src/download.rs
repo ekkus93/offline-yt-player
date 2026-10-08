@@ -8,8 +8,12 @@ use reqwest::blocking::{Client, Response};
 use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use sha2::{Digest, Sha256};
 use std::error::Error as StdError;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -117,6 +121,19 @@ impl DownloadEngine {
         Ok(())
     }
 
+    fn preflight_transfer_space(
+        &self,
+        request: &TransferRequest,
+        existing_bytes: u64,
+    ) -> Result<(), CoreError> {
+        let Some(expected_bytes) = request.expected_bytes else {
+            return Ok(());
+        };
+        let required_bytes = expected_bytes.saturating_sub(existing_bytes);
+        let available_bytes = available_space_bytes(&self.root)?;
+        self.preflight_space(Some(required_bytes), Some(available_bytes))
+    }
+
     pub fn transfer(
         &self,
         request: &TransferRequest,
@@ -147,6 +164,7 @@ impl DownloadEngine {
         ensure_safe_library_write_path(&self.root, &final_path, &partial_path)?;
 
         let existing = fs::metadata(&partial_path).map_or(0, |metadata| metadata.len());
+        self.preflight_transfer_space(request, existing)?;
         let mut response = self.request(&request.url, existing)?;
         ensure_success(&response)?;
         let mut observed = representation_from_headers(&request.url, response.headers());
@@ -294,6 +312,33 @@ impl DownloadEngine {
         }
         request.send().map_err(map_reqwest_error)
     }
+}
+
+#[cfg(unix)]
+fn available_space_bytes(path: &Path) -> Result<u64, CoreError> {
+    let canonical = canonical_library_root(path)?;
+    let c_path = CString::new(canonical.as_os_str().as_bytes()).map_err(|_| {
+        CoreError::new(
+            ErrorKind::InvalidInput,
+            "library root contains an invalid NUL byte",
+            false,
+        )
+    })?;
+    let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: c_path is a live NUL-terminated filesystem path and stats points to valid
+    // writable storage for statvfs to initialize on success.
+    let status = unsafe { libc::statvfs(c_path.as_ptr(), stats.as_mut_ptr()) };
+    if status != 0 {
+        return Err(io_error(std::io::Error::last_os_error()));
+    }
+    // SAFETY: statvfs returned success, so the structure was initialized.
+    let stats = unsafe { stats.assume_init() };
+    Ok(stats.f_bavail.saturating_mul(stats.f_frsize))
+}
+
+#[cfg(not(unix))]
+fn available_space_bytes(_path: &Path) -> Result<u64, CoreError> {
+    Ok(u64::MAX)
 }
 
 fn ensure_success(response: &Response) -> Result<(), CoreError> {
@@ -919,6 +964,29 @@ mod tests {
         let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
         let error = engine.preflight_space(Some(100), Some(99)).unwrap_err();
         assert_eq!(error.kind, ErrorKind::InsufficientStorage);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transfer_preflights_real_filesystem_space_before_network() {
+        let temp = tempfile::tempdir().unwrap();
+        let policy = DownloadPolicy {
+            max_asset_bytes: u64::MAX,
+            ..DownloadPolicy::default()
+        };
+        let engine = DownloadEngine::new(temp.path(), policy).unwrap();
+        let request = TransferRequest {
+            url: "http://127.0.0.1:1/preflight-must-run-first".into(),
+            relative_path: "items/storage-preflight/video.mp4".into(),
+            expected_bytes: Some(u64::MAX),
+            expected_sha256: None,
+        };
+
+        let error = engine.transfer(&request, &AtomicBool::new(false)).unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::InsufficientStorage);
+        assert!(!temp.path().join("items/storage-preflight/.video.mp4.partial").exists());
+        assert!(!temp.path().join("items/storage-preflight/video.mp4").exists());
     }
 
     #[test]

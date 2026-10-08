@@ -834,6 +834,8 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Verify user-visible actionable failure.
 - [ ] Verify no false completed library record.
 
+**RMD-1505 storage-preflight production repair (pending exact-head qualification):** independent review found that `DownloadEngine.preflight_space(...)` existed but the production transfer path never called it. The transfer engine now checks actual filesystem availability with `statvfs` before opening the network request, subtracts any resumable partial bytes from the required capacity, and returns permanent `InsufficientStorage` before writing when the remaining expected bytes exceed available space. Rust coverage proves this preflight wins over an unreachable-network URL. `Rmd1505StorageFailureInstrumentedTest` drives the packaged generated worker with a deliberately oversized deterministic plan, verifies durable `FAILED` state plus a non-retryable storage diagnostic, verifies no partial/final asset and no completed Library item, and verifies production Downloads UI shows the actionable failure. The real ENOSPC write-injection subtask remains open where infrastructure permits.
+
 
 ### RMD-1506 — Connectivity E2E
 
