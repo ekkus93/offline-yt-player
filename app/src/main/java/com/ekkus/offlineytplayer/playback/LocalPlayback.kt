@@ -3,6 +3,7 @@ package com.ekkus.offlineytplayer.playback
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MediaItem.SubtitleConfiguration
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
@@ -108,6 +109,7 @@ internal object LocalPlaybackPolicy {
         val request = playbackRequestFor(asset)
         val subtitleConfigurations = request.subtitleTracks.map(::subtitleConfigurationFor)
         return mediaItemBuilderFor(request.videoPath)
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(asset.title).build())
             .setSubtitleConfigurations(subtitleConfigurations)
             .setTag(request.audioPath)
             .build()
