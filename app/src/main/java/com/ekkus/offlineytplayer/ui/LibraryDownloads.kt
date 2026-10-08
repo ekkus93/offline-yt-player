@@ -49,7 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal enum class LibraryLayout { List, Grid }
-internal enum class DownloadUiState { Active, Paused, Failed, Completed }
+internal enum class DownloadUiState { Active, Paused, Failed, Completed, Canceled }
 internal data class LibraryRowModel(
     val id: String,
     val title: String,
@@ -114,13 +114,15 @@ internal object LibraryPlaybackRoute {
     }
 }
 internal object DownloadScreenPolicy {
-    val Filters = listOf("All", "Active", "Paused", "Failed", "Completed")
+    val Filters = listOf("All", "Active", "Paused", "Failed", "Completed", "Canceled")
     fun matchesFilter(row: DownloadRowModel, filter: String) = filter == "All" || row.state.name == filter
     fun legalActions(row: DownloadRowModel) = when (row.state) {
         DownloadUiState.Active -> listOf(DownloadRowAction.Pause, DownloadRowAction.Cancel)
         DownloadUiState.Paused -> listOf(DownloadRowAction.Resume, DownloadRowAction.Cancel)
         DownloadUiState.Failed -> listOf(DownloadRowAction.Retry, DownloadRowAction.Cancel)
-        DownloadUiState.Completed -> emptyList()
+        DownloadUiState.Completed,
+        DownloadUiState.Canceled,
+        -> emptyList()
     }
     fun detail(row: DownloadRowModel) = listOf(
         row.stateLabel,

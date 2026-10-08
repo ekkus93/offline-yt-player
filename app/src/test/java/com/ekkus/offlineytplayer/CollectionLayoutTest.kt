@@ -24,6 +24,6 @@ class CollectionLayoutTest {
     @Test
     fun libraryAndDownloadStatesCoverRequiredUx() {
         assertEquals(listOf("List", "Grid"), LibraryLayout.entries.map { it.name })
-        assertEquals(listOf("Active", "Paused", "Failed", "Completed"), DownloadUiState.entries.map { it.name })
+        assertEquals(listOf("Active", "Paused", "Failed", "Completed", "Canceled"), DownloadUiState.entries.map { it.name })
     }
 }

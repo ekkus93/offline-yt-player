@@ -10,7 +10,7 @@ class DownloadsOperationalScreenTest {
     @Test
     fun downloadsScreenExposesEveryRuntimeFilter() {
         assertEquals(
-            listOf("All", "Active", "Paused", "Failed", "Completed"),
+            listOf("All", "Active", "Paused", "Failed", "Completed", "Canceled"),
             DownloadScreenPolicy.Filters,
         )
     }
@@ -23,6 +23,9 @@ class DownloadsOperationalScreenTest {
         assertTrue(DownloadScreenPolicy.matchesFilter(active, "Active"))
         assertFalse(DownloadScreenPolicy.matchesFilter(completed, "Active"))
         assertTrue(DownloadScreenPolicy.matchesFilter(completed, "Completed"))
+        val canceled = row(DownloadUiState.Canceled)
+        assertTrue(DownloadScreenPolicy.matchesFilter(canceled, "Canceled"))
+        assertFalse(DownloadScreenPolicy.matchesFilter(canceled, "Active"))
     }
 
     @Test
@@ -30,6 +33,10 @@ class DownloadsOperationalScreenTest {
         assertEquals(
             emptyList<DownloadRowAction>(),
             DownloadScreenPolicy.legalActions(row(DownloadUiState.Completed)),
+        )
+        assertEquals(
+            emptyList<DownloadRowAction>(),
+            DownloadScreenPolicy.legalActions(row(DownloadUiState.Canceled)),
         )
         assertEquals(
             listOf(DownloadRowAction.Pause, DownloadRowAction.Cancel),

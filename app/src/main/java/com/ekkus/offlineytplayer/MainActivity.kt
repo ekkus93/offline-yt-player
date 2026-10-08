@@ -282,6 +282,7 @@ private fun CoreDownloadState.toUiState(): DownloadUiState = when (this) {
     CoreDownloadState.PAUSED -> DownloadUiState.Paused
     CoreDownloadState.FAILED -> DownloadUiState.Failed
     CoreDownloadState.COMPLETED -> DownloadUiState.Completed
+    CoreDownloadState.CANCELED -> DownloadUiState.Canceled
     else -> DownloadUiState.Active
 }
 
