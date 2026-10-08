@@ -1,7 +1,9 @@
 package com.ekkus.offlineytplayer
 
+import com.ekkus.offlineytplayer.coregateway.AppCoreGateway
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadSnapshot
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.CoreSourceIdentity
 import com.ekkus.offlineytplayer.coregateway.FakeCoreGateway
@@ -112,4 +114,58 @@ class AppStateRefresherTest {
         assertTrue(observedThreads.isNotEmpty())
         assertTrue(observedThreads.all { it != callerThread })
     }
+    @Test
+    fun stoppedLifecycleSuppressesLateRepositoryResultAndRestartObservesFreshState() {
+        val base = FakeCoreGateway()
+        val firstEntered = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val firstReturned = CountDownLatch(1)
+        val freshObserved = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val stalePublications = AtomicInteger()
+        val gateway = object : AppCoreGateway by base {
+            override fun listLibrary(query: String?): CoreGatewayResult<List<CoreLibraryItem>> {
+                val isFirst = calls.incrementAndGet() == 1
+                if (isFirst) {
+                    firstEntered.countDown()
+                    while (true) {
+                        try {
+                            releaseFirst.await()
+                            break
+                        } catch (_: InterruptedException) {
+                            // Simulate a repository call that completes after lifecycle stop.
+                        }
+                    }
+                    firstReturned.countDown()
+                }
+                val id = if (isFirst) "stale" else "fresh"
+                return CoreGatewayResult(
+                    listOf(CoreLibraryItem(id, CoreSourceIdentity("fixture", id, null), id, 1_000, "720p", 1, 0, true)),
+                    null,
+                )
+            }
+        }
+        AppStateRefresher(
+            gateway,
+            onLibrary = { result ->
+                when (result.value.orEmpty().firstOrNull()?.itemId) {
+                    "stale" -> stalePublications.incrementAndGet()
+                    "fresh" -> freshObserved.countDown()
+                }
+            },
+            onDownloads = {},
+            intervalMs = 25L,
+        ).use { refresher ->
+            refresher.start()
+            assertTrue(firstEntered.await(2, TimeUnit.SECONDS))
+            refresher.stop()
+            releaseFirst.countDown()
+            assertTrue(firstReturned.await(2, TimeUnit.SECONDS))
+            refresher.start()
+            assertTrue(freshObserved.await(2, TimeUnit.SECONDS))
+            refresher.stop()
+        }
+        assertEquals(0, stalePublications.get())
+    }
+
 }

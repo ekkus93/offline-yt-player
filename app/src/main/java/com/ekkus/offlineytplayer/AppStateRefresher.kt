@@ -9,6 +9,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /** Lifecycle-controlled observable-state bridge for the blocking core repository. */
 class AppStateRefresher(
@@ -20,28 +21,35 @@ class AppStateRefresher(
 ) : Closeable {
     private var executor: ScheduledExecutorService? = null
     private val refreshInFlight = AtomicBoolean(false)
+    private val lifecycleEpoch = AtomicLong(0L)
 
     @Synchronized
     fun start() {
         if (executor != null) return
+        val epoch = lifecycleEpoch.incrementAndGet()
         executor = Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "offline-yt-app-state").apply { isDaemon = true }
         }.also { scheduler ->
-            scheduler.scheduleWithFixedDelay(::refresh, 0L, intervalMs, TimeUnit.MILLISECONDS)
+            scheduler.scheduleWithFixedDelay({ refresh(epoch) }, 0L, intervalMs, TimeUnit.MILLISECONDS)
         }
     }
 
     @Synchronized
     fun stop() {
+        lifecycleEpoch.incrementAndGet()
         executor?.shutdownNow()
         executor = null
     }
 
-    private fun refresh() {
-        if (!refreshInFlight.compareAndSet(false, true)) return
+    private fun refresh(epoch: Long) {
+        if (epoch != lifecycleEpoch.get() || !refreshInFlight.compareAndSet(false, true)) return
         try {
-            onLibrary(gateway.listLibrary(libraryQuery()))
-            onDownloads(gateway.listDownloadQueue())
+            val library = gateway.listLibrary(libraryQuery())
+            if (epoch != lifecycleEpoch.get()) return
+            onLibrary(library)
+            val downloads = gateway.listDownloadQueue()
+            if (epoch != lifecycleEpoch.get()) return
+            onDownloads(downloads)
         } finally {
             refreshInFlight.set(false)
         }
