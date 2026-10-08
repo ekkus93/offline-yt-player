@@ -10,8 +10,9 @@ import org.junit.Test
 
 class DownloadConnectivityCoordinatorTest {
     @Test
-    fun lostConnectivityPausesOnlyActiveDurableWork() {
+    fun lostConnectivityPausesPendingAndActiveDurableWork() {
         val controls = FakeDownloadControlGateway()
+        val pauses = InMemoryDownloadConnectivityPauseRegistry()
         val coordinator = DownloadConnectivityCoordinator(
             coreGateway = FakeCoreGateway(
                 initialDownloads = listOf(
@@ -26,13 +27,20 @@ class DownloadConnectivityCoordinatorTest {
             ),
             controlGateway = controls,
             networkPreference = { DownloadNetworkPreference.AnyNetwork },
+            connectivityPauseRegistry = pauses,
         )
 
         val report = coordinator.onConnectivityChanged(DownloadConnectivity.None)
 
         assertEquals(DownloadNetworkDecision.PauseForConnectivity, report.decision)
         assertEquals(
-            listOf("active-downloading", "active-resolving", "active-verifying"),
+            listOf(
+                "active-downloading",
+                "active-resolving",
+                "active-verifying",
+                "queued",
+                "retry-wait",
+            ),
             controls.pausedJobIds,
         )
         assertEquals(controls.pausedJobIds, report.pausedJobIds)
@@ -41,8 +49,12 @@ class DownloadConnectivityCoordinatorTest {
     }
 
     @Test
-    fun restoredEligibleConnectivityResumesPausedWork() {
+    fun restoredEligibleConnectivityResumesOnlyConnectivityPausedWork() {
         val controls = FakeDownloadControlGateway()
+        val pauses = InMemoryDownloadConnectivityPauseRegistry().apply {
+            markPausedByConnectivity("paused-a")
+            markPausedByConnectivity("paused-b")
+        }
         val coordinator = DownloadConnectivityCoordinator(
             coreGateway = FakeCoreGateway(
                 initialDownloads = listOf(
@@ -53,6 +65,7 @@ class DownloadConnectivityCoordinatorTest {
             ),
             controlGateway = controls,
             networkPreference = { DownloadNetworkPreference.WifiOnly },
+            connectivityPauseRegistry = pauses,
         )
 
         val report = coordinator.onConnectivityChanged(DownloadConnectivity.Unmetered)
@@ -67,6 +80,7 @@ class DownloadConnectivityCoordinatorTest {
     @Test
     fun meteredConnectivityKeepsWifiOnlyPausedAndPausesActiveWork() {
         val controls = FakeDownloadControlGateway()
+        val pauses = InMemoryDownloadConnectivityPauseRegistry()
         val coordinator = DownloadConnectivityCoordinator(
             coreGateway = FakeCoreGateway(
                 initialDownloads = listOf(
@@ -76,6 +90,7 @@ class DownloadConnectivityCoordinatorTest {
             ),
             controlGateway = controls,
             networkPreference = { DownloadNetworkPreference.WifiOnly },
+            connectivityPauseRegistry = pauses,
         )
 
         val report = coordinator.onConnectivityChanged(DownloadConnectivity.Metered)
@@ -84,6 +99,27 @@ class DownloadConnectivityCoordinatorTest {
         assertEquals(listOf("active"), controls.pausedJobIds)
         assertTrue(controls.resumedJobIds.isEmpty())
     }
+
+    @Test
+    fun userPausedWorkIsNeverAutoResumedByConnectivity() {
+        val controls = FakeDownloadControlGateway()
+        val pauses = InMemoryDownloadConnectivityPauseRegistry()
+        val coordinator = DownloadConnectivityCoordinator(
+            coreGateway = FakeCoreGateway(
+                initialDownloads = listOf(snapshot("user-paused", CoreDownloadState.PAUSED)),
+            ),
+            controlGateway = controls,
+            networkPreference = { DownloadNetworkPreference.AnyNetwork },
+            connectivityPauseRegistry = pauses,
+        )
+
+        val report = coordinator.onConnectivityChanged(DownloadConnectivity.Unmetered)
+
+        assertEquals(DownloadNetworkDecision.Allow, report.decision)
+        assertTrue(controls.resumedJobIds.isEmpty())
+        assertTrue(report.resumedJobIds.isEmpty())
+    }
+
 }
 
 private fun snapshot(jobId: String, state: CoreDownloadState): CoreDownloadSnapshot = CoreDownloadSnapshot(

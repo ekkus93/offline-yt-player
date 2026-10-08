@@ -122,6 +122,10 @@ internal class AndroidDownloadExecutionScheduler(
             Intent(context, DownloadForegroundService::class.java).apply {
                 action = DownloadForegroundService.ACTION_SCHEDULE_WORK
                 putExtra(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, request.queueItemId)
+                putExtra(
+                    DownloadForegroundService.EXTRA_NETWORK_PREFERENCE,
+                    request.networkPreference.name,
+                )
             },
         )
         return DownloadScheduleResult(

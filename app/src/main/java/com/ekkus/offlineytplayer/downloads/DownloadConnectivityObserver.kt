@@ -30,6 +30,63 @@ internal object DownloadConnectivityMapper {
     }
 }
 
+
+internal interface DownloadConnectivityPauseRegistry {
+    fun markPausedByConnectivity(jobId: String)
+    fun clearPausedByConnectivity(jobId: String)
+    fun wasPausedByConnectivity(jobId: String): Boolean
+}
+
+internal class InMemoryDownloadConnectivityPauseRegistry : DownloadConnectivityPauseRegistry {
+    private val jobIds = mutableSetOf<String>()
+
+    @Synchronized
+    override fun markPausedByConnectivity(jobId: String) {
+        jobIds += jobId
+    }
+
+    @Synchronized
+    override fun clearPausedByConnectivity(jobId: String) {
+        jobIds -= jobId
+    }
+
+    @Synchronized
+    override fun wasPausedByConnectivity(jobId: String): Boolean = jobId in jobIds
+}
+
+internal class SharedPreferencesDownloadConnectivityPauseRegistry(
+    context: Context,
+) : DownloadConnectivityPauseRegistry {
+    private val preferences = context.applicationContext.getSharedPreferences(
+        "download_connectivity_pauses",
+        Context.MODE_PRIVATE,
+    )
+
+    @Synchronized
+    override fun markPausedByConnectivity(jobId: String) {
+        mutate { it += jobId }
+    }
+
+    @Synchronized
+    override fun clearPausedByConnectivity(jobId: String) {
+        mutate { it -= jobId }
+    }
+
+    @Synchronized
+    override fun wasPausedByConnectivity(jobId: String): Boolean =
+        preferences.getStringSet(KEY_JOB_IDS, emptySet()).orEmpty().contains(jobId)
+
+    private fun mutate(change: (MutableSet<String>) -> Unit) {
+        val next = preferences.getStringSet(KEY_JOB_IDS, emptySet()).orEmpty().toMutableSet()
+        change(next)
+        preferences.edit().putStringSet(KEY_JOB_IDS, next).commit()
+    }
+
+    private companion object {
+        const val KEY_JOB_IDS = "job_ids"
+    }
+}
+
 /**
  * Small lifecycle-owned Android connectivity observer.
  *
@@ -98,6 +155,8 @@ internal class DownloadConnectivityCoordinator(
     private val coreGateway: AppCoreGateway,
     private val controlGateway: AppDownloadControlGateway,
     private val networkPreference: () -> DownloadNetworkPreference,
+    private val connectivityPauseRegistry: DownloadConnectivityPauseRegistry =
+        InMemoryDownloadConnectivityPauseRegistry(),
 ) {
     fun onConnectivityChanged(connectivity: DownloadConnectivity): DownloadConnectivityCoordinatorReport {
         val decision = DownloadNetworkPolicy.decision(networkPreference(), connectivity)
@@ -114,12 +173,25 @@ internal class DownloadConnectivityCoordinator(
                 decision == DownloadNetworkDecision.PauseForConnectivity && snapshot.shouldPauseForConnectivity() -> {
                     val result = controlGateway.pause(snapshot.jobId)
                     result.error?.let(errors::add)
-                    if (result.error == null && result.value == true) paused += snapshot.jobId
+                    if (result.error == null && result.value == true) {
+                        connectivityPauseRegistry.markPausedByConnectivity(snapshot.jobId)
+                        paused += snapshot.jobId
+                    }
                 }
-                decision == DownloadNetworkDecision.Allow && snapshot.state == CoreDownloadState.PAUSED -> {
+                decision == DownloadNetworkDecision.Allow &&
+                    snapshot.state == CoreDownloadState.PAUSED &&
+                    connectivityPauseRegistry.wasPausedByConnectivity(snapshot.jobId) -> {
                     val result = controlGateway.resume(snapshot.jobId)
                     result.error?.let(errors::add)
-                    if (result.error == null && result.value == true) resumed += snapshot.jobId
+                    if (result.error == null && result.value == true) {
+                        connectivityPauseRegistry.clearPausedByConnectivity(snapshot.jobId)
+                        resumed += snapshot.jobId
+                    }
+                }
+                snapshot.state == CoreDownloadState.FAILED ||
+                    snapshot.state == CoreDownloadState.COMPLETED ||
+                    snapshot.state == CoreDownloadState.CANCELED -> {
+                    connectivityPauseRegistry.clearPausedByConnectivity(snapshot.jobId)
                 }
             }
         }
@@ -133,13 +205,13 @@ internal class DownloadConnectivityCoordinator(
 }
 
 private fun CoreDownloadSnapshot.shouldPauseForConnectivity(): Boolean = when (state) {
+    CoreDownloadState.QUEUED,
     CoreDownloadState.RESOLVING,
     CoreDownloadState.DOWNLOADING,
+    CoreDownloadState.RETRY_WAIT,
     CoreDownloadState.VERIFYING,
     -> true
-    CoreDownloadState.QUEUED,
     CoreDownloadState.PAUSED,
-    CoreDownloadState.RETRY_WAIT,
     CoreDownloadState.FAILED,
     CoreDownloadState.COMPLETED,
     CoreDownloadState.CANCELED,

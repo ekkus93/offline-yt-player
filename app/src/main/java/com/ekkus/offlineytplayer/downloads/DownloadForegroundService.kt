@@ -11,8 +11,12 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.ekkus.offlineytplayer.MainActivity
+import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
+import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal enum class DownloadNetworkPreference {
     AnyNetwork,
@@ -101,9 +105,20 @@ internal object DownloadForegroundTimeoutStore {
 }
 
 class DownloadForegroundService : Service() {
+    private val workerRunning = AtomicBoolean(false)
+    @Volatile private var activeQueueItemId: String? = null
+    @Volatile private var activeNetworkPreference = DownloadNetworkPreference.AnyNetwork
+    @Volatile private var lastConnectivity = DownloadConnectivity.None
+    @Volatile private var lastNetworkDecision = DownloadNetworkDecision.PauseForConnectivity
+    private lateinit var connectivityPauseRegistry: SharedPreferencesDownloadConnectivityPauseRegistry
+    private var connectivityObserver: AndroidDownloadConnectivityObserver? = null
+    private var settingsStore: SharedPreferencesAppSettingsStore? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        connectivityPauseRegistry = SharedPreferencesDownloadConnectivityPauseRegistry(this)
+        settingsStore = SharedPreferencesAppSettingsStore.open(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -114,22 +129,31 @@ class DownloadForegroundService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_PAUSE,
-            ACTION_RESUME,
-            ACTION_CANCEL,
-            -> dispatchControlAction(intent)
+            ACTION_PAUSE -> {
+                queueItemId?.let(connectivityPauseRegistry::clearPausedByConnectivity)
+                dispatchControlAction(intent)
+            }
+            ACTION_RESUME -> {
+                queueItemId?.let(connectivityPauseRegistry::clearPausedByConnectivity)
+                dispatchControlAction(intent)
+                configureActiveWork(intent, queueItemId)
+            }
+            ACTION_CANCEL -> {
+                queueItemId?.let(connectivityPauseRegistry::clearPausedByConnectivity)
+                dispatchControlAction(intent)
+            }
             ACTION_CONNECTIVITY_RETRY,
-            ACTION_RECONCILE_AFTER_REBOOT,
             ACTION_SCHEDULE_WORK,
-            -> Unit
+            -> configureActiveWork(intent, queueItemId)
+            ACTION_RECONCILE_AFTER_REBOOT -> Unit
         }
         startForeground(DownloadServicePolicy.NotificationId, activeNotification(queueItemId))
-        if (intent?.action == ACTION_SCHEDULE_WORK && !queueItemId.isNullOrBlank()) {
-            Thread {
-                DownloadWorkerExecutor.execute(this, queueItemId)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf(startId)
-            }.start()
+        if (
+            intent?.action == ACTION_SCHEDULE_WORK ||
+            intent?.action == ACTION_RESUME ||
+            intent?.action == ACTION_CONNECTIVITY_RETRY
+        ) {
+            ensureConnectivityObserver()
         }
         return START_STICKY
     }
@@ -145,6 +169,135 @@ class DownloadForegroundService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        connectivityObserver?.close()
+        connectivityObserver = null
+        settingsStore?.close()
+        settingsStore = null
+        super.onDestroy()
+    }
+
+    private fun configureActiveWork(intent: Intent?, queueItemId: String?) {
+        if (queueItemId.isNullOrBlank()) return
+        activeQueueItemId = queueItemId
+        activeNetworkPreference = intent?.getStringExtra(EXTRA_NETWORK_PREFERENCE)
+            ?.let { encoded ->
+                DownloadNetworkPreference.values().firstOrNull { it.name == encoded }
+            }
+            ?: settingsStore?.snapshot()?.let { settings ->
+                if (settings.wifiOnlyDownloads) {
+                    DownloadNetworkPreference.WifiOnly
+                } else {
+                    DownloadNetworkPreference.AnyNetwork
+                }
+            }
+            ?: DownloadNetworkPreference.AnyNetwork
+    }
+
+    private fun ensureConnectivityObserver() {
+        if (connectivityObserver != null) return
+        connectivityObserver = AndroidDownloadConnectivityObserver(this) { connectivity ->
+            lastConnectivity = connectivity
+            lastNetworkDecision = DownloadNetworkPolicy.decision(activeNetworkPreference, connectivity)
+            Thread {
+                handleConnectivityChange(connectivity)
+            }.start()
+        }.also(AndroidDownloadConnectivityObserver::start)
+    }
+
+    private fun handleConnectivityChange(connectivity: DownloadConnectivity) {
+        val queueItemId = activeQueueItemId ?: return
+        val decision = DownloadNetworkPolicy.decision(activeNetworkPreference, connectivity)
+        lastNetworkDecision = decision
+
+        // Never resume a connectivity pause before the active transfer thread has observed the
+        // durable PAUSED state and returned. Resuming too early could race the worker's pause check.
+        if (decision == DownloadNetworkDecision.Allow && workerRunning.get()) return
+
+        runConnectivityCoordinator(connectivity)
+        if (decision == DownloadNetworkDecision.Allow) {
+            launchWorkerIfEligible(queueItemId)
+        }
+    }
+
+    private fun runConnectivityCoordinator(
+        connectivity: DownloadConnectivity,
+    ): DownloadConnectivityCoordinatorReport {
+        val databasePath = downloadDatabasePath()
+        return GeneratedUniffiCoreGateway.open(databasePath).use { core ->
+            GeneratedUniffiDownloadControlGateway.open(databasePath).use { controls ->
+                DownloadConnectivityCoordinator(
+                    coreGateway = core,
+                    controlGateway = controls,
+                    networkPreference = { activeNetworkPreference },
+                    connectivityPauseRegistry = connectivityPauseRegistry,
+                ).onConnectivityChanged(connectivity)
+            }
+        }
+    }
+
+    private fun launchWorkerIfEligible(queueItemId: String) {
+        if (lastNetworkDecision != DownloadNetworkDecision.Allow) return
+        if (!workerRunning.compareAndSet(false, true)) return
+
+        Thread {
+            try {
+                DownloadWorkerExecutor.execute(this, queueItemId)
+            } finally {
+                workerRunning.set(false)
+                settleWorkerAfterExecution(queueItemId)
+            }
+        }.start()
+    }
+
+    private fun settleWorkerAfterExecution(queueItemId: String) {
+        if (activeQueueItemId != queueItemId) return
+
+        if (
+            lastNetworkDecision == DownloadNetworkDecision.PauseForConnectivity &&
+            currentDownloadState(queueItemId)?.let { state ->
+                state == CoreDownloadState.QUEUED ||
+                    state == CoreDownloadState.RESOLVING ||
+                    state == CoreDownloadState.DOWNLOADING ||
+                    state == CoreDownloadState.RETRY_WAIT ||
+                    state == CoreDownloadState.VERIFYING
+            } == true
+        ) {
+            runConnectivityCoordinator(lastConnectivity)
+        }
+
+        var state = currentDownloadState(queueItemId)
+        if (
+            state == CoreDownloadState.PAUSED &&
+            connectivityPauseRegistry.wasPausedByConnectivity(queueItemId) &&
+            lastNetworkDecision == DownloadNetworkDecision.Allow
+        ) {
+            runConnectivityCoordinator(lastConnectivity)
+            state = currentDownloadState(queueItemId)
+        }
+
+        if (state == CoreDownloadState.QUEUED && lastNetworkDecision == DownloadNetworkDecision.Allow) {
+            launchWorkerIfEligible(queueItemId)
+            return
+        }
+        if (
+            state == CoreDownloadState.PAUSED &&
+            connectivityPauseRegistry.wasPausedByConnectivity(queueItemId)
+        ) {
+            return
+        }
+
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun currentDownloadState(queueItemId: String): CoreDownloadState? =
+        GeneratedUniffiCoreGateway.open(downloadDatabasePath()).use { core ->
+            core.listDownloadQueue().value
+                ?.firstOrNull { it.jobId == queueItemId }
+                ?.state
+        }
 
     private fun dispatchControlAction(intent: Intent): Boolean = try {
         GeneratedUniffiDownloadControlGateway.open(downloadDatabasePath()).use { gateway ->
@@ -217,5 +370,6 @@ class DownloadForegroundService : Service() {
         const val ACTION_RECONCILE_AFTER_REBOOT = "com.ekkus.offlineytplayer.download.RECONCILE_AFTER_REBOOT"
         const val ACTION_SCHEDULE_WORK = "com.ekkus.offlineytplayer.download.SCHEDULE_WORK"
         const val EXTRA_QUEUE_ITEM_ID = "queue_item_id"
+        const val EXTRA_NETWORK_PREFERENCE = "network_preference"
     }
 }
