@@ -157,7 +157,7 @@ class MainActivity : ComponentActivity() {
             val initialLibrary = when {
                 core.isFailure -> LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> LibraryScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
-                else -> openedCore!!.listLibrary().toLibraryScreenState(libraryRoot, initialPlaybackAssets)
+                else -> openedCore!!.listLibrary(libraryQuery).toLibraryScreenState(libraryRoot, initialPlaybackAssets)
             }
             val initialDownloads = when {
                 core.isFailure -> DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
