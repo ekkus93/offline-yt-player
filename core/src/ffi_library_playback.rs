@@ -74,17 +74,17 @@ fn playback_asset(item: &LibraryItem) -> FfiLibraryPlaybackAsset {
         .assets
         .iter()
         .find(|asset| asset.kind == MediaKind::Video);
-    let Some(video) = video else {
-        return unavailable(item, "Completed item has no local video asset");
-    };
-    if validate_relative_library_path(&video.relative_path).is_err() {
-        return unavailable(item, "Local video asset path is invalid");
-    }
-
     let audio = item
         .assets
         .iter()
         .find(|asset| asset.kind == MediaKind::Audio);
+    // Media3 plays an audio-only file as the primary local media item.
+    let Some(primary) = video.or(audio) else {
+        return unavailable(item, "Completed item has no local playable media asset");
+    };
+    if validate_relative_library_path(&primary.relative_path).is_err() {
+        return unavailable(item, "Local primary media asset path is invalid");
+    }
     if let Some(audio) = audio
         && validate_relative_library_path(&audio.relative_path).is_err()
     {
@@ -107,8 +107,12 @@ fn playback_asset(item: &LibraryItem) -> FfiLibraryPlaybackAsset {
 
     FfiLibraryPlaybackAsset {
         item_id: item.item_id.clone(),
-        video_relative_path: Some(video.relative_path.clone()),
-        audio_relative_path: audio.map(|asset| asset.relative_path.clone()),
+        video_relative_path: Some(primary.relative_path.clone()),
+        audio_relative_path: if video.is_some() {
+            audio.map(|asset| asset.relative_path.clone())
+        } else {
+            None
+        },
         subtitle_tracks,
         playable: true,
         unavailable_reason: None,
@@ -178,6 +182,30 @@ mod tests {
     }
 
     #[test]
+    fn completed_audio_only_item_is_playable_without_duplicate_companion_audio() {
+        let descriptor = playback_asset(&item(
+            true,
+            vec![asset("audio", MediaKind::Audio, "items/item-1/audio.m4a")],
+        ));
+        assert!(descriptor.playable);
+        assert_eq!(descriptor.video_relative_path.as_deref(), Some("items/item-1/audio.m4a"));
+        assert!(descriptor.audio_relative_path.is_none());
+    }
+
+    #[test]
+    fn unsafe_audio_only_path_is_unavailable() {
+        let descriptor = playback_asset(&item(
+            true,
+            vec![asset("audio", MediaKind::Audio, "../outside.m4a")],
+        ));
+        assert!(!descriptor.playable);
+        assert_eq!(
+            descriptor.unavailable_reason.as_deref(),
+            Some("Local primary media asset path is invalid")
+        );
+    }
+
+    #[test]
     fn completed_item_exports_safe_persisted_subtitle_identity() {
         let mut subtitle = asset(
             "subtitle:en:human-en",
@@ -216,7 +244,7 @@ mod tests {
         assert!(!missing.playable);
         assert_eq!(
             missing.unavailable_reason.as_deref(),
-            Some("Completed item has no local video asset")
+            Some("Completed item has no local playable media asset")
         );
     }
 
@@ -230,7 +258,7 @@ mod tests {
         assert!(descriptor.video_relative_path.is_none());
         assert_eq!(
             descriptor.unavailable_reason.as_deref(),
-            Some("Local video asset path is invalid")
+            Some("Local primary media asset path is invalid")
         );
     }
 }
