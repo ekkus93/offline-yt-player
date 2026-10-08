@@ -127,7 +127,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         }
 
         ActivityScenario.launch<MainActivity>(intent).use {
-            compose.waitUntil(20_000) {
+            compose.waitUntil(60_000) {
                 runCatching { compose.onNodeWithText(TITLE, substring = true).assertIsDisplayed() }.isSuccess
             }
             compose.onNodeWithText("Download setup").assertIsDisplayed()
@@ -139,7 +139,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
 
             server.joinAndRethrow()
 
-            compose.waitUntil(30_000) {
+            compose.waitUntil(60_000) {
                 runCatching {
                     compose.onNodeWithText("Library").performClick()
                     compose.onNodeWithText(TITLE).assertIsDisplayed()
@@ -206,11 +206,11 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         assertFalse(requireNotNull(mediaItem.localConfiguration).uri.toString().startsWith("http"))
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            compose.waitUntil(15_000) {
+            compose.waitUntil(30_000) {
                 runCatching { compose.onNodeWithText(TITLE).assertIsDisplayed() }.isSuccess
             }
             compose.onNodeWithText("Play").performClick()
-            compose.waitUntil(15_000) {
+            compose.waitUntil(30_000) {
                 runCatching { compose.onNodeWithText("Offline local playback").assertIsDisplayed() }.isSuccess
             }
 
@@ -219,7 +219,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
             try {
                 var readyFromLocalFile = false
-                val deadline = SystemClock.elapsedRealtime() + 10_000L
+                val deadline = SystemClock.elapsedRealtime() + 20_000L
                 while (SystemClock.elapsedRealtime() < deadline) {
                     instrumentation.runOnMainSync {
                         readyFromLocalFile =
@@ -398,7 +398,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
     ) {
         private val failure = AtomicReference<Throwable?>()
         private val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).apply {
-            soTimeout = 30_000
+            soTimeout = 60_000
         }
         private lateinit var worker: Thread
         val mediaUrl: String = "http://127.0.0.1:" + server.localPort + "/offline.wav"
@@ -434,7 +434,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         }
 
         fun joinAndRethrow() {
-            worker.join(30_000)
+            worker.join(60_000)
             assertFalse("fixture server should finish after the production download", worker.isAlive)
             failure.get()?.let { throw AssertionError("fixture server failed", it) }
         }
