@@ -23,7 +23,7 @@ REVIEWED_HASHES = (
     "9cfd346c4254a4510e5a363212d9e8d0992813e45c2c749007c6cd62b0facd72",
     "577c0cb6e2d2d0ca32722243d648184a44a75b2b6ae14d9fb14077656fee00d0",
 )
-ANCHOR = '            "download_setup" to setOf(\n'
+ANCHOR = '            "download_setup" to setOf('
 INSERT_AFTER = '                "afb9a1a883beadc48b61658c6d43f7cc96819db7bb0705453d4a7bb5f5651476",\n'
 DOWNLOAD_SETUP_READY = '        compose.onNodeWithText("Quality choices").assertIsDisplayed()\n'
 DOWNLOAD_SETUP_SETTLED = '        compose.waitForIdle()\n'
