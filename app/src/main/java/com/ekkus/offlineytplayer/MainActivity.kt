@@ -78,8 +78,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Compose restores the visible search draft; restore the matching repository query too.
         // Otherwise the UI can display a filter that the reopened repository does not apply.
-        uiState.libraryQuery = savedInstanceState?.getString(SAVED_LIBRARY_QUERY)
-            ?.trim()?.take(MAX_LIBRARY_QUERY_CHARS)?.takeIf { it.isNotEmpty() }
+        savedInstanceState?.let { restored ->
+            uiState.libraryQuery = restored.getString(SAVED_LIBRARY_QUERY)
+                ?.trim()?.take(MAX_LIBRARY_QUERY_CHARS)?.takeIf { it.isNotEmpty() }
+        }
         val settings = SharedPreferencesAppSettingsStore.open(this)
         settingsStore = settings
         settingsSnapshot = settings.snapshot()
