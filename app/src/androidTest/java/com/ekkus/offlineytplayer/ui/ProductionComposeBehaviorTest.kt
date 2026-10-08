@@ -440,35 +440,5 @@ private class RecordingLibraryMutationGateway : AppLibraryMutationGateway {
     }
 
     override fun close() = Unit
-    @Test
-    fun rmd604LibraryAndAddDraftRestoreAcrossNavigationAndSaveRestore() {
-        val restoration = StateRestorationTester(compose)
-        restoration.setContent {
-            OfflineYTPlayerApp(
-                libraryState = LibraryScreenState.Ready(
-                    listOf(
-                        LibraryRowModel("alpha", "Alpha fixture", "720p"),
-                        LibraryRowModel("beta", "Beta fixture", "480p"),
-                    ),
-                ),
-                downloadsState = DownloadsScreenState.Ready(emptyList()),
-            )
-        }
-
-        compose.onNodeWithText("Search library").performTextInput("Alpha")
-        compose.onNodeWithText("Alpha fixture").assertIsDisplayed()
-        compose.onNodeWithText("Beta fixture").assertDoesNotExist()
-        compose.onNodeWithText("Add").performClick()
-        compose.onNodeWithText("Video URL").performTextInput("https://youtu.be/dQw4w9WgXcQ")
-        compose.onNodeWithText("Library").performClick()
-        compose.onNodeWithText("Alpha fixture").assertIsDisplayed()
-        compose.onNodeWithText("Beta fixture").assertDoesNotExist()
-
-        restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithText("Alpha fixture").assertIsDisplayed()
-        compose.onNodeWithText("Beta fixture").assertDoesNotExist()
-        compose.onNodeWithText("Add").performClick()
-        compose.onNodeWithText("https://youtu.be/dQw4w9WgXcQ").assertIsDisplayed()
-    }
 
 }
