@@ -24,7 +24,7 @@ REVIEWED_HASHES = (
     "9cfd346c4254a4510e5a363212d9e8d0992813e45c2c749007c6cd62b0facd72",
     "577c0cb6e2d2d0ca32722243d648184a44a75b2b6ae14d9fb14077656fee00d0",
 )
-DOWNLOAD_SETUP_BLOCK = re.compile(r'(?P<start>^[ \\t]*"download_setup"\\s+to\\s+setOf\\()(?P<values>[^)]*)(?P<end>\\),)', re.MULTILINE)
+DOWNLOAD_SETUP_BLOCK = re.compile(r'(?P<start>^[ \t]*"download_setup"\s+to\s+setOf\()(?P<values>[^)]*)(?P<end>\),)', re.MULTILINE)
 DOWNLOAD_SETUP_READY = '        compose.onNodeWithText("Quality choices").assertIsDisplayed()\n'
 DOWNLOAD_SETUP_SETTLED = '        compose.waitForIdle()\n'
 
