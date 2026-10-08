@@ -852,6 +852,8 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Cancel from notification.
 - [ ] Verify durable state/UI mirrors each action.
 
+**RMD-1507 correctness repair (pending exact-head qualification):** independent review found that durable `CoreDownloadState.CANCELED` fell through `MainActivity.toUiState()` to `DownloadUiState.Active`, so a successful Cancel could be misrepresented as active work. Production mapping now has a dedicated `Canceled` UI/filter state with no legal row actions, with JVM coverage in `CollectionLayoutTest` and `DownloadsOperationalScreenTest`. The RMD-1507 E2E checkboxes remain open until the actual notification `PendingIntent` actions are exercised against the durable queue and observed through production UI state.
+
 **Acceptance for RMD-1500:** policy enum sequence tests may remain, but they cannot be cited as the E2E evidence for these tasks.
 
 
