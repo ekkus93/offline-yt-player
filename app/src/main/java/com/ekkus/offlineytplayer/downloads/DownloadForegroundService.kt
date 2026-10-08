@@ -15,6 +15,7 @@ import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
+import java.io.Closeable
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -111,7 +112,7 @@ class DownloadForegroundService : Service() {
     @Volatile private var lastConnectivity = DownloadConnectivity.None
     @Volatile private var lastNetworkDecision = DownloadNetworkDecision.PauseForConnectivity
     private lateinit var connectivityPauseRegistry: SharedPreferencesDownloadConnectivityPauseRegistry
-    private var connectivityObserver: AndroidDownloadConnectivityObserver? = null
+    private var connectivityObserver: Closeable? = null
     private var settingsStore: SharedPreferencesAppSettingsStore? = null
 
     override fun onCreate() {
@@ -202,16 +203,18 @@ class DownloadForegroundService : Service() {
             Thread { handleConnectivityChange(lastConnectivity) }.start()
             return
         }
-        connectivityObserver = AndroidDownloadConnectivityObserver(
-            context = this,
-            onConnectivityChanged = { connectivity ->
-                lastConnectivity = connectivity
-                lastNetworkDecision = DownloadNetworkPolicy.decision(activeNetworkPreference, connectivity)
-                Thread {
-                    handleConnectivityChange(connectivity)
-                }.start()
-            },
-        ).also { it.start() }
+        val handleChange: (DownloadConnectivity) -> Unit = { connectivity ->
+            lastConnectivity = connectivity
+            lastNetworkDecision = DownloadNetworkPolicy.decision(activeNetworkPreference, connectivity)
+            Thread {
+                handleConnectivityChange(connectivity)
+            }.start()
+        }
+        connectivityObserver = connectivityObserverFactoryForTesting?.invoke(this, handleChange)
+            ?: AndroidDownloadConnectivityObserver(
+                context = this,
+                onConnectivityChanged = handleChange,
+            ).also { it.start() }
     }
 
     private fun handleConnectivityChange(connectivity: DownloadConnectivity) {
@@ -370,6 +373,13 @@ class DownloadForegroundService : Service() {
     }
 
     companion object {
+        // Instrumentation-only seam: a test can deliver the initial network state once,
+        // then deliberately withhold subsequent callbacks to prove schedule-intent reuse.
+        // Production always uses the real AndroidDownloadConnectivityObserver.
+        @Volatile
+        internal var connectivityObserverFactoryForTesting:
+            ((Context, (DownloadConnectivity) -> Unit) -> Closeable)? = null
+
         private const val PRODUCTION_DATABASE_NAME = "offline-yt-player.sqlite3"
         const val ACTION_PAUSE = "com.ekkus.offlineytplayer.download.PAUSE"
         const val ACTION_RESUME = "com.ekkus.offlineytplayer.download.RESUME"

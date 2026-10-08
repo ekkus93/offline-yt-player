@@ -11,6 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
+import java.io.Closeable
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -18,6 +19,7 @@ import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.After
@@ -35,6 +37,8 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
 
     @After
     fun cleanRuntimeState() {
+        context.stopService(Intent(context, DownloadForegroundService::class.java))
+        DownloadForegroundService.connectivityObserverFactoryForTesting = null
         deleteRuntimeState()
     }
 
@@ -129,15 +133,26 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         val relativePath = "items/rmd-1506-observer-reuse/video.mp4"
         val server = SlowRangeFixtureServer(payload).also { it.start() }
         val serviceIntent = Intent(context, DownloadForegroundService::class.java)
+        val registrations = AtomicInteger(0)
+        val callbacks = AtomicInteger(0)
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { _, onChanged ->
+            registrations.incrementAndGet()
+            callbacks.incrementAndGet()
+            onChanged(DownloadConnectivity.Unmetered)
+            Closeable { }
+        }
         try {
-            // Register the observer before the fixture is enqueued. A second start command
-            // must dispatch work even when Android sends no new connectivity callback.
+            // Register an observer that emits exactly one initial Unmetered event.
+            // It never emits again, so only onStartCommand's observer-reuse path
+            // can dispatch the newly queued fixture work.
             ContextCompat.startForegroundService(
                 context,
                 Intent(serviceIntent).setAction(DownloadForegroundService.ACTION_CONNECTIVITY_RETRY),
             )
             waitForServiceNotification()
             SystemClock.sleep(500)
+            assertEquals("observer should register once before enqueuing", 1, registrations.get())
+            assertEquals("initial network callback only", 1, callbacks.get())
 
             GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { controls ->
                 val result = controls.enqueue(jobId)
@@ -153,8 +168,11 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             )
             waitForState(jobId, CoreDownloadState.COMPLETED)
             assertEquals(payload.toList(), File(context.filesDir, relativePath).readBytes().toList())
+            assertEquals("registered observer must be reused", 1, registrations.get())
+            assertEquals("no additional connectivity callback may drive the worker", 1, callbacks.get())
         } finally {
             context.stopService(serviceIntent)
+            DownloadForegroundService.connectivityObserverFactoryForTesting = null
             server.close()
         }
     }
