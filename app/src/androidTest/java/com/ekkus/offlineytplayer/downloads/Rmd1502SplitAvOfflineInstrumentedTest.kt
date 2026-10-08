@@ -54,7 +54,9 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
     fun cleanRuntimeState() {
         context.stopService(android.content.Intent(context, DownloadForegroundService::class.java))
         context.stopService(android.content.Intent(context, PlaybackSessionService::class.java))
-        deleteRuntimeState()
+        if (coldStartPhase() != "seed") {
+            deleteRuntimeState()
+        }
     }
 
     @Test
@@ -167,6 +169,133 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
             }
         }
     }
+
+
+    @Test
+    fun coldStartSeedPersistsSeparateVideoAndAudio() {
+        assumeTrue(coldStartPhase() == "seed")
+        assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
+        deleteRuntimeState()
+
+        val jobId = "rmd-1502-split-av"
+        val title = "RMD-1502 split A/V fixture"
+        val video = Base64.decode(VIDEO_BASE64, Base64.DEFAULT)
+        val audio = deterministicWaveBytes()
+        val server = FixtureHttpServer(
+            mapOf(
+                "/video.mp4" to FixtureResponse("video/mp4", video),
+                "/audio.wav" to FixtureResponse("audio/wav", audio),
+            ),
+        ).also { it.start() }
+
+        GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { control ->
+            val enqueued = control.enqueue(jobId)
+            assertNull(enqueued.error)
+            assertEquals(true, enqueued.value)
+        }
+        seedDurableWork(
+            jobId = jobId,
+            title = title,
+            sourceUrl = server.baseUrl + "/fixture-source",
+            videoUrl = server.baseUrl + "/video.mp4",
+            videoBytes = video.size,
+            audioUrl = server.baseUrl + "/audio.wav",
+            audioBytes = audio.size,
+        )
+        val scheduled = AndroidDownloadExecutionScheduler(context).schedule(
+            DownloadScheduleRequest(queueItemId = jobId),
+        )
+        assertEquals(DownloadSchedulerKind.ForegroundServiceFallback, scheduled.kind)
+        assertTrue("production scheduler should accept split A/V cold-start fixture work", scheduled.accepted)
+        waitForState(jobId, CoreDownloadState.COMPLETED)
+        server.joinAndRethrow()
+
+        val videoFile = File(context.filesDir, VIDEO_RELATIVE_PATH)
+        val audioFile = File(context.filesDir, AUDIO_RELATIVE_PATH)
+        assertTrue(videoFile.isFile)
+        assertTrue(audioFile.isFile)
+        GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+            val descriptor = requireNotNull(playback.listPlaybackAssets().value).single { it.itemId == jobId }
+            assertTrue(descriptor.playable)
+            assertEquals(VIDEO_RELATIVE_PATH, descriptor.videoRelativePath)
+            assertEquals(AUDIO_RELATIVE_PATH, descriptor.audioRelativePath)
+        }
+    }
+
+    @Test
+    fun coldStartVerificationReopensPersistedSplitAvOffline() {
+        assumeTrue(coldStartPhase() == "verify")
+        assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
+
+        val jobId = "rmd-1502-split-av"
+        val title = "RMD-1502 split A/V fixture"
+        val videoFile = File(context.filesDir, VIDEO_RELATIVE_PATH)
+        val audioFile = File(context.filesDir, AUDIO_RELATIVE_PATH)
+        assertTrue("video must survive the host force-stop", videoFile.isFile)
+        assertTrue("audio must survive the host force-stop", audioFile.isFile)
+
+        GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+            val library = core.listLibrary()
+            assertNull(library.error)
+            assertTrue(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
+        }
+        GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+            val descriptor = requireNotNull(playback.listPlaybackAssets().value).single { it.itemId == jobId }
+            assertTrue(descriptor.playable)
+            assertEquals(VIDEO_RELATIVE_PATH, descriptor.videoRelativePath)
+            assertEquals(AUDIO_RELATIVE_PATH, descriptor.audioRelativePath)
+        }
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            compose.waitUntil(15_000) {
+                runCatching { compose.onNodeWithText(title).assertIsDisplayed() }.isSuccess
+            }
+            compose.onNodeWithText("Play").performClick()
+            compose.waitUntil(15_000) {
+                runCatching { compose.onNodeWithText("Offline local playback").assertIsDisplayed() }.isSuccess
+            }
+
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+            val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+            try {
+                var readyWithSelectedVideoAndAudio = false
+                val deadline = SystemClock.elapsedRealtime() + 10_000L
+                while (SystemClock.elapsedRealtime() < deadline) {
+                    instrumentation.runOnMainSync {
+                        val groups = observer.currentTracks.groups
+                        val selectedVideo = groups.any { group ->
+                            group.type == C.TRACK_TYPE_VIDEO &&
+                                (0 until group.length).any(group::isTrackSelected)
+                        }
+                        val selectedAudio = groups.any { group ->
+                            group.type == C.TRACK_TYPE_AUDIO &&
+                                (0 until group.length).any(group::isTrackSelected)
+                        }
+                        val current = observer.currentMediaItem
+                        readyWithSelectedVideoAndAudio =
+                            observer.playbackState == Player.STATE_READY &&
+                                current != null &&
+                                current.localConfiguration?.uri?.path == videoFile.absolutePath &&
+                                LocalPlaybackPolicy.splitAudioPathFrom(current) == audioFile.absolutePath &&
+                                selectedVideo &&
+                                selectedAudio
+                    }
+                    if (readyWithSelectedVideoAndAudio) break
+                    SystemClock.sleep(50)
+                }
+                assertTrue(
+                    "cold-started canonical session must merge persisted local video and audio offline",
+                    readyWithSelectedVideoAndAudio,
+                )
+            } finally {
+                instrumentation.runOnMainSync { observer.release() }
+            }
+        }
+    }
+
+    private fun coldStartPhase(): String? =
+        InstrumentationRegistry.getArguments().getString("rmdColdStartPhase")
 
     private fun com.ekkus.offlineytplayer.coregateway.CoreLibraryItem.completedAssetsCount(): Int =
         GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->

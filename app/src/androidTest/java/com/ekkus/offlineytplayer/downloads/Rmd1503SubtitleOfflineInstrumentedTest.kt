@@ -57,7 +57,9 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
     fun cleanRuntimeState() {
         context.stopService(Intent(context, DownloadForegroundService::class.java))
         context.stopService(Intent(context, PlaybackSessionService::class.java))
-        deleteRuntimeState()
+        if (coldStartPhase() != "seed") {
+            deleteRuntimeState()
+        }
     }
 
     @Test
@@ -196,6 +198,134 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
             }
         }
     }
+
+
+    @Test
+    fun coldStartSeedPersistsSubtitleAsset() {
+        assumeTrue(coldStartPhase() == "seed")
+        assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
+        deleteRuntimeState()
+
+        val jobId = "rmd-1503-subtitle-offline"
+        val title = "RMD-1503 offline subtitle fixture"
+        val wave = deterministicWaveBytes()
+        val subtitle = (
+            "WEBVTT\n\n" +
+                "00:00.000 --> 00:01.500\n" +
+                "Offline subtitle cue\n"
+            ).toByteArray(StandardCharsets.UTF_8)
+        val server = FixtureHttpServer(
+            mapOf(
+                "/offline.wav" to FixtureResponse("audio/wav", wave),
+                "/captions.vtt" to FixtureResponse("text/vtt", subtitle),
+            ),
+        ).also { it.start() }
+
+        GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { control ->
+            val enqueued = control.enqueue(jobId)
+            assertNull(enqueued.error)
+            assertEquals(true, enqueued.value)
+        }
+        seedDurableWork(
+            jobId = jobId,
+            title = title,
+            sourceUrl = server.baseUrl + "/fixture-source",
+            mediaUrl = server.baseUrl + "/offline.wav",
+            mediaBytes = wave.size,
+            subtitleUrl = server.baseUrl + "/captions.vtt",
+            subtitleBytes = subtitle.size,
+        )
+        val scheduled = AndroidDownloadExecutionScheduler(context).schedule(
+            DownloadScheduleRequest(queueItemId = jobId),
+        )
+        assertEquals(DownloadSchedulerKind.ForegroundServiceFallback, scheduled.kind)
+        assertTrue("production scheduler should accept subtitle cold-start fixture work", scheduled.accepted)
+        waitForState(jobId, CoreDownloadState.COMPLETED)
+        server.joinAndRethrow()
+
+        assertTrue(File(context.filesDir, VIDEO_RELATIVE_PATH).isFile)
+        val subtitleFile = File(context.filesDir, SUBTITLE_RELATIVE_PATH)
+        assertTrue(subtitleFile.isFile)
+        assertTrue(subtitleFile.readText().contains("Offline subtitle cue"))
+        GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+            val descriptor = requireNotNull(playback.listPlaybackAssets().value).single { it.itemId == jobId }
+            val persistedSubtitle = descriptor.subtitleTracks.single()
+            assertEquals(SUBTITLE_RELATIVE_PATH, persistedSubtitle.relativePath)
+            assertEquals("en", persistedSubtitle.language)
+            assertEquals("vtt", persistedSubtitle.format)
+            assertEquals("human-en", persistedSubtitle.trackId)
+            assertEquals("text/vtt", persistedSubtitle.mimeType)
+        }
+    }
+
+    @Test
+    fun coldStartVerificationReopensPersistedSubtitleOffline() {
+        assumeTrue(coldStartPhase() == "verify")
+        assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
+
+        val jobId = "rmd-1503-subtitle-offline"
+        val title = "RMD-1503 offline subtitle fixture"
+        val videoFile = File(context.filesDir, VIDEO_RELATIVE_PATH)
+        val subtitleFile = File(context.filesDir, SUBTITLE_RELATIVE_PATH)
+        assertTrue("media must survive the host force-stop", videoFile.isFile)
+        assertTrue("subtitle must survive the host force-stop", subtitleFile.isFile)
+
+        GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+            val library = core.listLibrary()
+            assertNull(library.error)
+            assertTrue(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
+        }
+        GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+            val descriptor = requireNotNull(playback.listPlaybackAssets().value).single { it.itemId == jobId }
+            assertTrue(descriptor.playable)
+            val persistedSubtitle = descriptor.subtitleTracks.single()
+            assertEquals(SUBTITLE_RELATIVE_PATH, persistedSubtitle.relativePath)
+            assertEquals("en", persistedSubtitle.language)
+            assertEquals("vtt", persistedSubtitle.format)
+            assertEquals("text/vtt", persistedSubtitle.mimeType)
+        }
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            compose.waitUntil(15_000) {
+                runCatching { compose.onNodeWithText(title).assertIsDisplayed() }.isSuccess
+            }
+            compose.onNodeWithText("Play").performClick()
+            compose.waitUntil(15_000) {
+                runCatching { compose.onNodeWithText("Offline local playback").assertIsDisplayed() }.isSuccess &&
+                    runCatching { compose.onNodeWithText("Subtitles: en").assertIsDisplayed() }.isSuccess
+            }
+
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+            val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+            try {
+                var selectedEnglishTextTrack = false
+                val deadline = SystemClock.elapsedRealtime() + 10_000L
+                while (SystemClock.elapsedRealtime() < deadline) {
+                    instrumentation.runOnMainSync {
+                        selectedEnglishTextTrack = observer.currentTracks.groups.any { group ->
+                            group.type == C.TRACK_TYPE_TEXT &&
+                                (0 until group.length).any { index ->
+                                    group.isTrackSelected(index) &&
+                                        group.getTrackFormat(index).language == "en"
+                                }
+                        }
+                    }
+                    if (selectedEnglishTextTrack) break
+                    SystemClock.sleep(50)
+                }
+                assertTrue(
+                    "cold-started production player must select the persisted English subtitle offline",
+                    selectedEnglishTextTrack,
+                )
+            } finally {
+                instrumentation.runOnMainSync { observer.release() }
+            }
+        }
+    }
+
+    private fun coldStartPhase(): String? =
+        InstrumentationRegistry.getArguments().getString("rmdColdStartPhase")
 
     private fun waitForState(jobId: String, expected: CoreDownloadState) {
         var state: CoreDownloadState? = null

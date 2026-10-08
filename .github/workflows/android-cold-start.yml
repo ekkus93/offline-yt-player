@@ -1,0 +1,83 @@
+name: Android cold start
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-cold-start-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api29-cold-start:
+    name: API 29 process-death offline qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Android SDK command-line tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: "false"
+      - name: Build Rust core for packaged ABIs
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup target add aarch64-linux-android x86_64-linux-android
+          sdkmanager "ndk;30.0.16248370" "platforms;android-37.0" "build-tools;37.0.0"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export CC_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export AR_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export CC_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          cargo build -p offline-yt-core --target aarch64-linux-android
+          cargo build -p offline-yt-core --target x86_64-linux-android
+      - name: Run host-driven process-death qualification
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
+          script: >-
+            sh -c 'set -eu;
+            mkdir -p app/build/reports/androidColdStart;
+            ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest > app/build/reports/androidColdStart/build.log 2>&1;
+            APP_APK=$(find app/build/outputs/apk/debug -name "*.apk" ! -name "*androidTest*" | head -n 1);
+            TEST_APK=$(find app/build/outputs/apk/androidTest/debug -name "*.apk" | head -n 1);
+            test -n "$APP_APK" && test -n "$TEST_APK";
+            adb install -r "$APP_APK" > app/build/reports/androidColdStart/install-app.log;
+            adb install -r "$TEST_APK" > app/build/reports/androidColdStart/install-test.log;
+            INSTRUMENTATION=$(adb shell pm list instrumentation | tr -d "\r" | sed -n "s/^instrumentation:\([^ ]*\) (target=com\.ekkus\.offlineytplayer)$/\1/p" | head -n 1);
+            test -n "$INSTRUMENTATION";
+            run_phase() { class_method="$1"; phase="$2"; log="$3"; adb shell am instrument -w -e rmdColdStartPhase "$phase" -e class "$class_method" "$INSTRUMENTATION" > "$log" 2>&1; cat "$log"; grep -q "OK (1 test)" "$log"; };
+            run_phase "com.ekkus.offlineytplayer.downloads.Rmd1502SplitAvOfflineInstrumentedTest#coldStartSeedPersistsSeparateVideoAndAudio" seed app/build/reports/androidColdStart/rmd1502-seed.log;
+            adb shell am force-stop com.ekkus.offlineytplayer;
+            run_phase "com.ekkus.offlineytplayer.downloads.Rmd1502SplitAvOfflineInstrumentedTest#coldStartVerificationReopensPersistedSplitAvOffline" verify app/build/reports/androidColdStart/rmd1502-verify.log;
+            run_phase "com.ekkus.offlineytplayer.downloads.Rmd1503SubtitleOfflineInstrumentedTest#coldStartSeedPersistsSubtitleAsset" seed app/build/reports/androidColdStart/rmd1503-seed.log;
+            adb shell am force-stop com.ekkus.offlineytplayer;
+            run_phase "com.ekkus.offlineytplayer.downloads.Rmd1503SubtitleOfflineInstrumentedTest#coldStartVerificationReopensPersistedSubtitleOffline" verify app/build/reports/androidColdStart/rmd1503-verify.log'
+      - name: Upload cold-start evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-cold-start-evidence-${{ github.run_id }}
+          path: app/build/reports/androidColdStart
+          if-no-files-found: ignore
+          retention-days: 7
