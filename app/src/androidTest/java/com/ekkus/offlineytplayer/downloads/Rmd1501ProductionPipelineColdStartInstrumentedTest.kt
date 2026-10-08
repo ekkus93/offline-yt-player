@@ -10,6 +10,8 @@ import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -122,13 +124,21 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         val intent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_SEND
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, SOURCE_URL)
+            putExtra(Intent.EXTRA_TEXT, "Shared from another app: $SOURCE_URL")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
         ActivityScenario.launch<MainActivity>(intent).use {
-            compose.waitUntil(60_000) {
-                runCatching { compose.onNodeWithText(TITLE, substring = true).assertIsDisplayed() }.isSuccess
+            runCatching {
+                compose.waitUntil(60_000) {
+                    runCatching { compose.onNodeWithText(TITLE, substring = true).assertIsDisplayed() }.isSuccess
+                }
+            }.getOrElse { cause ->
+                throw AssertionError(
+                    "RMD-1501 analysis/setup title not visible after ACTION_SEND; Compose semantics:\n" +
+                        compose.onRoot(useUnmergedTree = true).printToString(),
+                    cause,
+                )
             }
             compose.onNodeWithText("Download setup").assertIsDisplayed()
             compose.onNodeWithText("Options").performClick()
