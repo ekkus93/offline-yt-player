@@ -7,6 +7,7 @@ import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.SystemClock
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -157,7 +158,15 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         compose.onNodeWithText("Options").performClick()
         compose.onNodeWithText("Select Fixture WAV").performClick()
         compose.onNodeWithText("Apply options").performClick()
-        compose.onNodeWithText("Download options applied.").assertIsDisplayed()
+        // The confirmation can be outside the small API-29 emulator viewport. Assert that
+        // Apply committed the state in the Compose tree; actual chosen quality is verified
+        // against the production scheduler's enqueue arguments below.
+        compose.waitUntil(30_000) {
+            runCatching {
+                compose.onNodeWithText("Download options applied.").assertExists()
+                compose.onNodeWithText("Download").assertIsEnabled()
+            }.isSuccess
+        }
         compose.onNodeWithText("Download").performClick()
 
         server.joinAndRethrow()

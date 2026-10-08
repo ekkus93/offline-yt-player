@@ -25,6 +25,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Closeout guard tests
         run: python3 -m unittest tests/test_check_remediation_closeout.py
+      - name: Instrumentation execution guard tests
+        run: python3 -m unittest tests/test_assert_android_smoke_execution.py
 
   rust:
     name: Rust fmt clippy test
