@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +62,8 @@ internal fun PortraitPlayerScreen(
     var selectedSubtitleIndex by remember(validated) { mutableIntStateOf(if (subtitleLabels.isEmpty()) -1 else 0) }
     var selectedAudioIndex by remember(validated) { mutableIntStateOf(if (audioLabels.isEmpty()) -1 else 0) }
     var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
+    var displayedTitle by remember(asset) { mutableStateOf(validated.title) }
+    var displayedPositionMs by remember(asset) { mutableLongStateOf(validated.startPositionMs) }
 
     DisposableEffect(context, validated.videoPath, validated.audioPath, validated.subtitleTracks, validated.audioTracks, validated.startPositionMs, validated.itemId, settings.rememberPlaybackPosition) {
         val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
@@ -88,14 +91,26 @@ internal fun PortraitPlayerScreen(
         }
 
         val periodicSaver = object : Runnable { override fun run() { if (disposed) return; persistPlaybackPosition(false); mainHandler.postDelayed(this, LocalPlaybackPolicy.PositionPersistCadenceMs) } }
-        future.addListener({ if (!future.isCancelled) { runCatching { future.get() }.getOrNull()?.let { connected -> acquiredController = connected; connected.setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated), configuredStartPositionMs); connected.setPlaybackSpeed(settings.playbackSpeed); connected.prepare(); controller = connected; if (settings.rememberPlaybackPosition) mainHandler.postDelayed(periodicSaver, LocalPlaybackPolicy.PositionPersistCadenceMs) } } }, mainExecutor)
-        onDispose { disposed = true; mainHandler.removeCallbacks(periodicSaver); persistPlaybackPosition(true); future.cancel(true); if (controller === acquiredController) controller = null; acquiredController?.release(); persistenceExecutor.shutdown() }
+        val uiTicker = object : Runnable {
+            override fun run() {
+                if (disposed) return
+                acquiredController?.let { active ->
+                    displayedPositionMs = active.currentPosition.coerceAtLeast(0L)
+                    displayedTitle = active.currentMediaItem?.mediaMetadata?.title?.toString()
+                        ?.takeIf { it.isNotBlank() } ?: validated.title
+                }
+                mainHandler.postDelayed(this, 250L)
+            }
+        }
+        future.addListener({ if (!future.isCancelled) { runCatching { future.get() }.getOrNull()?.let { connected -> acquiredController = connected; connected.setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated), configuredStartPositionMs); connected.setPlaybackSpeed(settings.playbackSpeed); connected.prepare(); controller = connected; mainHandler.post(uiTicker); if (settings.rememberPlaybackPosition) mainHandler.postDelayed(periodicSaver, LocalPlaybackPolicy.PositionPersistCadenceMs) } } }, mainExecutor)
+        onDispose { disposed = true; mainHandler.removeCallbacks(periodicSaver); mainHandler.removeCallbacks(uiTicker); persistPlaybackPosition(true); future.cancel(true); if (controller === acquiredController) controller = null; acquiredController?.release(); persistenceExecutor.shutdown() }
     }
 
     Column(Modifier.fillMaxSize().padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(validated.title); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(displayedTitle); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }
         AndroidView(modifier = Modifier.fillMaxWidth().aspectRatio(PlayerLayoutPolicy.VideoAspectRatio), factory = { viewContext -> PlayerView(viewContext).apply { layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT); useController = false; player = controller } }, update = { it.player = controller })
         Text(if (controller == null) "Connecting to playback session…" else "Offline local playback")
+        Text("Position ${formatPlaybackPosition(displayedPositionMs)}")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = { controller?.seekBack() }, enabled = controller != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("-10s") }
             Button(onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } }, enabled = controller != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Play/Pause") }
@@ -140,3 +155,8 @@ private fun nextSpeed(current: Float): Float = when { current < 1f -> 1f; curren
 private fun playbackPersistenceExecutor(): ExecutorService = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "offline-yt-playback-position").apply { isDaemon = true } }
 private fun MediaController.knownPositionMs(): Long = currentPosition.coerceAtLeast(0L)
 private fun MediaController.knownDurationMs(): Long? = duration.takeIf { value -> value > 0L && value != C.TIME_UNSET }
+
+private fun formatPlaybackPosition(positionMs: Long): String {
+    val seconds = positionMs.coerceAtLeast(0L) / 1_000L
+    return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+}
