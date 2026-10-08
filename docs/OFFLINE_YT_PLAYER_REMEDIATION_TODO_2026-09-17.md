@@ -520,10 +520,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-907 — MediaSession behavioral qualification
 
-- [ ] Prove UI controls manipulate the session player.
-- [ ] Prove MediaSession/controller commands manipulate the same player.
+- [x] Prove UI controls manipulate the session player.
+- [x] Prove MediaSession/controller commands manipulate the same player.
 - [ ] Test headset/system play-pause/seek where emulator APIs permit.
 - [ ] Prove current item/position agree between UI and session.
+
+**RMD-907 incremental evidence (exact qualified master):** `app/src/androidTest/java/com/ekkus/offlineytplayer/playback/PlaybackSessionBehaviorInstrumentedTest.kt` exercises the production `PortraitPlayerScreen` speed button through a real `SessionToken`/`MediaController` and observes the resulting speed on a second controller attached to the service-owned `PlaybackSessionService` player. The same device-side test suite drives independent controllers to set a media item, play, pause, and change speed, verifying both observe the same media identity and playback state. Exact `master` SHA `8dffb2db9692ad0964ed9a8ec717307c56086d34` passed CI `37699309483`, Android smoke `37699309485` (includes this instrumentation class), Android FGS timeout `37699309522`, Supply chain `37699309604`, CI evidence `37699309502`, and Deterministic E2E fixture `37699309489`. Headset/system media-key play-pause/seek and UI-versus-session position agreement remain unchecked pending targeted device qualification; controller speed/item agreement alone is not sufficient evidence for those separate requirements.
 
 ---
 
