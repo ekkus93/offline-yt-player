@@ -47,6 +47,10 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
+    private companion object {
+        const val SAVED_LIBRARY_QUERY = "library_query"
+        const val MAX_LIBRARY_QUERY_CHARS = 256
+    }
     private val bootstrapExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "offline-yt-production-bootstrap").apply { isDaemon = true }
     }
@@ -73,6 +77,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Compose restores the visible search draft; restore the matching repository query too.
+        // Otherwise the UI can display a filter that the reopened repository does not apply.
+        libraryQuery = savedInstanceState?.getString(SAVED_LIBRARY_QUERY)
+            ?.trim()?.take(MAX_LIBRARY_QUERY_CHARS)?.takeIf { it.isNotEmpty() }
         val settings = SharedPreferencesAppSettingsStore.open(this)
         settingsStore = settings
         settingsSnapshot = settings.snapshot()
@@ -89,12 +97,17 @@ class MainActivity : ComponentActivity() {
                 libraryDetailsGatewayProvider = { libraryDetailsGateway },
                 libraryMutationGatewayProvider = { libraryMutationGateway },
                 libraryRootPath = filesDir.absolutePath,
-                onLibraryQueryChanged = { query -> libraryQuery = query.trim().takeIf { it.isNotEmpty() } },
+                onLibraryQueryChanged = { query -> libraryQuery = query.trim().take(MAX_LIBRARY_QUERY_CHARS).takeIf { it.isNotEmpty() } },
                 settingsSnapshot = settingsSnapshot,
                 onUpdateSettings = { mutation -> settingsStore?.update(mutation) },
             )
         }
         bootstrapProductionUi()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(SAVED_LIBRARY_QUERY, libraryQuery)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onStart() {

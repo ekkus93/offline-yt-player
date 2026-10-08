@@ -376,6 +376,8 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Keep blocking FFI/network work off main thread.
 - [ ] Restore relevant UI state across configuration/process recreation where appropriate.
 
+**RMD-604 incremental repair (pending exact-head qualification):** MainActivity now saves and restores the repository-side Library search query in its Activity instance state, matching the Compose search draft restored by `rememberSaveable`; this prevents a visible restored search from silently querying the unfiltered repository after rotation. `MainActivityQueryRecreationInstrumentedTest` exercises real Activity recreation in the API-29 Android smoke lane, complementing `LifecycleStateRestorationComposeTest`'s synthetic Compose saved-state test. This is not process-death qualification, and all RMD-604 checkboxes remain unchecked until complete lifecycle/state ownership and process-recreation evidence is reconciled.
+
 ---
 
 ## RMD-700 — Add and Share workflows
