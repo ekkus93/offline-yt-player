@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiDownloadControlOpenError {
-    #[error("persistence error: {message}")]
-    Persistence { message: String },
+    #[error("persistence error: {details}")]
+    Persistence { details: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -37,7 +37,7 @@ impl FfiDownloadControlService {
                 })
             })
             .map_err(|error| FfiDownloadControlOpenError::Persistence {
-                message: error.message,
+                details: error.message,
             })
     }
 

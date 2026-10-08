@@ -119,8 +119,8 @@ pub struct FfiError {
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiCoreServiceOpenError {
-    #[error("persistence error: {message}")]
-    Persistence { message: String },
+    #[error("persistence error: {details}")]
+    Persistence { details: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -159,7 +159,7 @@ impl FfiCoreService {
         LibraryStore::open(&database_path)
             .map(|library| Arc::new(Self { library }))
             .map_err(|error| FfiCoreServiceOpenError::Persistence {
-                message: error.message,
+                details: error.message,
             })
     }
 

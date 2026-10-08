@@ -11,8 +11,8 @@ pub struct FfiLibraryRemoveResult {
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiLibraryRemoveServiceOpenError {
-    #[error("persistence error: {message}")]
-    Persistence { message: String },
+    #[error("persistence error: {details}")]
+    Persistence { details: String },
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -27,7 +27,7 @@ impl FfiLibraryRemoveService {
         LibraryStore::open(&database_path)
             .map(|library| Arc::new(Self { library }))
             .map_err(|error| FfiLibraryRemoveServiceOpenError::Persistence {
-                message: error.message,
+                details: error.message,
             })
     }
 

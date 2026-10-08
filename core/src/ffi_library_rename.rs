@@ -12,8 +12,8 @@ pub struct FfiLibraryRenameResult {
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiLibraryRenameServiceOpenError {
-    #[error("persistence error: {message}")]
-    Persistence { message: String },
+    #[error("persistence error: {details}")]
+    Persistence { details: String },
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -28,7 +28,7 @@ impl FfiLibraryRenameService {
         LibraryStore::open(&database_path)
             .map(|library| Arc::new(Self { library }))
             .map_err(|error| FfiLibraryRenameServiceOpenError::Persistence {
-                message: error.message,
+                details: error.message,
             })
     }
 

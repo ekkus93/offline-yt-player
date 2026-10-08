@@ -31,8 +31,8 @@ pub struct FfiLibraryPlaybackAssetsResult {
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiLibraryPlaybackServiceOpenError {
-    #[error("persistence error: {message}")]
-    Persistence { message: String },
+    #[error("persistence error: {details}")]
+    Persistence { details: String },
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -47,7 +47,7 @@ impl FfiLibraryPlaybackService {
         LibraryStore::open(&database_path)
             .map(|library| Arc::new(Self { library }))
             .map_err(|error| FfiLibraryPlaybackServiceOpenError::Persistence {
-                message: error.message,
+                details: error.message,
             })
     }
 
