@@ -1,0 +1,204 @@
+package com.ekkus.offlineytplayer.downloads
+
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
+import java.io.File
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.SocketTimeoutException
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicReference
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val database = File(context.filesDir, DATABASE_NAME)
+
+    @After
+    fun cleanRuntimeState() {
+        deleteRuntimeState()
+    }
+
+    @Test
+    fun generatedWorkerExecutesDeterministicFixtureIntoCompletedLibraryState() {
+        deleteRuntimeState()
+        val jobId = "rmd-1501-android-runtime-fixture"
+        val mediaBytes = "deterministic android runtime fixture media bytes\n".toByteArray()
+        val server = OneShotHttpServer(mediaBytes).also { it.start() }
+        val sourceUrl = "${server.baseUrl}/fixture-source"
+        val mediaUrl = "${server.baseUrl}/media.mp4"
+
+        GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { control ->
+            val result = control.enqueue(jobId)
+            assertNull(result.error)
+            assertEquals(true, result.value)
+        }
+        seedDurableWork(
+            jobId = jobId,
+            sourceUrl = sourceUrl,
+            mediaUrl = mediaUrl,
+            expectedBytes = mediaBytes.size,
+        )
+
+        assertTrue("production Android worker executor should claim and complete fixture work", DownloadWorkerExecutor.execute(context, jobId))
+        server.joinAndRethrow()
+
+        GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+            val queue = core.listDownloadQueue()
+            assertNull(queue.error)
+            val snapshot = requireNotNull(queue.value).single { it.jobId == jobId }
+            assertEquals(CoreDownloadState.COMPLETED, snapshot.state)
+            assertEquals(mediaBytes.size.toLong(), snapshot.bytesDownloaded)
+            assertEquals(mediaBytes.size.toLong(), snapshot.totalBytes)
+
+            val library = core.listLibrary()
+            assertNull(library.error)
+            val item = requireNotNull(library.value).single { it.itemId == jobId }
+            assertTrue(item.completed)
+            assertEquals("RMD-1501 Android runtime fixture", item.displayTitle)
+            assertEquals("720p", item.qualityLabel)
+        }
+
+        val localAsset = File(context.filesDir, "items/rmd-1501-android-runtime/rmd-1501-android-runtime.mp4")
+        assertTrue("worker should persist the fixture asset under the production library root", localAsset.isFile)
+        assertEquals(mediaBytes.size.toLong(), localAsset.length())
+    }
+
+    private fun seedDurableWork(
+        jobId: String,
+        sourceUrl: String,
+        mediaUrl: String,
+        expectedBytes: Int,
+    ) {
+        val planJson = """
+            {
+              "source": {
+                "provider": "direct-fixture",
+                "media_id": "rmd-1501-android-runtime",
+                "canonical_url": "$sourceUrl"
+              },
+              "title": "RMD-1501 Android runtime fixture",
+              "quality": {
+                "choice_id": "fixture-720p",
+                "label": "720p",
+                "estimated_bytes": $expectedBytes,
+                "video_height": 720,
+                "audio_only": false,
+                "compatibility": "Preferred"
+              },
+              "assets": [
+                {
+                  "asset_id": "combined",
+                  "kind": "Video",
+                  "url": "$mediaUrl",
+                  "relative_path": "items/rmd-1501-android-runtime/rmd-1501-android-runtime.mp4",
+                  "expected_bytes": $expectedBytes,
+                  "expected_sha256": null,
+                  "mime_type": "video/mp4"
+                }
+              ]
+            }
+        """.trimIndent()
+        SQLiteDatabase.openDatabase(database.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS download_work_items (
+                  job_id TEXT PRIMARY KEY,
+                  plan_json TEXT NOT NULL,
+                  created_at_epoch_ms INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS download_presentations (
+                  job_id TEXT PRIMARY KEY,
+                  display_title TEXT NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT OR REPLACE INTO download_work_items(job_id, plan_json, created_at_epoch_ms)
+                VALUES(?, ?, ?)
+                """.trimIndent(),
+                arrayOf(jobId, planJson, 1_700_000_000_000L),
+            )
+            db.execSQL(
+                """
+                INSERT OR REPLACE INTO download_presentations(job_id, display_title)
+                VALUES(?, ?)
+                """.trimIndent(),
+                arrayOf(jobId, "RMD-1501 Android runtime fixture"),
+            )
+        }
+    }
+
+    private fun deleteRuntimeState() {
+        context.filesDir.listFiles()?.forEach { file ->
+            if (file.name == "items" || file.name.startsWith(DATABASE_NAME)) {
+                file.deleteRecursively()
+            }
+        }
+    }
+
+    private class OneShotHttpServer(private val body: ByteArray) {
+        private val failure = AtomicReference<Throwable?>()
+        private val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).apply {
+            soTimeout = 15_000
+        }
+        private lateinit var thread: Thread
+
+        val baseUrl: String = "http://127.0.0.1:${server.localPort}"
+
+        fun start() {
+            thread = Thread({
+                try {
+                    server.use { socket ->
+                        val client = socket.accept()
+                        client.use {
+                            val input = it.getInputStream().bufferedReader(StandardCharsets.US_ASCII)
+                            while (true) {
+                                val line = input.readLine() ?: break
+                                if (line.isEmpty()) break
+                            }
+                            val header = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                            it.getOutputStream().use { output ->
+                                output.write(header.toByteArray(StandardCharsets.US_ASCII))
+                                output.write(body)
+                                output.flush()
+                            }
+                        }
+                    }
+                } catch (error: SocketTimeoutException) {
+                    failure.set(AssertionError("fixture media server did not receive a request", error))
+                } catch (error: Throwable) {
+                    failure.set(error)
+                }
+            }, "rmd-1501-fixture-http")
+            thread.start()
+        }
+
+        fun joinAndRethrow() {
+            thread.join(15_000)
+            assertTrue("fixture media server thread should finish", !thread.isAlive)
+            failure.get()?.let { throw AssertionError("fixture media server failed", it) }
+        }
+    }
+
+    private companion object {
+        const val DATABASE_NAME = "offline-yt-player.sqlite3"
+    }
+}
