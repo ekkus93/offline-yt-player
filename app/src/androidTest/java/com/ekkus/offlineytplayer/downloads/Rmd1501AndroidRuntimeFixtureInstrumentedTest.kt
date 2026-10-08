@@ -87,6 +87,55 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
         }
     }
 
+    @Test
+    fun api29ForegroundSchedulerDispatchesFixtureThroughProductionService() {
+        // This complements the direct worker test: scheduling must actually launch the
+        // Android foreground-service fallback, not just invoke the worker from the test.
+        org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
+        deleteRuntimeState()
+        val jobId = "rmd-1501-scheduled-android-fixture"
+        val mediaBytes = "scheduled foreground-service fixture media bytes\n".toByteArray()
+        val server = OneShotHttpServer(mediaBytes).also { it.start() }
+        val sourceUrl = "${server.baseUrl}/fixture-source"
+        val mediaUrl = "${server.baseUrl}/media.mp4"
+
+        GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { control ->
+            val result = control.enqueue(jobId)
+            assertNull(result.error)
+            assertEquals(true, result.value)
+        }
+        seedDurableWork(jobId, sourceUrl, mediaUrl, mediaBytes.size)
+
+        val scheduled = AndroidDownloadExecutionScheduler(context).schedule(
+            DownloadScheduleRequest(queueItemId = jobId),
+        )
+        assertEquals(DownloadSchedulerKind.ForegroundServiceFallback, scheduled.kind)
+        assertTrue("foreground-service scheduler should accept fixture work", scheduled.accepted)
+
+        var state: CoreDownloadState? = null
+        val deadline = android.os.SystemClock.elapsedRealtime() + 60_000L
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val queue = core.listDownloadQueue()
+                assertNull(queue.error)
+                state = queue.value?.firstOrNull { it.jobId == jobId }?.state
+            }
+            if (state == CoreDownloadState.COMPLETED || state == CoreDownloadState.FAILED) break
+            Thread.sleep(250)
+        }
+        assertEquals("scheduled service must complete durable fixture work", CoreDownloadState.COMPLETED, state)
+        server.joinAndRethrow()
+
+        val asset = File(context.filesDir, "items/rmd-1501-android-runtime/rmd-1501-android-runtime.mp4")
+        assertTrue("scheduled worker must persist the local media asset", asset.isFile)
+        assertArrayEquals(mediaBytes, asset.readBytes())
+        GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+            val descriptors = playback.listPlaybackAssets()
+            assertNull(descriptors.error)
+            assertTrue(requireNotNull(descriptors.value).any { it.itemId == jobId && it.playable })
+        }
+    }
+
     private fun seedDurableWork(
         jobId: String,
         sourceUrl: String,
