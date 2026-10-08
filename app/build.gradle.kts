@@ -135,7 +135,9 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
     implementation(libs.media3.ui)
-    implementation(libs.jna)
+    // UniFFI's generated Kotlin bindings use JNA. The plain JAR omits Android's
+    // libjnidispatch.so; the AAR packages it for each supported APK ABI.
+    implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 
