@@ -1,18 +1,30 @@
 package com.ekkus.offlineytplayer.downloads
 
+import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
+import android.os.SystemClock
 import android.database.sqlite.SQLiteDatabase
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
+import com.ekkus.offlineytplayer.playback.PlaybackSessionService
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.SocketTimeoutException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -136,11 +148,121 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun scheduledFixtureReopensOfflineAndPlaysViaCanonicalMediaSession() {
+        org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT in 26..33)
+        deleteRuntimeState()
+        val jobId = "rmd-1501-offline-session-wave"
+        val wave = deterministicWaveBytes()
+        val server = OneShotHttpServer(wave, "audio/wav").also { it.start() }
+        val sourceUrl = "${server.baseUrl}/fixture-source"
+        val mediaUrl = "${server.baseUrl}/offline.wav"
+        val relativePath = "items/rmd-1501-android-runtime/offline.wav"
+
+        GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { control ->
+            val enqueued = control.enqueue(jobId)
+            assertNull(enqueued.error)
+            assertEquals(true, enqueued.value)
+        }
+        seedDurableWork(
+            jobId, sourceUrl, mediaUrl, wave.size,
+            relativePath = relativePath,
+            mimeType = "audio/wav",
+        )
+        val scheduled = AndroidDownloadExecutionScheduler(context).schedule(DownloadScheduleRequest(jobId))
+        assertEquals(DownloadSchedulerKind.ForegroundServiceFallback, scheduled.kind)
+        assertTrue("production scheduler should accept the offline fixture", scheduled.accepted)
+
+        var state: CoreDownloadState? = null
+        val downloadDeadline = SystemClock.elapsedRealtime() + 60_000L
+        while (SystemClock.elapsedRealtime() < downloadDeadline) {
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val queue = core.listDownloadQueue()
+                assertNull(queue.error)
+                state = queue.value?.firstOrNull { it.jobId == jobId }?.state
+            }
+            if (state == CoreDownloadState.COMPLETED || state == CoreDownloadState.FAILED) break
+            Thread.sleep(250)
+        }
+        assertEquals("production scheduler must complete the local fixture", CoreDownloadState.COMPLETED, state)
+        server.joinAndRethrow() // The only fixture HTTP server is now closed.
+
+        // Reopen the durable gateways as a cold repository reader with no source server.
+        val localAsset = File(context.filesDir, relativePath)
+        assertTrue(localAsset.isFile)
+        assertArrayEquals(wave, localAsset.readBytes())
+        GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+            val library = core.listLibrary()
+            assertNull(library.error)
+            assertTrue(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
+        }
+        GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+            val assets = playback.listPlaybackAssets()
+            assertNull(assets.error)
+            val descriptor = requireNotNull(assets.value).single { it.itemId == jobId }
+            assertTrue(descriptor.playable)
+            assertEquals(relativePath, descriptor.videoRelativePath)
+        }
+
+        // The production MediaSessionService/ExoPlayer must prepare and play the
+        // downloaded local file after the fixture server has been shut down.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            instrumentation.runOnMainSync {
+                controller.setMediaItem(MediaItem.fromUri(Uri.fromFile(localAsset)))
+                controller.prepare()
+                controller.play()
+            }
+            var ready = false
+            val playbackDeadline = SystemClock.elapsedRealtime() + 10_000L
+            while (SystemClock.elapsedRealtime() < playbackDeadline) {
+                instrumentation.runOnMainSync {
+                    ready = controller.playbackState == Player.STATE_READY &&
+                        controller.playWhenReady &&
+                        controller.currentMediaItem?.localConfiguration?.uri == Uri.fromFile(localAsset)
+                }
+                if (ready) break
+                SystemClock.sleep(50)
+            }
+            assertTrue("canonical session must play the downloaded local fixture offline", ready)
+        } finally {
+            instrumentation.runOnMainSync {
+                controller.pause()
+                controller.clearMediaItems()
+                controller.release()
+            }
+        }
+    }
+
+    private fun deterministicWaveBytes(): ByteArray {
+        val sampleRate = 8_000
+        val pcmBytes = sampleRate * 2 * 2
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+        header.put("RIFF".toByteArray(StandardCharsets.US_ASCII))
+        header.putInt(pcmBytes + 36)
+        header.put("WAVEfmt ".toByteArray(StandardCharsets.US_ASCII))
+        header.putInt(16)
+        header.putShort(1.toShort())
+        header.putShort(1.toShort())
+        header.putInt(sampleRate)
+        header.putInt(sampleRate * 2)
+        header.putShort(2.toShort())
+        header.putShort(16.toShort())
+        header.put("data".toByteArray(StandardCharsets.US_ASCII))
+        header.putInt(pcmBytes)
+        return header.array() + ByteArray(pcmBytes)
+    }
+
     private fun seedDurableWork(
         jobId: String,
         sourceUrl: String,
         mediaUrl: String,
         expectedBytes: Int,
+        relativePath: String = "items/rmd-1501-android-runtime/rmd-1501-android-runtime.mp4",
+        mimeType: String = "video/mp4",
     ) {
         val planJson = """
             {
@@ -163,10 +285,10 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
                   "asset_id": "combined",
                   "kind": "Video",
                   "url": "$mediaUrl",
-                  "relative_path": "items/rmd-1501-android-runtime/rmd-1501-android-runtime.mp4",
+                  "relative_path": "$relativePath",
                   "expected_bytes": $expectedBytes,
                   "expected_sha256": null,
-                  "mime_type": "video/mp4"
+                  "mime_type": "$mimeType"
                 }
               ]
             }
@@ -214,7 +336,7 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
         }
     }
 
-    private class OneShotHttpServer(private val body: ByteArray) {
+    private class OneShotHttpServer(private val body: ByteArray, private val contentType: String = "video/mp4") {
         private val failure = AtomicReference<Throwable?>()
         private val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).apply {
             soTimeout = 15_000
@@ -234,7 +356,7 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
                                 val line = input.readLine() ?: break
                                 if (line.isEmpty()) break
                             }
-                            val header = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                            val header = "HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
                             it.getOutputStream().use { output ->
                                 output.write(header.toByteArray(StandardCharsets.US_ASCII))
                                 output.write(body)
