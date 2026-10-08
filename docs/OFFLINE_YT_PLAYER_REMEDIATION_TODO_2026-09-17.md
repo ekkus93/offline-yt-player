@@ -830,12 +830,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1504 — Share E2E
 
-- [ ] Send `ACTION_SEND text/plain` fixture/supported input.
-- [ ] Enter real analysis/setup pipeline.
+- [x] Send `ACTION_SEND text/plain` fixture/supported input.
+- [x] Enter real analysis/setup pipeline.
 
-- [ ] Schedule/download.
-- [ ] Verify Library state.
-- [ ] Verify back-stack behavior.
+- [x] Schedule/download.
+- [x] Verify Library state.
+- [x] Verify back-stack behavior.
+
+**Evidence (RMD-1504):** `app/src/androidTest/java/com/ekkus/offlineytplayer/Rmd1504ShareE2EInstrumentedTest.kt` runs `actionSendFlowsThroughAnalyzeSetupRealSchedulerWorkerLibraryAndBackStack` in the packaged API-29 Android smoke suite (`.github/workflows/android-smoke.yml`). It sends a real `ACTION_SEND text/plain` intent containing a fixture-supported URL to production `MainActivity`, exercises its analysis and Download Setup screens through the injected deterministic source gateway, dispatches a planned fixture through the actual Android scheduler/core worker into persisted local media and the production Library screen, then verifies Back returns from Add to Library. Exact already-merged `master` SHA `e89912f5e9b16eb83cdc7cd3651f04d77fb97a67` passed Android smoke run `37826114126` (including this test), CI `37826114032`, Android FGS timeout `37826114046`, deterministic fixture E2E `37826113874`, Supply chain `37826114114`, and CI evidence `37826113973`. This qualifies only the five RMD-1504 Share E2E subtasks; the separately failing Android cold-start lane `37826113886` is **not** counted as passed, and RMD-1501/1502/1503 offline cold-start closeout remains open.
 
 ### RMD-1505 — Storage failure E2E
 
