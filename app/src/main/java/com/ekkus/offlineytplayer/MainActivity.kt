@@ -59,11 +59,11 @@ class MainActivity : ComponentActivity() {
         Thread(runnable, "offline-yt-production-bootstrap").apply { isDaemon = true }
     }
     private var coreGateway: GeneratedUniffiCoreGateway? = null
-    private var downloadControlGateway: AppDownloadControlGateway? = null
+    private var downloadControlGateway by mutableStateOf<AppDownloadControlGateway?>(null)
     private var libraryPlaybackGateway: GeneratedUniffiLibraryPlaybackGateway? = null
-    private var libraryDetailsGateway: AppLibraryDetailsGateway? = null
-    private var libraryMutationGateway: AppLibraryMutationGateway? = null
-    private var sourceAnalysisGateway: AppSourceAnalysisGateway? = null
+    private var libraryDetailsGateway by mutableStateOf<AppLibraryDetailsGateway?>(null)
+    private var libraryMutationGateway by mutableStateOf<AppLibraryMutationGateway?>(null)
+    private var sourceAnalysisGateway by mutableStateOf<AppSourceAnalysisGateway?>(null)
     private var downloadPresentationGateway: DownloadPresentationGateway? = null
     private var settingsStore: SharedPreferencesAppSettingsStore? = null
     private var settingsSubscription: SettingsSubscription? = null
