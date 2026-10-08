@@ -16,6 +16,8 @@ import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
+import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
+import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 import com.ekkus.offlineytplayer.playback.PlaybackSessionService
 import java.io.File
 import java.net.InetAddress
@@ -197,13 +199,27 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
             assertNull(library.error)
             assertTrue(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
         }
-        GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
+        val offlineMediaItem = GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
             val assets = playback.listPlaybackAssets()
             assertNull(assets.error)
             val descriptor = requireNotNull(assets.value).single { it.itemId == jobId }
             assertTrue(descriptor.playable)
             assertEquals(relativePath, descriptor.videoRelativePath)
+            // Exercise the same descriptor-to-local-MediaItem policy used by the
+            // production Library/Player, rather than passing a raw fixture URI.
+            LocalPlaybackPolicy.mediaItemFor(
+                LocalPlaybackAsset(
+                    videoPath = File(context.filesDir, descriptor.videoRelativePath).absolutePath,
+                    audioPath = descriptor.audioRelativePath?.let { File(context.filesDir, it).absolutePath },
+                    title = "RMD-1501 Android runtime fixture",
+                    itemId = jobId,
+                ),
+            )
         }
+        assertEquals(Uri.fromFile(localAsset), offlineMediaItem.localConfiguration?.uri)
+        assertEquals(jobId, LocalPlaybackPolicy.persistableItemId(
+            LocalPlaybackAsset(videoPath = localAsset.absolutePath, title = "RMD-1501 Android runtime fixture", itemId = jobId),
+        ))
 
         // The production MediaSessionService/ExoPlayer must prepare and play the
         // downloaded local file after the fixture server has been shut down.
@@ -212,7 +228,7 @@ class Rmd1501AndroidRuntimeFixtureInstrumentedTest {
         val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
         try {
             instrumentation.runOnMainSync {
-                controller.setMediaItem(MediaItem.fromUri(Uri.fromFile(localAsset)))
+                controller.setMediaItem(offlineMediaItem)
                 controller.prepare()
                 controller.play()
             }
