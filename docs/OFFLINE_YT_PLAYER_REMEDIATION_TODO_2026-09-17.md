@@ -842,12 +842,15 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-1505 — Storage failure E2E
 
 - [x] Exercise insufficient-space preflight.
-- [ ] Exercise write failure/ENOSPC path where infrastructure permits.
-- [ ] Verify partial cleanup/recoverability.
+- [x] Exercise write failure/ENOSPC path where infrastructure permits.
+- [x] Verify partial cleanup/recoverability.
 - [x] Verify user-visible actionable failure.
 - [x] Verify no false completed library record.
 
 **RMD-1505 storage-preflight production repair (qualified incremental E2E):** independent review found that `DownloadEngine.preflight_space(...)` existed but the production transfer path never called it. The transfer engine now checks actual filesystem availability with `statvfs` before opening the network request, subtracts any resumable partial bytes from the required capacity, and returns permanent `InsufficientStorage` before writing when the remaining expected bytes exceed available space. Rust coverage proves this preflight wins over an unreachable-network URL. `Rmd1505StorageFailureInstrumentedTest` drives the packaged generated worker with a deliberately oversized deterministic plan, verifies durable `FAILED` state plus a non-retryable storage diagnostic, verifies no partial/final asset and no completed Library item, and verifies production Downloads UI shows the actionable failure. Exact implementation `bcd298d7e87db55dee16d3ab485c9214998c8033` passed CI `37767072682`, Android smoke `37767072673`, Android FGS timeout `37767072664`, Supply chain `37767072641`, CI evidence `37767072745`, and deterministic fixture `37767072764`; see `docs/RMD_1505_1507_EXACT_HEAD_QUALIFICATION_2026-10-08.md`. The real ENOSPC/write-failure injection and mid-transfer partial recovery remain open.
+
+
+**RMD-1505 portable write-time ENOSPC and partial-recovery evidence:** `core/src/download.rs::write_time_enospc_preserves_partial_and_next_attempt_resumes_to_completion` exercises the real `DownloadEngine::transfer` against a local HTTP fixture, injects an OS-shaped ENOSPC (`raw_os_error(28)`) after 17 bytes are physically written, and verifies non-retryable `InsufficientStorage`, no promoted final asset, exact retained partial length, and retained HTTP representation identity. A second real transfer reuses the validated partial range, verifies the final bytes match the fixture, and asserts the partial file and resume sidecar are removed after successful promotion. The injection is `#[cfg(test)]` and does not affect production; it is the available deterministic filesystem-write qualification tier under `docs/ANDROID_QUALIFICATION_ACCELERATION_PLAN_2026-09-22.md`, **not** a claim of physically filling Android device storage. The separately qualified packaged Android `Rmd1505StorageFailureInstrumentedTest` covers production worker/queue/UI error behavior on insufficient-space preflight. Exact previously merged master `fb643860264808c6dd4b29bbe52021ad437b5ba0` passed CI `37845850441` (including Rust tests), Android smoke `37845850545`, Android FGS timeout `37845850558`, Supply chain `37845850532`, CI evidence `37845850440`, and Deterministic E2E fixture `37845850479`. Android cold-start `37845850445` failed in unrelated RMD-1501 and is **not** counted as passing. These two RMD-1505 subtasks are reconciled for portable write-time ENOSPC and recoverable partials, not for an additional physical-device disk-fill run.
 
 
 ### RMD-1506 — Connectivity E2E
