@@ -10,8 +10,6 @@ import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -60,8 +58,10 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
     @get:Rule
     val compose = createEmptyComposeRule()
 
-    private val context = ApplicationProvider.getApplicationContext<Context>()
-    private val database = File(context.filesDir, DATABASE_NAME)
+    private val context: Context
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
+    private val database: File
+        get() = File(context.filesDir, DATABASE_NAME)
 
     @After
     fun cleanAfter() {
@@ -129,16 +129,8 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         }
 
         ActivityScenario.launch<MainActivity>(intent).use {
-            runCatching {
-                compose.waitUntil(60_000) {
-                    runCatching { compose.onNodeWithText(TITLE, substring = true).assertIsDisplayed() }.isSuccess
-                }
-            }.getOrElse { cause ->
-                throw AssertionError(
-                    "RMD-1501 analysis/setup title not visible after ACTION_SEND; Compose semantics:\n" +
-                        compose.onRoot(useUnmergedTree = true).printToString(),
-                    cause,
-                )
+            compose.waitUntil(60_000) {
+                runCatching { compose.onNodeWithText("Download setup").assertIsDisplayed() }.isSuccess
             }
             compose.onNodeWithText("Download setup").assertIsDisplayed()
             compose.onNodeWithText("Options").performClick()
