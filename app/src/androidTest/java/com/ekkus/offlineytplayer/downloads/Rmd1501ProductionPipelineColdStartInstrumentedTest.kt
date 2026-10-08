@@ -9,7 +9,7 @@ import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.media3.common.Player
@@ -60,7 +60,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class Rmd1501ProductionPipelineColdStartInstrumentedTest {
     @get:Rule
-    val compose = createEmptyComposeRule()
+    val compose = createComposeRule()
 
     private val context: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
