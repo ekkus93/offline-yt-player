@@ -13,6 +13,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.ui.PortraitPlayerScreen
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -103,6 +105,69 @@ class PlaybackSessionBehaviorInstrumentedTest {
             instrumentation.runOnMainSync {
                 first.release()
                 second.release()
+            }
+        }
+    }
+
+
+    @Test
+    fun composeSeekControlsReachTheCanonicalSessionPosition() {
+        val audio = createLocalWaveFixture()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            compose.setContent {
+                PortraitPlayerScreen(
+                    asset = LocalPlaybackAsset(videoPath = audio.absolutePath, title = "Seek fixture"),
+                    settings = AppSettingsSnapshot(),
+                    onUpdateSettings = {},
+                    onBack = {},
+                )
+            }
+            waitForControllerState(observer) {
+                currentMediaItem?.localConfiguration?.uri?.path == audio.absolutePath &&
+                    playbackState == androidx.media3.common.Player.STATE_READY
+            }
+            compose.waitForIdle()
+            compose.onNodeWithText("+10s").performClick()
+            waitForControllerState(observer) { currentPosition in 9_000L..12_000L }
+            compose.onNodeWithText("-10s").performClick()
+            waitForControllerState(observer) { currentPosition in 0L..2_000L }
+            instrumentation.runOnMainSync {
+                assertEquals(audio.absolutePath, observer.currentMediaItem?.localConfiguration?.uri?.path)
+            }
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+            audio.delete()
+        }
+    }
+
+    private fun createLocalWaveFixture(): File {
+        val sampleRate = 8_000
+        val pcmBytes = sampleRate * 45 * 2
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+        header.put("RIFF".toByteArray(Charsets.US_ASCII))
+        header.putInt(pcmBytes + 36)
+        header.put("WAVEfmt ".toByteArray(Charsets.US_ASCII))
+        header.putInt(16)
+        header.putShort(1.toShort())
+        header.putShort(1.toShort())
+        header.putInt(sampleRate)
+        header.putInt(sampleRate * 2)
+        header.putShort(2.toShort())
+        header.putShort(16.toShort())
+        header.put("data".toByteArray(Charsets.US_ASCII))
+        header.putInt(pcmBytes)
+        return File(context.cacheDir, "rmd907-session-seek.wav").apply {
+            outputStream().use { output ->
+                output.write(header.array())
+                val silence = ByteArray(8_192)
+                var remaining = pcmBytes
+                while (remaining > 0) {
+                    val count = minOf(remaining, silence.size)
+                    output.write(silence, 0, count)
+                    remaining -= count
+                }
             }
         }
     }
