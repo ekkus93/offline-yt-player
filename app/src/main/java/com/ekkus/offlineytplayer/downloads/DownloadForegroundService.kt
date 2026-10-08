@@ -197,13 +197,16 @@ class DownloadForegroundService : Service() {
 
     private fun ensureConnectivityObserver() {
         if (connectivityObserver != null) return
-        connectivityObserver = AndroidDownloadConnectivityObserver(this) { connectivity ->
-            lastConnectivity = connectivity
-            lastNetworkDecision = DownloadNetworkPolicy.decision(activeNetworkPreference, connectivity)
-            Thread {
-                handleConnectivityChange(connectivity)
-            }.start()
-        }.also(AndroidDownloadConnectivityObserver::start)
+        connectivityObserver = AndroidDownloadConnectivityObserver(
+            context = this,
+            onConnectivityChanged = { connectivity ->
+                lastConnectivity = connectivity
+                lastNetworkDecision = DownloadNetworkPolicy.decision(activeNetworkPreference, connectivity)
+                Thread {
+                    handleConnectivityChange(connectivity)
+                }.start()
+            },
+        ).also { it.start() }
     }
 
     private fun handleConnectivityChange(connectivity: DownloadConnectivity) {
