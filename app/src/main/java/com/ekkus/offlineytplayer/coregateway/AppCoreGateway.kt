@@ -217,13 +217,13 @@ class GeneratedUniffiCoreGateway private constructor(
 
         private fun openGeneratedService(databasePath: String): Any =
             openGeneratedService(
-                className = "com.ekkus.offlineytplayer.core.FfiCoreService",
+                className = com.ekkus.offlineytplayer.core.FfiCoreService::class.java.name,
                 databasePath = databasePath,
             )
 
         private fun openGeneratedStartupReconciliationService(databasePath: String): Any =
             openGeneratedService(
-                className = "com.ekkus.offlineytplayer.core.FfiStartupReconciliationService",
+                className = com.ekkus.offlineytplayer.core.FfiStartupReconciliationService::class.java.name,
                 databasePath = databasePath,
             )
 
