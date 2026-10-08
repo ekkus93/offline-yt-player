@@ -1,6 +1,7 @@
 package com.ekkus.offlineytplayer
 
 import com.ekkus.offlineytplayer.coregateway.AppCoreGateway
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayError
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadSnapshot
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
@@ -44,16 +45,25 @@ class AppStateRefresher(
     private fun refresh(epoch: Long) {
         if (epoch != lifecycleEpoch.get() || !refreshInFlight.compareAndSet(false, true)) return
         try {
-            val library = gateway.listLibrary(libraryQuery())
+            val library = readSafely("Library") { gateway.listLibrary(libraryQuery()) }
             if (epoch != lifecycleEpoch.get()) return
-            onLibrary(library)
-            val downloads = gateway.listDownloadQueue()
+            try { onLibrary(library) } catch (_: RuntimeException) { /* Retry on the next poll. */ }
+            val downloads = readSafely("Downloads") { gateway.listDownloadQueue() }
             if (epoch != lifecycleEpoch.get()) return
-            onDownloads(downloads)
+            try { onDownloads(downloads) } catch (_: RuntimeException) { /* Retry on the next poll. */ }
         } finally {
             refreshInFlight.set(false)
         }
     }
+
+    private fun <T> readSafely(label: String, read: () -> CoreGatewayResult<T>): CoreGatewayResult<T> =
+        try {
+            read()
+        } catch (_: RuntimeException) {
+            // Do not let a transient FFI/repository exception permanently cancel periodic polling.
+            // Never expose exception text, which may contain paths or source URLs, to the UI.
+            CoreGatewayResult(null, CoreGatewayError("repository_unavailable", "$label refresh failed", true))
+        }
 
     override fun close() = stop()
 }

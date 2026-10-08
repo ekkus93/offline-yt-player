@@ -168,4 +168,70 @@ class AppStateRefresherTest {
         assertEquals(0, stalePublications.get())
     }
 
+    @Test
+    fun transientRepositoryFailuresPublishSanitizedErrorsAndRecoverOnNextPoll() {
+        val base = FakeCoreGateway()
+        val libraryCalls = AtomicInteger()
+        val downloadCalls = AtomicInteger()
+        val libraryFailed = CountDownLatch(1)
+        val libraryRecovered = CountDownLatch(1)
+        val downloadsFailed = CountDownLatch(1)
+        val downloadsRecovered = CountDownLatch(1)
+        val libraryDiagnostic = AtomicReference<String?>()
+        val downloadsDiagnostic = AtomicReference<String?>()
+        val gateway = object : AppCoreGateway by base {
+            override fun listLibrary(query: String?): CoreGatewayResult<List<CoreLibraryItem>> {
+                if (libraryCalls.incrementAndGet() == 1) throw IllegalStateException("private library URL")
+                return base.listLibrary(query)
+            }
+            override fun listDownloadQueue(): CoreGatewayResult<List<CoreDownloadSnapshot>> {
+                if (downloadCalls.incrementAndGet() == 1) throw IllegalStateException("private download path")
+                return base.listDownloadQueue()
+            }
+        }
+        AppStateRefresher(
+            gateway = gateway,
+            onLibrary = { result ->
+                if (result.error != null) {
+                    libraryDiagnostic.set(result.error.message)
+                    libraryFailed.countDown()
+                } else libraryRecovered.countDown()
+            },
+            onDownloads = { result ->
+                if (result.error != null) {
+                    downloadsDiagnostic.set(result.error.message)
+                    downloadsFailed.countDown()
+                } else downloadsRecovered.countDown()
+            },
+            intervalMs = 25L,
+        ).use { refresher ->
+            refresher.start()
+            assertTrue(libraryFailed.await(2, TimeUnit.SECONDS))
+            assertTrue(downloadsFailed.await(2, TimeUnit.SECONDS))
+            assertTrue(libraryRecovered.await(2, TimeUnit.SECONDS))
+            assertTrue(downloadsRecovered.await(2, TimeUnit.SECONDS))
+        }
+        assertEquals("Library refresh failed", libraryDiagnostic.get())
+        assertEquals("Downloads refresh failed", downloadsDiagnostic.get())
+    }
+
+    @Test
+    fun transientPublicationCallbackFailureDoesNotDisableFutureRefreshes() {
+        val calls = AtomicInteger()
+        val recovered = CountDownLatch(1)
+        AppStateRefresher(
+            gateway = FakeCoreGateway(),
+            onLibrary = {
+                if (calls.incrementAndGet() == 1) throw IllegalStateException("transient UI callback")
+                recovered.countDown()
+            },
+            onDownloads = {},
+            intervalMs = 25L,
+        ).use { refresher ->
+            refresher.start()
+            assertTrue(recovered.await(2, TimeUnit.SECONDS))
+        }
+        assertTrue(calls.get() >= 2)
+    }
+
 }
