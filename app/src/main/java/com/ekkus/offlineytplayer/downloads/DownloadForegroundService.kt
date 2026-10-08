@@ -264,7 +264,14 @@ class DownloadForegroundService : Service() {
     }
 
     private fun settleWorkerAfterExecution(queueItemId: String) {
-        if (activeQueueItemId != queueItemId) return
+        if (activeQueueItemId != queueItemId) {
+            // A newer schedule/resume command can replace the active job while the previous
+            // worker is still running. Its observer-reuse kick sees workerRunning=true and
+            // cannot dispatch yet; hand off once the previous worker releases that guard.
+            // Re-evaluate the current connectivity policy rather than assuming it is allowed.
+            handleConnectivityChange(lastConnectivity)
+            return
+        }
 
         if (
             lastNetworkDecision == DownloadNetworkDecision.PauseForConnectivity &&

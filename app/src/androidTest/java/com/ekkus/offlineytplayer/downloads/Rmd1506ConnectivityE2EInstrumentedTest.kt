@@ -177,6 +177,61 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         }
     }
 
+    @Test
+    fun secondScheduleDuringActiveTransferDispatchesAfterFirstWorkerWithoutNewNetworkCallback() {
+        deleteRuntimeState()
+        val firstJobId = "rmd-1506-observer-active-first"
+        val secondJobId = "rmd-1506-observer-active-second"
+        val firstPath = "items/rmd-1506-observer-active-first/video.mp4"
+        val secondPath = "items/rmd-1506-observer-active-second/video.mp4"
+        // The existing fixture server intentionally throttles each 4 KiB chunk, so the
+        // second schedule arrives while the first real generated-core worker is active.
+        val firstPayload = ByteArray(2 * 1024 * 1024) { index -> (index % 251).toByte() }
+        val secondPayload = ByteArray(16 * 1024) { index -> (index % 239).toByte() }
+        val firstServer = SlowRangeFixtureServer(firstPayload).also { it.start() }
+        val secondServer = SlowRangeFixtureServer(secondPayload).also { it.start() }
+        val registrations = AtomicInteger(0)
+        val callbacks = AtomicInteger(0)
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { _, onChanged ->
+            registrations.incrementAndGet()
+            callbacks.incrementAndGet()
+            onChanged(DownloadConnectivity.Unmetered)
+            Closeable { }
+        }
+        try {
+            GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { controls ->
+                for (jobId in listOf(firstJobId, secondJobId)) {
+                    val result = controls.enqueue(jobId)
+                    assertNull(result.error)
+                    assertEquals(true, result.value)
+                }
+            }
+            seedDurableWork(firstJobId, firstServer.mediaUrl, firstPath, firstPayload.size)
+            seedDurableWork(secondJobId, secondServer.mediaUrl, secondPath, secondPayload.size)
+
+            val scheduler = AndroidDownloadExecutionScheduler(context)
+            assertTrue(scheduler.schedule(DownloadScheduleRequest(firstJobId)).accepted)
+            waitForState(firstJobId, CoreDownloadState.DOWNLOADING)
+            assertEquals(1, registrations.get())
+            assertEquals(1, callbacks.get())
+
+            // This intent reuses the already-registered observer; it cannot start its worker
+            // until the first worker exits, and the observer deliberately emits no new event.
+            assertTrue(scheduler.schedule(DownloadScheduleRequest(secondJobId)).accepted)
+            waitForState(firstJobId, CoreDownloadState.COMPLETED)
+            waitForState(secondJobId, CoreDownloadState.COMPLETED)
+            assertEquals(firstPayload.size.toLong(), File(context.filesDir, firstPath).length())
+            assertEquals(secondPayload.toList(), File(context.filesDir, secondPath).readBytes().toList())
+            assertEquals("observer must not be registered twice", 1, registrations.get())
+            assertEquals("no second network callback may be needed", 1, callbacks.get())
+        } finally {
+            context.stopService(Intent(context, DownloadForegroundService::class.java))
+            DownloadForegroundService.connectivityObserverFactoryForTesting = null
+            firstServer.close()
+            secondServer.close()
+        }
+    }
+
     private fun waitForServiceNotification() {
         val manager = context.getSystemService(android.app.NotificationManager::class.java)
         val deadline = SystemClock.elapsedRealtime() + 10_000L
