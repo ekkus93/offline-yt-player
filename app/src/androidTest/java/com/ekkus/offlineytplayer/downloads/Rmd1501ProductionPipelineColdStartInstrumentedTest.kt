@@ -68,23 +68,12 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
     private val database: File
         get() = File(context.filesDir, DATABASE_NAME)
 
-    // Each host-driven phase runs in a fresh instrumentation process, unlike the
-
-
-    // packaged smoke suite which initializes the native UniFFI runtime earlier.
-
-
+    // Host-driven phases run in separate instrumentation processes; explicitly initialize
+    // the packaged native library before using generated UniFFI gateways.
     @Before
-
-
     fun loadNativeCore() {
-
-
         System.loadLibrary("offline_yt_core")
-
-
     }
-
 
     @After
     fun cleanAfter() {

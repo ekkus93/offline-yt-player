@@ -54,23 +54,12 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val database = File(context.filesDir, DATABASE_NAME)
 
-    // Each host-driven phase runs in a fresh instrumentation process, unlike the
-
-
-    // packaged smoke suite which initializes the native UniFFI runtime earlier.
-
-
+    // Host-driven phases run in separate instrumentation processes; explicitly initialize
+    // the packaged native library before using generated UniFFI gateways.
     @Before
-
-
     fun loadNativeCore() {
-
-
         System.loadLibrary("offline_yt_core")
-
-
     }
-
 
     @After
     fun cleanRuntimeState() {
@@ -517,3 +506,19 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
                     failure.set(error)
                 }
             }, "rmd-1503-fixture-http")
+            thread.start()
+        }
+
+        fun joinAndRethrow() {
+            thread.join(20_000)
+            assertTrue("fixture server thread should finish", !thread.isAlive)
+            failure.get()?.let { throw AssertionError("fixture server failed", it) }
+        }
+    }
+
+    private companion object {
+        const val DATABASE_NAME = "offline-yt-player.sqlite3"
+        const val VIDEO_RELATIVE_PATH = "items/rmd-1503-subtitle-offline/offline.wav"
+        const val SUBTITLE_RELATIVE_PATH = "items/rmd-1503-subtitle-offline/captions.vtt"
+    }
+}

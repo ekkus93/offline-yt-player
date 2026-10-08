@@ -51,23 +51,12 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val database = File(context.filesDir, DATABASE_NAME)
 
-    // Each host-driven phase runs in a fresh instrumentation process, unlike the
-
-
-    // packaged smoke suite which initializes the native UniFFI runtime earlier.
-
-
+    // Host-driven phases run in separate instrumentation processes; explicitly initialize
+    // the packaged native library before using generated UniFFI gateways.
     @Before
-
-
     fun loadNativeCore() {
-
-
         System.loadLibrary("offline_yt_core")
-
-
     }
-
 
     @After
     fun cleanRuntimeState() {
