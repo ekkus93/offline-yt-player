@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.media3.common.C
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.test.core.app.ActivityScenario
@@ -168,19 +169,24 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
             val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
             val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
             try {
-                var preferredLanguage: String? = null
+                var selectedEnglishTextTrack = false
                 val deadline = SystemClock.elapsedRealtime() + 10_000L
                 while (SystemClock.elapsedRealtime() < deadline) {
                     instrumentation.runOnMainSync {
-                        preferredLanguage = observer.trackSelectionParameters.preferredTextLanguage
+                        selectedEnglishTextTrack = observer.currentTracks.groups.any { group ->
+                            group.type == C.TRACK_TYPE_TEXT &&
+                                (0 until group.length).any { index ->
+                                    group.isTrackSelected(index) &&
+                                        group.getTrackFormat(index).language == "en"
+                                }
+                        }
                     }
-                    if (preferredLanguage == "en") break
+                    if (selectedEnglishTextTrack) break
                     SystemClock.sleep(50)
                 }
-                assertEquals(
-                    "production player must apply the persisted subtitle language to the canonical session",
-                    "en",
-                    preferredLanguage,
+                assertTrue(
+                    "production player must select the persisted English subtitle track in the canonical session",
+                    selectedEnglishTextTrack,
                 )
 
                 compose.onNodeWithText("Subtitles: en").performClick()
