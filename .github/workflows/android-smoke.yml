@@ -76,8 +76,7 @@ jobs:
             golden_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest > app/build/reports/androidSmokeLogs/golden-gradle.log 2>&1 || golden_status=$?;
             mkdir -p app/build/reports/androidGoldens;
-            adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ > app/build/reports/androidSmokeLogs/golden-pull.log 2>&1 || \
-              adb pull /sdcard/Download/offline-yt-player-goldens/. app/build/reports/androidGoldens/ >> app/build/reports/androidSmokeLogs/golden-pull.log 2>&1 || true;
+            if ! adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ > app/build/reports/androidSmokeLogs/golden-pull.log 2>&1; then adb pull /sdcard/Download/offline-yt-player-goldens/. app/build/reports/androidGoldens/ >> app/build/reports/androidSmokeLogs/golden-pull.log 2>&1 || true; fi;
             echo "Golden raster SHA-256 manifest:";
             cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true;
             if [ "$golden_status" -ne 0 ]; then echo "Golden failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$golden_status; fi;
