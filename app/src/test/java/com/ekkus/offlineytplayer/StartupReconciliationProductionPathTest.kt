@@ -9,7 +9,7 @@ class StartupReconciliationProductionPathTest {
     fun mainActivityRunsStartupReconciliationBeforeInitialRepositoryReads() {
         val source = File("src/main/java/com/ekkus/offlineytplayer/MainActivity.kt").readText()
         val reconcileIndex = source.indexOf("openedCore?.reconcileStartup()")
-        val libraryIndex = source.indexOf("openedCore!!.listLibrary()")
+        val libraryIndex = source.indexOf("openedCore!!.listLibrary(libraryQuery)")
         val queueIndex = source.indexOf("openedCore!!.listDownloadQueue()")
 
         assertTrue(reconcileIndex >= 0)
