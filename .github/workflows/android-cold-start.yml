@@ -58,12 +58,7 @@ jobs:
           script: >-
             sh -c 'set -eu;
             mkdir -p app/build/reports/androidColdStart;
-            ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest > app/build/reports/androidColdStart/build.log 2>&1;
-            APP_APK=$(find app/build/outputs/apk/debug -name "*.apk" ! -name "*androidTest*" | head -n 1);
-            TEST_APK=$(find app/build/outputs/apk/androidTest/debug -name "*.apk" | head -n 1);
-            test -n "$APP_APK" && test -n "$TEST_APK";
-            adb install -r "$APP_APK" > app/build/reports/androidColdStart/install-app.log;
-            adb install -r "$TEST_APK" > app/build/reports/androidColdStart/install-test.log;
+            ./gradlew --no-daemon :app:installDebug :app:installDebugAndroidTest > app/build/reports/androidColdStart/install-gradle.log 2>&1;
             INSTRUMENTATION=$(adb shell pm list instrumentation | tr -d "\r" | sed -n "s/^instrumentation:\([^ ]*\) (target=com\.ekkus\.offlineytplayer)$/\1/p" | head -n 1);
             test -n "$INSTRUMENTATION";
             run_phase() { class_method="$1"; phase="$2"; log="$3"; adb shell am instrument -w -e rmdColdStartPhase "$phase" -e class "$class_method" "$INSTRUMENTATION" > "$log" 2>&1; cat "$log"; grep -q "OK (1 test)" "$log"; };
