@@ -198,6 +198,19 @@ class GeneratedUniffiCoreGatewaySmokeTest {
             }
             assertEquals(payload.size.toLong(), itemDir.resolve("video.mp4").length())
 
+            // RMD-906a: exercise the packaged unsigned UniFFI binding against a
+            // real completed Library record, not only an absent-item error path.
+            GeneratedUniffiPlaybackPositionGateway.open(database.absolutePath).use { positions ->
+                val saved = positions.savePlaybackPosition(jobId, 1_234L, 120_000L)
+                assertNull(saved.error)
+                assertEquals(true, saved.value)
+            }
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val persisted = core.getLibraryItem(jobId)
+                assertNull(persisted.error)
+                assertEquals(1_234L, persisted.value?.playbackPositionMs)
+            }
+
             val playbackAssets = GeneratedUniffiLibraryPlaybackGateway.open(database.absolutePath).use { playback ->
                 playback.listPlaybackAssetsAsync().get(10, TimeUnit.SECONDS)
             }
