@@ -98,6 +98,26 @@ if [[ "$METERED_INITIAL_STATE" == "false" ]]; then
 else
     echo "WIFI_ONLY_METERED_DEFAULT_UNMETERED: explicit false override unnecessary" | tee -a "$DIR/wifi-only-metered-result.txt"
 fi
+# Probe the actual emulator netpolicy control before starting the second worker.
+# Some API-29 images list a saved SSID but reject metered overrides (adb
+# exit 255). In that case the already-qualified OS network-loss lane remains
+# successful, while metered acceptance is explicitly UNAVAILABLE, not qualified.
+if ! adb shell cmd netpolicy set metered-network "$METERED_SSID" true > "$DIR/wifi-metered-control-probe.log" 2>&1; then
+    echo "WIFI_ONLY_METERED_UNAVAILABLE: emulator rejected metered control probe" | tee -a "$DIR/wifi-only-metered-result.txt"
+    cat "$DIR/wifi-metered-control-probe.log"
+    exit 0
+fi
+adb shell cmd netpolicy list wifi-networks > "$DIR/wifi-metered-control-state.txt" 2>&1 || true
+cat "$DIR/wifi-metered-control-state.txt"
+if ! grep -Fq "$METERED_SSID;true" "$DIR/wifi-metered-control-state.txt"; then
+    echo "WIFI_ONLY_METERED_UNAVAILABLE: emulator did not apply a metered SSID policy" | tee -a "$DIR/wifi-only-metered-result.txt"
+    exit 0
+fi
+if ! adb shell cmd netpolicy set metered-network "$METERED_SSID" false > "$DIR/wifi-metered-control-reset.log" 2>&1; then
+    echo "WIFI_ONLY_METERED_UNAVAILABLE: emulator could not reset metered probe" | tee -a "$DIR/wifi-only-metered-result.txt"
+    cat "$DIR/wifi-metered-control-reset.log"
+    exit 0
+fi
 sleep 3
 adb shell am instrument -w -e rmdHostWifiMetered true \
     -e class 'com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest#hostDrivenWifiOnlyMeteredWifiPausesAndUnmeteredWifiResumes' \
