@@ -85,7 +85,19 @@ if [[ -z "$METERED_SSID" ]]; then
     exit 0
 fi
 echo "WIFI_ONLY_METERED_SSID_FOUND: $METERED_SSID" | tee "$DIR/wifi-only-metered-result.txt"
-adb shell cmd netpolicy set metered-network "$METERED_SSID" false
+# A ;none entry is already the default unmetered state. Android 10
+# emulators can reject the redundant explicit false override with adb 255.
+# Do not fail the host lane before attempting the supported metered transition.
+METERED_INITIAL_STATE=$(sed -n -E '/;(false|none)[[:space:]]*$/ { s/^.*;(false|none)[[:space:]]*$/\1/; p; q; }' "$DIR/wifi-networks-before.txt")
+if [[ "$METERED_INITIAL_STATE" == "false" ]]; then
+    if ! adb shell cmd netpolicy set metered-network "$METERED_SSID" false > "$DIR/wifi-unmetered-precondition.log" 2>&1; then
+        echo "WIFI_ONLY_METERED_UNAVAILABLE: emulator rejected unmetered precondition" | tee -a "$DIR/wifi-only-metered-result.txt"
+        cat "$DIR/wifi-unmetered-precondition.log"
+        exit 0
+    fi
+else
+    echo "WIFI_ONLY_METERED_DEFAULT_UNMETERED: explicit false override unnecessary" | tee -a "$DIR/wifi-only-metered-result.txt"
+fi
 sleep 3
 adb shell am instrument -w -e rmdHostWifiMetered true \
     -e class 'com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest#hostDrivenWifiOnlyMeteredWifiPausesAndUnmeteredWifiResumes' \
