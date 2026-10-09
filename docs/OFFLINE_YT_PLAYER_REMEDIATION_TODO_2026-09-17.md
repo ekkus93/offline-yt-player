@@ -724,7 +724,9 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1304 — Provider/resource bounds
 
-- [x] Bound provider response size.
+**Independent review follow-up (2026-10-09, pending exact-head qualification):** the previous response-size assertion only rejected oversized declared `Content-Length` before reading, and rejected observed length *after* `Response::bytes()` had already buffered the entire untrusted body. Chunked/undeclared responses could therefore exhaust memory despite the declared 4 MiB limit. `core/src/youtube_source.rs::read_bounded_watch_body` now caps the actual stream at 4 MiB + 1 byte before parsing, with a deterministic infinite-reader regression test. Keep the provider-response-size checkbox open until the new implementation's exact-head CI passes. The prior RMD-1304 historical evidence remains valid for its other bounds, but not for the former unbounded allocation.
+
+- [ ] Bound provider response size.
 - [x] Bound URL/metadata lengths.
 - [x] Bound redirects/timeouts/asset sizes.
 - [x] Bound concurrent downloads.

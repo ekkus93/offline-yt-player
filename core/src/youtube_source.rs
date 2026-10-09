@@ -1,7 +1,7 @@
 use crate::resource_bounds::{
     MAX_PROVIDER_REDIRECTS, MAX_PROVIDER_STREAMS, MAX_PROVIDER_SUBTITLE_ID_BYTES,
     MAX_PROVIDER_SUBTITLE_LABEL_CHARS, MAX_PROVIDER_SUBTITLE_LANGUAGE_BYTES,
-    MAX_PROVIDER_SUBTITLES, ensure_provider_response_size, ensure_provider_url_bound,
+    MAX_PROVIDER_SUBTITLES, MAX_PROVIDER_RESPONSE_BYTES, ensure_provider_response_size, ensure_provider_url_bound,
     provider_connect_timeout, provider_request_timeout, truncate_provider_title,
 };
 use crate::youtube_extract::{
@@ -15,6 +15,7 @@ use crate::{
 };
 use reqwest::blocking::Client;
 use serde_json::Value;
+use std::io::Read;
 
 /// Narrow fail-closed production YouTube adapter described by the extraction ADR.
 #[derive(Debug, Clone)]
@@ -52,13 +53,25 @@ impl YouTubeSource {
             ));
         }
         ensure_provider_response_size("YouTube watch", response.content_length(), 0)?;
-        let bytes = response.bytes().map_err(network_error)?;
-        ensure_provider_response_size("YouTube watch", None, bytes.len())?;
+        let bytes = read_bounded_watch_body(response)?;
         let html = std::str::from_utf8(&bytes)
             .map_err(|_| source_changed("YouTube watch response was not UTF-8"))?;
         let player = extract_player_json(html)?;
         parse_player(&player)
     }
+}
+
+// A declared Content-Length may be absent or dishonest. Stop reading after one byte
+// beyond the metadata bound; do not buffer an arbitrarily large chunked response
+// and only then check its size.
+fn read_bounded_watch_body(reader: impl Read) -> Result<Vec<u8>, CoreError> {
+    let mut bounded = reader.take(MAX_PROVIDER_RESPONSE_BYTES as u64 + 1);
+    let mut bytes = Vec::new();
+    bounded.read_to_end(&mut bytes).map_err(|_| {
+        CoreError::new(ErrorKind::NetworkUnavailable, "YouTube watch response read failed", true)
+    })?;
+    ensure_provider_response_size("YouTube watch", None, bytes.len())?;
+    Ok(bytes)
 }
 
 impl MediaSource for YouTubeSource {
@@ -675,6 +688,20 @@ mod tests {
         let html = include_str!("../tests/fixtures/youtube/malformed_watch.html");
         let err = extract_player_json(html).unwrap_err();
         assert_eq!(err.kind, ErrorKind::SourceChanged);
+    }
+
+    #[test]
+    fn unknown_length_watch_response_is_bounded_during_streaming() {
+        // An infinite reader models chunked input with no Content-Length. This
+        // must terminate at MAX_PROVIDER_RESPONSE_BYTES + 1, not buffer endlessly.
+        let err = read_bounded_watch_body(std::io::repeat(b'x')).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            read_bounded_watch_body(std::io::repeat(b'x').take(MAX_PROVIDER_RESPONSE_BYTES as u64))
+                .unwrap()
+                .len(),
+            MAX_PROVIDER_RESPONSE_BYTES
+        );
     }
 
     #[test]
