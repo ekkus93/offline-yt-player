@@ -10,6 +10,12 @@ class ManifestPermissionTest {
     private val manifest: String = Files.readString(Path.of("src/main/AndroidManifest.xml"))
 
     @Test
+    fun privateLibraryIsExcludedFromImplicitAndroidCloudBackup() {
+        assertTrue(manifest.contains("android:allowBackup=\"false\""))
+        assertFalse(manifest.contains("android:allowBackup=\"true\""))
+    }
+
+    @Test
     fun networkPermissionsRequiredByProductionPathsAreDeclared() {
         assertTrue(manifest.contains("android.permission.INTERNET"))
         assertTrue(manifest.contains("android.permission.ACCESS_NETWORK_STATE"))

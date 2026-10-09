@@ -737,6 +737,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ---
 
+### RMD-1305 — Explicit private-library backup exclusion (independent review)
+
+- [ ] Disable implicit Android app-data cloud backup, verify both the tracked manifest and packaged Android application flag, and document the privacy behavior and remaining device-migration limitations. Qualify via exact-head JVM and API-29 Android-smoke evidence before closing.
+
+**Review finding (2026-10-09):** the prior manifest shipped `android:allowBackup="true"` without an established backup privacy policy, potentially allowing the OS to copy private SQLite state and downloaded assets outside the local-only media store. The manifest now disables automatic backup; `ManifestPermissionTest` checks the tracked declaration and `AndroidRuntimeSmokeTest` checks the packaged app flag. The check remains open until exact-head CI and instrumentation qualify the change.
+
+---
+
 ## RMD-1400 — Real Android UI qualification
 
 ### RMD-1401 — Establish `androidTest` infrastructure

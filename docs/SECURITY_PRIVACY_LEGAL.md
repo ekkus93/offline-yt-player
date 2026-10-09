@@ -71,7 +71,7 @@ When hashes are available, explicit/deep validation should use them to detect sa
 
 Offline YT Player is intended to keep completed media local to the device. Completed local playback must not require uploading the user library or recontacting the provider merely to play a valid local item.
 
-Network access is expected for explicit resolution/download operations and provider interactions required by those operations. Network diagnostics must avoid leaking provider request material. Application telemetry, analytics, account synchronization, or cloud backup behavior are not established by this remediation document and must not be implied without explicit implementation and review.
+Network access is expected for explicit resolution/download operations and provider interactions required by those operations. Network diagnostics must avoid leaking provider request material. Application telemetry, analytics, and account synchronization are not established by this remediation document and must not be implied without explicit implementation and review. Android cloud backup is explicitly disabled with `android:allowBackup="false"` in `app/src/main/AndroidManifest.xml` so private downloaded media, durable queue metadata, and locally stored preferences are not silently exported by the operating system’s automatic backup feature. This is a default privacy guard, not a guarantee about every OEM-controlled device-to-device migration or user-initiated file export.
 
 ## Notification and platform permissions
 
