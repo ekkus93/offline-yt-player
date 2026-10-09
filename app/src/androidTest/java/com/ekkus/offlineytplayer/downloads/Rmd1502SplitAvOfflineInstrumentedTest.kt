@@ -322,7 +322,8 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
                             "media=${current?.localConfiguration?.uri}"
                         readyWithSelectedVideoAndAudio =
                             observer.playbackState == Player.STATE_READY &&
-                                current?.localConfiguration?.uri?.path == videoFile.absolutePath &&
+                                current != null &&
+                                current.localConfiguration?.uri?.path == videoFile.absolutePath &&
                                 LocalPlaybackPolicy.splitAudioPathFrom(current) == audioFile.absolutePath &&
                                 selectedVideo && selectedAudio
                     }
