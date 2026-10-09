@@ -152,7 +152,7 @@ class GeneratedUniffiCoreGateway private constructor(
         val result = callFfi(ffiStartupReconciliationService, "startupReconcile")
         return CoreGatewayResult(
             value = CoreStartupReconciliation(
-                jobsRequeued = readNumber(result, "jobsRequeued", "jobs_requeued").toInt(),
+                jobsRequeued = generatedNumericAsInt(readRequired(result, "jobsRequeued", "jobs_requeued")),
             ),
             error = readError(result),
         )
@@ -307,7 +307,7 @@ private fun mapDownloadSnapshot(record: Any): CoreDownloadSnapshot = CoreDownloa
     state = CoreDownloadState.fromGeneratedName(readRequired(record, "state").toString()),
     bytesDownloaded = readNumber(record, "bytesDownloaded", "bytes_downloaded").toLong(),
     totalBytes = readNullable(record, "totalBytes", "total_bytes")?.let(::generatedNumericAsLong),
-    attempt = readNumber(record, "attempt").toInt(),
+    attempt = generatedNumericAsInt(readRequired(record, "attempt")),
     retryAtEpochMs = readNullable(record, "retryAtEpochMs", "retry_at_epoch_ms")?.let(::generatedNumericAsLong),
     lastError = readNullable(record, "lastError", "last_error")?.let { error ->
         CoreGatewayError(
@@ -362,6 +362,14 @@ internal fun generatedNumericAsLong(value: Any): Long = when (value) {
     is UByte -> value.toLong()
     is Number -> value.toLong()
     else -> error("Unexpected generated numeric type: ${value.javaClass.name}")
+}
+
+internal fun generatedNumericAsInt(value: Any): Int {
+    val number = generatedNumericAsLong(value)
+    require(number in 0..Int.MAX_VALUE.toLong()) {
+        "Generated numeric count is outside the supported nonnegative Int range"
+    }
+    return number.toInt()
 }
 
 private fun readNumber(target: Any, vararg names: String): Long =
