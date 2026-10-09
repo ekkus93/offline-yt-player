@@ -622,9 +622,11 @@ This checklist repairs the implementation and qualification gaps found during th
 
 - [x] Calculate actual managed-media usage.
 - [x] Show DB/partial/cache breakdown where useful.
-- [x] Implement safe cleanup actions.
+- [ ] Implement safe cleanup actions.
 - [x] Confirm destructive cleanup.
 - [x] Add tests against temporary storage.
+
+**RMD-1104 independent review follow-up (2026-10-09, pending qualification):** Managed storage usage/cleanup used `File.walkTopDown` and recursive cache deletion without checking nested symlinks, potentially traversing app-private symlinks into external paths, and ignored failed deletion return values while reporting bytes removed. `StorageSettingsManager` now skips symlink contents during accounting, unlinks instead of following links during cleanup, performs per-entry root checks, and propagates deletion failures. `StorageSettingsManagerTest` includes adversarial cache-directory and incomplete-asset symlink tests. The storage UI must surface bounded errors. Leave safe-cleanup acceptance unchecked until exact-head JVM/Android CI passes, and preserve historical RMD-1104 evidence for the other settings subtasks.
 
 ### RMD-1105 — Appearance settings
 
