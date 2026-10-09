@@ -13,13 +13,6 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 
-internal object PlaybackSessionPolicy {
-    const val SupportsLockScreenControls = true
-    const val SupportsHeadsetControls = true
-    const val HandlesAudioFocus = true
-    const val HandlesAudioBecomingNoisy = true
-}
-
 class PlaybackSessionService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
 

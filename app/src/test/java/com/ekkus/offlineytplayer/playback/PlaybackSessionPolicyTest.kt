@@ -6,14 +6,6 @@ import org.junit.Test
 
 class PlaybackSessionPolicyTest {
     @Test
-    fun mediaSessionPolicyCoversPlatformPlaybackControls() {
-        assertTrue(PlaybackSessionPolicy.SupportsLockScreenControls)
-        assertTrue(PlaybackSessionPolicy.SupportsHeadsetControls)
-        assertTrue(PlaybackSessionPolicy.HandlesAudioFocus)
-        assertTrue(PlaybackSessionPolicy.HandlesAudioBecomingNoisy)
-    }
-
-    @Test
     fun manifestRegistersMediaSessionServiceForPlatformControllers() {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("android:name=\".playback.PlaybackSessionService\""))
