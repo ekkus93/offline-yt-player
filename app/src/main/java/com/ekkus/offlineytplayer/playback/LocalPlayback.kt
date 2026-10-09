@@ -105,14 +105,25 @@ internal object LocalPlaybackPolicy {
         )
     }
 
+    /**
+     * MediaSession controllers transport MediaItem.mediaId, but do not preserve the
+     * arbitrary LocalConfiguration.tag through their IPC serialization. Encode the
+     * separate app-local audio path in the transported media ID so the service-owned
+     * MediaSource.Factory can reconstruct the actual merged audio source.
+     */
+    private const val SplitAudioMediaIdPrefix = "offline-yt-player/split-audio/"
+
     fun mediaItemFor(asset: LocalPlaybackAsset): MediaItem {
         val request = playbackRequestFor(asset)
         val subtitleConfigurations = request.subtitleTracks.map(::subtitleConfigurationFor)
-        return mediaItemBuilderFor(request.videoPath)
+        val builder = mediaItemBuilderFor(request.videoPath)
             .setMediaMetadata(MediaMetadata.Builder().setTitle(asset.title).build())
             .setSubtitleConfigurations(subtitleConfigurations)
             .setTag(request.audioPath)
-            .build()
+        request.audioPath?.let { path ->
+            builder.setMediaId(SplitAudioMediaIdPrefix + Uri.encode(path))
+        }
+        return builder.build()
     }
 
     fun mediaItemFor(path: String): MediaItem {
@@ -121,7 +132,16 @@ internal object LocalPlaybackPolicy {
         return mediaItemBuilderFor(path).build()
     }
 
-    fun splitAudioPathFrom(item: MediaItem): String? = item.localConfiguration?.tag as? String
+    fun splitAudioPathFrom(item: MediaItem): String? {
+        if (item.mediaId.startsWith(SplitAudioMediaIdPrefix)) {
+            val path = Uri.decode(item.mediaId.removePrefix(SplitAudioMediaIdPrefix))
+            require(path.isNotBlank() && !looksRemote(path)) {
+                "invalid separate local audio path in MediaSession item"
+            }
+            return path
+        }
+        return item.localConfiguration?.tag as? String
+    }
 
     fun availableSubtitleLabels(asset: LocalPlaybackAsset): List<String> = validate(asset).subtitleTracks.map { track ->
         track.label?.takeIf(String::isNotBlank) ?: track.language

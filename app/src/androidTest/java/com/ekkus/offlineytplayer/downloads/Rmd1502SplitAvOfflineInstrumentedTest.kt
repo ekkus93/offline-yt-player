@@ -329,13 +329,14 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
                         diagnostics = "state=${observer.playbackState}, " +
                             "error=${observer.playerError}, selectedVideo=$selectedVideo, " +
                             "selectedAudio=$selectedAudio, position=${observer.currentPosition}, " +
-                            "media=${current?.localConfiguration?.uri}"
+                            "media=${current?.localConfiguration?.uri}, mediaId=${current?.mediaId}"
                         readyWithSelectedVideoAndAudio =
                             observer.playbackState == Player.STATE_READY &&
                                 current != null &&
                                 current.localConfiguration?.uri?.path == videoFile.absolutePath &&
-                                // The deterministic video MP4 contains no audio track:
-                                // selected audio here can only come from the persisted WAV.
+                                // The serialized MediaSession item must retain the audio
+                                // path, not only the video. The video MP4 has no audio track.
+                                LocalPlaybackPolicy.splitAudioPathFrom(current) == audioFile.absolutePath &&
                                 selectedVideo && selectedAudio
                     }
                     if (readyWithSelectedVideoAndAudio) break
