@@ -42,7 +42,7 @@ class DownloadConnectivityMapperTest {
     fun unmeteredInternetMapsToUnmetered() {
         assertEquals(
             DownloadConnectivity.Unmetered,
-            DownloadConnectivityMapper.fromCapabilityFlags(hasInternet = true, isUnmetered = true),
+            DownloadConnectivityMapper.fromCapabilityFlags(hasInternet = true, isUnmetered = true, isWifi = true),
         )
     }
 }
