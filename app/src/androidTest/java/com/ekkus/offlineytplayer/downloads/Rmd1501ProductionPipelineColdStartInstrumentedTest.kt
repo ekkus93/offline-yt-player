@@ -187,9 +187,37 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         }
         compose.onNodeWithText("Download").performClick()
 
-        server.joinAndRethrow()
-
+        // Assert the production enqueue boundary was invoked before waiting for
+        // loopback traffic. A missing or rejected schedule must not look like a
+        // generic 60-second fixture-server timeout.
+        runCatching {
+            compose.waitUntil(15_000) { selectedOptions.get() != null }
+        }.getOrElse { error ->
+            throw AssertionError(
+                "Download click never reached the app-owned enqueue boundary. " +
+                    "Compose semantics: " + describeSemanticsTree(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()),
+                error,
+            )
+        }
         assertEquals("fixture-wave", selectedOptions.get()?.qualityChoiceId)
+        var lastQueueState: CoreDownloadState? = null
+        val completionDeadline = SystemClock.elapsedRealtime() + 25_000L
+        while (SystemClock.elapsedRealtime() < completionDeadline) {
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val queue = core.listDownloadQueue()
+                assertNull(queue.error)
+                lastQueueState = queue.value?.firstOrNull { it.jobId == SOURCE_URL }?.state
+            }
+            if (lastQueueState == CoreDownloadState.COMPLETED) break
+            if (lastQueueState == CoreDownloadState.FAILED || lastQueueState == CoreDownloadState.CANCELED) break
+            SystemClock.sleep(100)
+        }
+        assertEquals(
+            "the scheduled Android foreground worker must complete fixture work; last durable queue state",
+            CoreDownloadState.COMPLETED,
+            lastQueueState,
+        )
+        server.joinAndRethrow()
         val localFile = File(context.filesDir, MEDIA_RELATIVE_PATH)
         assertTrue(localFile.isFile)
         assertArrayEquals(wave, localFile.readBytes())
