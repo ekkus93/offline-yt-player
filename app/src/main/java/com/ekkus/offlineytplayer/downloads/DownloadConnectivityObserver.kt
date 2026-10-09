@@ -22,11 +22,19 @@ internal object DownloadConnectivityMapper {
         fromCapabilityFlags(
             hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
             isUnmetered = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true,
+            isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true,
         )
 
-    fun fromCapabilityFlags(hasInternet: Boolean, isUnmetered: Boolean): DownloadConnectivity {
+    fun fromCapabilityFlags(
+        hasInternet: Boolean,
+        isUnmetered: Boolean,
+        isWifi: Boolean = true,
+    ): DownloadConnectivity {
         if (!hasInternet) return DownloadConnectivity.None
-        return if (isUnmetered) DownloadConnectivity.Unmetered else DownloadConnectivity.Metered
+        if (!isUnmetered) return DownloadConnectivity.Metered
+        // An unmetered Ethernet/cellular/VPN network is not Wi-Fi and must
+        // not silently bypass the user's explicit Wi-Fi-only preference.
+        return if (isWifi) DownloadConnectivity.Unmetered else DownloadConnectivity.UnmeteredNonWifi
     }
 }
 

@@ -29,6 +29,16 @@ class DownloadConnectivityMapperTest {
     }
 
     @Test
+    fun unmeteredNonWifiInternetDoesNotMasqueradeAsWifi() {
+        assertEquals(
+            DownloadConnectivity.UnmeteredNonWifi,
+            DownloadConnectivityMapper.fromCapabilityFlags(
+                hasInternet = true, isUnmetered = true, isWifi = false,
+            ),
+        )
+    }
+
+    @Test
     fun unmeteredInternetMapsToUnmetered() {
         assertEquals(
             DownloadConnectivity.Unmetered,

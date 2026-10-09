@@ -32,6 +32,24 @@ class DownloadNetworkPolicyTest {
     }
 
     @Test
+    fun unmeteredNonWifiDoesNotBypassWifiOnlyButAnyNetworkStillAllowsIt() {
+        assertEquals(
+            DownloadNetworkDecision.PauseForConnectivity,
+            DownloadNetworkPolicy.decision(
+                DownloadNetworkPreference.WifiOnly,
+                DownloadConnectivity.UnmeteredNonWifi,
+            ),
+        )
+        assertEquals(
+            DownloadNetworkDecision.Allow,
+            DownloadNetworkPolicy.decision(
+                DownloadNetworkPreference.AnyNetwork,
+                DownloadConnectivity.UnmeteredNonWifi,
+            ),
+        )
+    }
+
+    @Test
     fun anyNetworkStillPausesWhenConnectivityIsLost() {
         assertEquals(
             DownloadNetworkDecision.Allow,

@@ -24,6 +24,7 @@ class DownloadConnectivityObserverInstrumentedTest {
         val expected = DownloadConnectivityMapper.fromCapabilityFlags(
             hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
             isUnmetered = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true,
+            isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true,
         )
 
         assertEquals(expected, DownloadConnectivityMapper.fromCapabilities(capabilities))

@@ -28,6 +28,7 @@ internal enum class DownloadConnectivity {
     None,
     Metered,
     Unmetered,
+    UnmeteredNonWifi,
 }
 
 internal enum class DownloadNetworkDecision {
@@ -48,12 +49,14 @@ internal object DownloadNetworkPolicy {
             DownloadConnectivity.None -> DownloadNetworkDecision.PauseForConnectivity
             DownloadConnectivity.Metered,
             DownloadConnectivity.Unmetered,
+            DownloadConnectivity.UnmeteredNonWifi,
             -> DownloadNetworkDecision.Allow
         }
         DownloadNetworkPreference.WifiOnly -> when (connectivity) {
             DownloadConnectivity.Unmetered -> DownloadNetworkDecision.Allow
             DownloadConnectivity.None,
             DownloadConnectivity.Metered,
+            DownloadConnectivity.UnmeteredNonWifi,
             -> DownloadNetworkDecision.PauseForConnectivity
         }
     }

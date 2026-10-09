@@ -865,6 +865,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Restore eligible network.
 - [ ] Verify legal resume.
 - [ ] Repeat with Wi-Fi-only/metered policy where emulator controls permit.
+- [ ] **RMD-1506b — Do not equate unmetered transports with Wi-Fi.** Production `DownloadConnectivityMapper` previously classified any unmetered network (including Ethernet, cellular, or VPN) as `Unmetered`, allowing a Wi-Fi-only download without a Wi-Fi transport. Require correct Wi-Fi-transport mapping, deterministic JVM policy tests, packaged Android capability mapping, and passing exact-head CI/Android smoke before checking. This fixes the policy-boundary bug but does not replace the six host-driven OS network transition requirements above.
 - [x] **RMD-1506a — Foreground-service observer reuse.** Verify a second schedule/resume command dispatches newly queued durable work when the connectivity observer is already registered and no new network callback arrives; require packaged Android test and exact-head CI before checking.
 
 
