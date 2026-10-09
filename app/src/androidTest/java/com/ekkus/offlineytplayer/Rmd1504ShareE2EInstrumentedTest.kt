@@ -3,6 +3,8 @@ package com.ekkus.offlineytplayer
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.app.NotificationManager
+import android.os.SystemClock
 import android.database.sqlite.SQLiteDatabase
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -18,6 +20,10 @@ import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
 import com.ekkus.offlineytplayer.coregateway.CoreSourceQualityChoice
 import com.ekkus.offlineytplayer.coregateway.DownloadSelectionOptions
+import com.ekkus.offlineytplayer.downloads.DownloadConnectivity
+import com.ekkus.offlineytplayer.downloads.DownloadForegroundService
+import com.ekkus.offlineytplayer.downloads.DownloadServicePolicy
+import java.io.Closeable
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -43,12 +49,14 @@ class Rmd1504ShareE2EInstrumentedTest {
     @Before
     fun cleanBefore() {
         MainActivityDependencyOverrides.clearForInstrumentation()
+        stopFixtureService()
         deleteRuntimeState()
     }
 
     @After
     fun cleanAfter() {
         MainActivityDependencyOverrides.clearForInstrumentation()
+        stopFixtureService()
         deleteRuntimeState()
     }
 
@@ -58,6 +66,14 @@ class Rmd1504ShareE2EInstrumentedTest {
         val title = "RMD-1504 shared fixture"
         val payload = "rmd-1504 deterministic downloaded bytes".toByteArray(StandardCharsets.UTF_8)
         val server = OneShotFixtureServer(payload).also { it.start() }
+        // Qualify ACTION_SEND -> real scheduler/core worker independently of
+        // an emulator's default-network callback, which can report no network
+        // even though the loopback fixture is reachable. OS network transitions
+        // remain qualified separately under RMD-1506.
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { _, onChanged ->
+            onChanged(DownloadConnectivity.Unmetered)
+            Closeable { }
+        }
 
         MainActivityDependencyOverrides.installForInstrumentation(
             sourceFactory = {
@@ -109,6 +125,11 @@ class Rmd1504ShareE2EInstrumentedTest {
             }
             compose.onNodeWithText("Download setup").assertIsDisplayed()
             compose.onNodeWithText("Download").performClick()
+            compose.waitUntil(20_000) {
+                runCatching {
+                    compose.onNodeWithText("Download scheduled", substring = true).assertIsDisplayed()
+                }.isSuccess
+            }
 
             server.joinAndRethrow()
 
@@ -130,6 +151,23 @@ class Rmd1504ShareE2EInstrumentedTest {
                 runCatching { compose.onNodeWithText(title).assertIsDisplayed() }.isSuccess
             }
         }
+    }
+
+    private fun stopFixtureService() {
+        context.stopService(Intent(context, DownloadForegroundService::class.java))
+        DownloadForegroundService.connectivityObserverFactoryForTesting = null
+        val notifications = context.getSystemService(NotificationManager::class.java)
+        val deadline = SystemClock.elapsedRealtime() + 5_000L
+        while (
+            notifications.activeNotifications.any { it.id == DownloadServicePolicy.NotificationId } &&
+            SystemClock.elapsedRealtime() < deadline
+        ) {
+            SystemClock.sleep(50L)
+        }
+        assertTrue(
+            "foreground worker must stop before fixture database cleanup",
+            notifications.activeNotifications.none { it.id == DownloadServicePolicy.NotificationId },
+        )
     }
 
     private fun deleteRuntimeState() {
@@ -202,6 +240,8 @@ class Rmd1504ShareE2EInstrumentedTest {
                 }
             """.trimIndent()
             SQLiteDatabase.openDatabase(databasePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+                db.beginTransaction()
+                try {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS download_work_items (
@@ -249,6 +289,10 @@ class Rmd1504ShareE2EInstrumentedTest {
                         put("display_title", title)
                     },
                 )
+                db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
+                }
             }
         }
     }
