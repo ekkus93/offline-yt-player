@@ -244,7 +244,6 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
                 runCatching { compose.onNodeWithText("Offline local playback").assertIsDisplayed() }.isSuccess
             }
 
-
             val instrumentation = InstrumentationRegistry.getInstrumentation()
             val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
             val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
@@ -469,3 +468,14 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         fun joinAndRethrow() {
             worker.join(60_000)
             assertFalse("fixture server should finish after the production download", worker.isAlive)
+            failure.get()?.let { throw AssertionError("fixture server failed", it) }
+        }
+    }
+
+    private companion object {
+        const val DATABASE_NAME = "offline-yt-player.sqlite3"
+        const val SOURCE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        const val TITLE = "RMD-1501 production pipeline fixture"
+        const val MEDIA_RELATIVE_PATH = "items/rmd-1501-cold-start/offline.wav"
+    }
+}
