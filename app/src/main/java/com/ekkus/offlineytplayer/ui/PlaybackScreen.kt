@@ -104,7 +104,7 @@ internal fun PortraitPlayerScreen(
                 mainHandler.postDelayed(this, 250L)
             }
         }
-        future.addListener({ if (!future.isCancelled) { runCatching { future.get() }.getOrNull()?.let { connected -> acquiredController = connected; connected.setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated), configuredStartPositionMs); connected.setPlaybackSpeed(settings.playbackSpeed); connected.applySubtitleSelection(validated, selectedSubtitleIndex); connected.prepare(); controller = connected; mainHandler.post(uiTicker); if (settings.rememberPlaybackPosition) mainHandler.postDelayed(periodicSaver, LocalPlaybackPolicy.PositionPersistCadenceMs) } } }, mainExecutor)
+        future.addListener({ if (!future.isCancelled) { runCatching { future.get() }.getOrNull()?.let { connected -> acquiredController = connected; connected.setMediaItem(LocalPlaybackPolicy.mediaItemFor(validated), configuredStartPositionMs); connected.setPlaybackSpeed(settings.playbackSpeed); connected.applySubtitleSelection(validated, selectedSubtitleIndex); connected.prepare(); connected.play(); controller = connected; mainHandler.post(uiTicker); if (settings.rememberPlaybackPosition) mainHandler.postDelayed(periodicSaver, LocalPlaybackPolicy.PositionPersistCadenceMs) } } }, mainExecutor)
         onDispose { disposed = true; mainHandler.removeCallbacks(periodicSaver); mainHandler.removeCallbacks(uiTicker); persistPlaybackPosition(true); future.cancel(true); if (controller === acquiredController) controller = null; acquiredController?.release(); persistenceExecutor.shutdown() }
     }
 

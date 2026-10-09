@@ -92,6 +92,32 @@ class GeneratedUniffiCoreGatewaySmokeTest {
     }
 
     @Test
+    fun packagedPlaybackPositionGatewayCallsUnsignedGeneratedKotlinBinding() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = context.cacheDir.resolve("rmd-906a-${System.nanoTime()}").apply { mkdirs() }
+        val database = root.resolve("library.sqlite")
+
+        try {
+            System.loadLibrary("offline_yt_core")
+            // The core creates the real library schema. An absent item should
+            // return saved=false rather than fail to resolve the generated FFI
+            // function (whose ULong parameters mangle its JVM name).
+            GeneratedUniffiCoreGateway.open(database.absolutePath).close()
+            GeneratedUniffiPlaybackPositionGateway.open(database.absolutePath).use { gateway ->
+                val missing = gateway.savePlaybackPosition(
+                    itemId = "rmd-906a-missing",
+                    positionMs = 1_234L,
+                    durationMs = 10_000L,
+                )
+                assertNull(missing.error)
+                assertEquals(false, missing.value)
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun androidSchedulerFallbackCompletesDurableFixtureIntoLibrary() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         // Stop any service left running by a prior instrumentation test before
