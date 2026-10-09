@@ -7,6 +7,7 @@ import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.SystemClock
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -169,7 +170,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         }.getOrElse { error ->
             throw AssertionError(
                 "Download action did not become enabled after Apply options. " +
-                    "Compose semantics: " + compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().toString(),
+                    "Compose semantics: " + describeSemanticsTree(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()),
                 error,
             )
         }
@@ -273,6 +274,16 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             }
         }
     }
+
+    private fun describeSemanticsTree(node: SemanticsNode, depth: Int = 0): String =
+        buildString {
+            append("  ".repeat(depth))
+            append(node.config)
+            append('\\n')
+            if (depth < 20) {
+                node.children.forEach { append(describeSemanticsTree(it, depth + 1)) }
+            }
+        }
 
     private fun coldStartPhase(): String? =
         InstrumentationRegistry.getArguments().getString("rmdColdStartPhase")
