@@ -67,7 +67,7 @@ jobs:
             adb install -r "$TEST_APK" > app/build/reports/androidColdStart/install-test.log;
             INSTRUMENTATION=$(adb shell pm list instrumentation | tr -d "\r" | sed -n "s/^instrumentation:\([^ ]*\) (target=com\.ekkus\.offlineytplayer)$/\1/p" | head -n 1);
             test -n "$INSTRUMENTATION";
-            run_phase() { class_method="$1"; phase="$2"; network_disabled="$3"; log="$4"; adb shell am instrument -w -e rmdColdStartPhase "$phase" -e rmdNetworkDisabled "$network_disabled" -e class "$class_method" "$INSTRUMENTATION" > "$log" 2>&1; cat "$log"; grep -q "OK (1 test)" "$log"; };
+            run_phase() { class_method="$1"; phase="$2"; network_disabled="$3"; log="$4"; adb shell am instrument -w -e rmdColdStartPhase "$phase" -e rmdNetworkDisabled "$network_disabled" -e class "$class_method" "$INSTRUMENTATION" > "$log" 2>&1; cat "$log"; if ! grep -q "OK (1 test)" "$log"; then adb logcat -d -t 250 > "${log%.log}-logcat.txt" 2>&1 || true; echo "Filtered Android logcat evidence:"; grep -E "FATAL EXCEPTION|AndroidRuntime|offlineytplayer|DownloadForegroundService|Exception" "${log%.log}-logcat.txt" | tail -n 90 || true; return 1; fi; };
             run_phase "com.ekkus.offlineytplayer.downloads.Rmd1501ProductionPipelineColdStartInstrumentedTest#seedRunsAnalyzeOptionsSchedulerDownloadAndLibraryPipeline" seed false app/build/reports/androidColdStart/rmd1501-seed.log;
             adb shell am force-stop com.ekkus.offlineytplayer;
             adb shell svc wifi disable || true;
