@@ -294,7 +294,7 @@ private fun mapLibraryItem(record: Any): CoreLibraryItem {
             canonicalUrl = readNullable(source, "canonicalUrl", "canonical_url") as String?,
         ),
         displayTitle = readString(record, "displayTitle", "display_title"),
-        durationMs = (readNullable(record, "durationMs", "duration_ms") as Number?)?.toLong(),
+        durationMs = readNullable(record, "durationMs", "duration_ms")?.let(::generatedNumericAsLong),
         qualityLabel = readString(record, "qualityLabel", "quality_label"),
         createdAtEpochMs = readNumber(record, "createdAtEpochMs", "created_at_epoch_ms").toLong(),
         playbackPositionMs = readNumber(record, "playbackPositionMs", "playback_position_ms").toLong(),
@@ -306,9 +306,9 @@ private fun mapDownloadSnapshot(record: Any): CoreDownloadSnapshot = CoreDownloa
     jobId = readString(record, "jobId", "job_id"),
     state = CoreDownloadState.fromGeneratedName(readRequired(record, "state").toString()),
     bytesDownloaded = readNumber(record, "bytesDownloaded", "bytes_downloaded").toLong(),
-    totalBytes = (readNullable(record, "totalBytes", "total_bytes") as Number?)?.toLong(),
+    totalBytes = readNullable(record, "totalBytes", "total_bytes")?.let(::generatedNumericAsLong),
     attempt = readNumber(record, "attempt").toInt(),
-    retryAtEpochMs = (readNullable(record, "retryAtEpochMs", "retry_at_epoch_ms") as Number?)?.toLong(),
+    retryAtEpochMs = readNullable(record, "retryAtEpochMs", "retry_at_epoch_ms")?.let(::generatedNumericAsLong),
     lastError = readNullable(record, "lastError", "last_error")?.let { error ->
         CoreGatewayError(
             kind = readRequired(error, "kind").toString(),
@@ -350,4 +350,19 @@ private fun readString(target: Any, vararg names: String): String = readRequired
 
 private fun readBoolean(target: Any, vararg names: String): Boolean = readRequired(target, *names) as Boolean
 
-private fun readNumber(target: Any, vararg names: String): Number = readRequired(target, *names) as Number
+internal fun generatedNumericAsLong(value: Any): Long = when (value) {
+    is ULong -> {
+        require(value <= Long.MAX_VALUE.toULong()) {
+            "Generated unsigned numeric value exceeds the supported signed Long range"
+        }
+        value.toLong()
+    }
+    is UInt -> value.toLong()
+    is UShort -> value.toLong()
+    is UByte -> value.toLong()
+    is Number -> value.toLong()
+    else -> error("Unexpected generated numeric type: ${value.javaClass.name}")
+}
+
+private fun readNumber(target: Any, vararg names: String): Long =
+    generatedNumericAsLong(readRequired(target, *names))

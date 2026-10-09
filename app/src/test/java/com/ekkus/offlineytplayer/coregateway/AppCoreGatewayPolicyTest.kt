@@ -50,6 +50,24 @@ class AppCoreGatewayPolicyTest {
     }
 
     @Test
+    fun generatedUnsignedNumericValuesMapWithoutNumberCastOrWraparound() {
+        assertEquals(0L, generatedNumericAsLong(0uL))
+        assertEquals(123L, generatedNumericAsLong(123uL))
+        assertEquals(123L, generatedNumericAsLong(123u))
+        assertEquals(123L, generatedNumericAsLong(123L))
+        assertEquals(Long.MAX_VALUE, generatedNumericAsLong(Long.MAX_VALUE.toULong()))
+        assertTrue(
+            "Unsigned overflow must be rejected rather than silently converted to negative",
+            runCatching { generatedNumericAsLong(ULong.MAX_VALUE) }.exceptionOrNull()
+                is IllegalArgumentException,
+        )
+        assertTrue(
+            "Unexpected generated types should fail rather than silently coerce",
+            runCatching { generatedNumericAsLong("123") }.isFailure,
+        )
+    }
+
+    @Test
     fun productionGatewayIsTheOnlyLayerThatNamesGeneratedUniffiService() {
         val source = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppCoreGateway.kt").readText()
         val controls = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppDownloadControlGateway.kt").readText()
