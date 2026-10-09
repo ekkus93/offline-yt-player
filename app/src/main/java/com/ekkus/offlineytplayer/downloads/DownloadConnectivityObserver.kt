@@ -28,7 +28,7 @@ internal object DownloadConnectivityMapper {
     fun fromCapabilityFlags(
         hasInternet: Boolean,
         isUnmetered: Boolean,
-        isWifi: Boolean = true,
+        isWifi: Boolean = false,
     ): DownloadConnectivity {
         if (!hasInternet) return DownloadConnectivity.None
         if (!isUnmetered) return DownloadConnectivity.Metered

@@ -11,6 +11,42 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class DownloadConnectivityObserverInstrumentedTest {
     @Test
+    fun unmeteredNonWifiAndroidCapabilitiesNeverSatisfyWifiOnly() {
+        for (transport in listOf(
+            NetworkCapabilities.TRANSPORT_ETHERNET,
+            NetworkCapabilities.TRANSPORT_CELLULAR,
+            NetworkCapabilities.TRANSPORT_VPN,
+        )) {
+            val capabilities = NetworkCapabilities().apply {
+                addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                addTransportType(transport)
+            }
+            val mapped = DownloadConnectivityMapper.fromCapabilities(capabilities)
+            assertEquals("transport=$transport", DownloadConnectivity.UnmeteredNonWifi, mapped)
+            assertEquals(
+                "transport=$transport",
+                DownloadNetworkDecision.PauseForConnectivity,
+                DownloadNetworkPolicy.decision(DownloadNetworkPreference.WifiOnly, mapped),
+            )
+        }
+
+        val wifi = NetworkCapabilities().apply {
+            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+            addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+        }
+        assertEquals(DownloadConnectivity.Unmetered, DownloadConnectivityMapper.fromCapabilities(wifi))
+        assertEquals(
+            DownloadNetworkDecision.Allow,
+            DownloadNetworkPolicy.decision(
+                DownloadNetworkPreference.WifiOnly,
+                DownloadConnectivityMapper.fromCapabilities(wifi),
+            ),
+        )
+    }
+
+    @Test
     fun mapsAndroidCapabilitiesToDownloadConnectivity() {
         assertEquals(
             DownloadConnectivity.None,
