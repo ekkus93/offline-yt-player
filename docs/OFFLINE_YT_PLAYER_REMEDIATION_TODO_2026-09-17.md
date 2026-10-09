@@ -786,7 +786,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 - [x] Capture representative large-font cases.
 - [x] Fail tests on unintended golden changes.
-- [ ] **RMD-1403c — Eliminate CI-local golden-test source mutation.** Pin reviewed Download Setup hashes and the Compose idle barrier in tracked Kotlin source; convert the CI preparation script into a read-only validator; assert the source has no CI worktree diff; add host-side regression tests; qualify with exact-head normal CI and Android golden instrumentation before closing. Historical RMD-1403 green runs that patched Kotlin inside CI do not by themselves prove exact-head golden acceptance.
+- [ ] **RMD-1403c — Eliminate CI-local golden-test source mutation.** Pin reviewed Download Setup hashes and the Compose idle barrier in tracked Kotlin source; convert the CI preparation script into a read-only validator; assert the source has no CI worktree diff; add host-side regression tests; verify every expected raster test method executed non-skipped (not merely that the suite started); remove outdated policy flags claiming bitmap goldens are deferred; qualify with exact-head normal CI and Android golden instrumentation before closing. Historical RMD-1403 green runs that patched Kotlin inside CI do not by themselves prove exact-head golden acceptance.
 
 ### RMD-1404 — No-hidden-controls behavioral gate
 

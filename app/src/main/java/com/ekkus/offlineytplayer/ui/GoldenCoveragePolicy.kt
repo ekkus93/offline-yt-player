@@ -28,6 +28,7 @@ internal object GoldenCoveragePolicy {
         Profiles.map { profile -> GoldenScenario(surface, profile) }
     }
 
-    const val UsesDeterministicHostSideManifest = true
-    const val BitmapGoldensDeferredUntilStableComposeHarness = true
+    // This is a target-scenario inventory, NOT executable screenshot evidence.
+    // Only ProductionComposeGoldenTest on an emulator can qualify bitmap captures.
+
 }

@@ -7,6 +7,8 @@ from pathlib import Path
 from scripts.assert_android_smoke_execution import (
     executed_test_classes,
     missing_required_classes,
+    executed_test_methods,
+    missing_required_methods,
 )
 
 
@@ -38,6 +40,20 @@ class AndroidSmokeExecutionGuardTests(unittest.TestCase):
             self.assertEqual(
                 ["com.example.Gateway"],
                 missing_required_classes(Path(tmp), {"com.example.Gateway"}),
+            )
+
+    def test_required_bitmap_methods_must_each_execute_non_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "TEST-goldens.xml").write_text(
+                '<testsuite><testcase classname="com.example.Goldens" name="library"/>'
+                '<testcase classname="com.example.Goldens" name="settings"><skipped/></testcase>'
+                '</testsuite>',
+                encoding="utf-8",
+            )
+            self.assertEqual({("com.example.Goldens", "library")}, executed_test_methods(Path(tmp)))
+            self.assertEqual(
+                ["com.example.Goldens#settings"],
+                missing_required_methods(Path(tmp), {("com.example.Goldens", "library"), ("com.example.Goldens", "settings")}),
             )
 
     def test_invalid_report_is_rejected(self):

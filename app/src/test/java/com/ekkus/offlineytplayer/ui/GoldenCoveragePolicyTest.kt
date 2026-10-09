@@ -35,9 +35,4 @@ class GoldenCoveragePolicyTest {
         }
     }
 
-    @Test
-    fun goldenGateIsDeterministicAndDocumentsBitmapBoundary() {
-        assertTrue(GoldenCoveragePolicy.UsesDeterministicHostSideManifest)
-        assertTrue(GoldenCoveragePolicy.BitmapGoldensDeferredUntilStableComposeHarness)
-    }
 }
