@@ -2,7 +2,6 @@ package com.ekkus.offlineytplayer.downloads
 
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -18,11 +17,11 @@ class DownloadConnectivityObserverInstrumentedTest {
             NetworkCapabilities.TRANSPORT_CELLULAR,
             NetworkCapabilities.TRANSPORT_VPN,
         )) {
-            val capabilities = NetworkRequest.Builder().apply {
+            val capabilities = NetworkCapabilities().apply {
                 addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
                 addTransportType(transport)
-            }.build().networkCapabilities
+            }
             val mapped = DownloadConnectivityMapper.fromCapabilities(capabilities)
             assertEquals("transport=$transport", DownloadConnectivity.UnmeteredNonWifi, mapped)
             assertEquals(
@@ -32,11 +31,11 @@ class DownloadConnectivityObserverInstrumentedTest {
             )
         }
 
-        val wifi = NetworkRequest.Builder().apply {
+        val wifi = NetworkCapabilities().apply {
             addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
             addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-        }.build().networkCapabilities
+        }
         assertEquals(DownloadConnectivity.Unmetered, DownloadConnectivityMapper.fromCapabilities(wifi))
         assertEquals(
             DownloadNetworkDecision.Allow,
