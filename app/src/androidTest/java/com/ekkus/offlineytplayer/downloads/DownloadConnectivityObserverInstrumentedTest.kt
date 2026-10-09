@@ -11,18 +11,20 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class DownloadConnectivityObserverInstrumentedTest {
     @Test
-    fun unmeteredNonWifiAndroidCapabilitiesNeverSatisfyWifiOnly() {
+    fun unmeteredNonWifiTransportFlagsNeverSatisfyWifiOnly() {
+        // Android does not expose public NetworkCapabilities mutators on API 29.
+        // Exercise the same production mapping flags on the packaged device; the
+        // framework-object test below separately verifies actual capability extraction.
         for (transport in listOf(
             NetworkCapabilities.TRANSPORT_ETHERNET,
             NetworkCapabilities.TRANSPORT_CELLULAR,
             NetworkCapabilities.TRANSPORT_VPN,
         )) {
-            val capabilities = NetworkCapabilities().apply {
-                addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-                addTransportType(transport)
-            }
-            val mapped = DownloadConnectivityMapper.fromCapabilities(capabilities)
+            val mapped = DownloadConnectivityMapper.fromCapabilityFlags(
+                hasInternet = true,
+                isUnmetered = true,
+                isWifi = transport == NetworkCapabilities.TRANSPORT_WIFI,
+            )
             assertEquals("transport=$transport", DownloadConnectivity.UnmeteredNonWifi, mapped)
             assertEquals(
                 "transport=$transport",
@@ -31,18 +33,15 @@ class DownloadConnectivityObserverInstrumentedTest {
             )
         }
 
-        val wifi = NetworkCapabilities().apply {
-            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-            addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-        }
-        assertEquals(DownloadConnectivity.Unmetered, DownloadConnectivityMapper.fromCapabilities(wifi))
+        val wifi = DownloadConnectivityMapper.fromCapabilityFlags(
+            hasInternet = true,
+            isUnmetered = true,
+            isWifi = true,
+        )
+        assertEquals(DownloadConnectivity.Unmetered, wifi)
         assertEquals(
             DownloadNetworkDecision.Allow,
-            DownloadNetworkPolicy.decision(
-                DownloadNetworkPreference.WifiOnly,
-                DownloadConnectivityMapper.fromCapabilities(wifi),
-            ),
+            DownloadNetworkPolicy.decision(DownloadNetworkPreference.WifiOnly, wifi),
         )
     }
 
