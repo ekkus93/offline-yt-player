@@ -1,8 +1,9 @@
 use crate::resource_bounds::{
-    MAX_PROVIDER_REDIRECTS, MAX_PROVIDER_STREAMS, MAX_PROVIDER_SUBTITLE_ID_BYTES,
-    MAX_PROVIDER_SUBTITLE_LABEL_CHARS, MAX_PROVIDER_SUBTITLE_LANGUAGE_BYTES,
-    MAX_PROVIDER_SUBTITLES, MAX_PROVIDER_RESPONSE_BYTES, ensure_provider_response_size, ensure_provider_url_bound,
-    provider_connect_timeout, provider_request_timeout, truncate_provider_title,
+    MAX_PROVIDER_REDIRECTS, MAX_PROVIDER_RESPONSE_BYTES, MAX_PROVIDER_STREAMS,
+    MAX_PROVIDER_SUBTITLE_ID_BYTES, MAX_PROVIDER_SUBTITLE_LABEL_CHARS,
+    MAX_PROVIDER_SUBTITLE_LANGUAGE_BYTES, MAX_PROVIDER_SUBTITLES, ensure_provider_response_size,
+    ensure_provider_url_bound, provider_connect_timeout, provider_request_timeout,
+    truncate_provider_title,
 };
 use crate::youtube_extract::{
     ExtractedStream, ExtractedSubtitle, ExtractedYouTubeMedia, curate_quality_choices,
@@ -68,7 +69,11 @@ fn read_bounded_watch_body(reader: impl Read) -> Result<Vec<u8>, CoreError> {
     let mut bounded = reader.take(MAX_PROVIDER_RESPONSE_BYTES as u64 + 1);
     let mut bytes = Vec::new();
     bounded.read_to_end(&mut bytes).map_err(|_| {
-        CoreError::new(ErrorKind::NetworkUnavailable, "YouTube watch response read failed", true)
+        CoreError::new(
+            ErrorKind::NetworkUnavailable,
+            "YouTube watch response read failed",
+            true,
+        )
     })?;
     ensure_provider_response_size("YouTube watch", None, bytes.len())?;
     Ok(bytes)
