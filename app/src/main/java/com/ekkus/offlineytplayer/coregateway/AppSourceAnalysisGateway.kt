@@ -73,7 +73,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         val qualityOptions = choices.map { choice ->
             CoreSourceQualityChoice(
                 label = SourceMetadataPolicy.qualityLabel(readSourceString(choice, "label")),
-                estimatedBytes = (readSourceNullable(choice, "estimatedBytes", "estimated_bytes") as Number?)?.toLong(),
+                estimatedBytes = readSourceNullable(choice, "estimatedBytes", "estimated_bytes")?.let(::generatedNumericAsLong),
                 choiceId = readSourceString(choice, "choiceId", "choice_id"),
                 separateAudio = readSourceRequired(choice, "separateAudio", "separate_audio") as Boolean,
             )
@@ -93,7 +93,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
                 formatId = readSourceString(option, "formatId", "format_id"),
                 label = readSourceString(option, "label"),
                 container = readSourceString(option, "container"),
-                bitrateBps = (readSourceNullable(option, "bitrateBps", "bitrate_bps") as Number?)?.toLong(),
+                bitrateBps = readSourceNullable(option, "bitrateBps", "bitrate_bps")?.let(::generatedNumericAsLong),
             )
         }
         val containerOptions = readSourceRequired(media, "containerOptions", "container_options") as List<*>
@@ -102,7 +102,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
             CoreSourceAnalysis(
                 sourceUrl = canonicalSourceUrl(media) ?: normalized,
                 title = SourceMetadataPolicy.title(readSourceString(media, "title")),
-                durationMs = (readSourceNullable(media, "durationMs", "duration_ms") as Number?)?.toLong(),
+                durationMs = readSourceNullable(media, "durationMs", "duration_ms")?.let(::generatedNumericAsLong),
                 thumbnailUrl = readSourceNullable(media, "thumbnailUrl", "thumbnail_url") as String?,
                 qualityLabel = preferred?.label ?: "No compatible format",
                 estimatedBytes = preferred?.estimatedBytes,

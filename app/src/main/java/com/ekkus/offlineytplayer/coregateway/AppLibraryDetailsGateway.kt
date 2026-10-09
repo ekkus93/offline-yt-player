@@ -81,7 +81,7 @@ private fun mapDetails(record: Any): CoreLibraryDetails = CoreLibraryDetails(
     mediaId = readStringDetail(record, "mediaId", "media_id"),
     canonicalUrl = readNullableDetail(record, "canonicalUrl", "canonical_url") as String?,
     displayTitle = readStringDetail(record, "displayTitle", "display_title"),
-    durationMs = (readNullableDetail(record, "durationMs", "duration_ms") as Number?)?.toLong(),
+    durationMs = readNullableDetail(record, "durationMs", "duration_ms")?.let(::generatedNumericAsLong),
     qualityLabel = readStringDetail(record, "qualityLabel", "quality_label"),
     completed = readBooleanDetail(record, "completed"),
     playbackPositionMs = readNumberDetail(record, "playbackPositionMs", "playback_position_ms").toLong(),
@@ -118,4 +118,5 @@ private fun readRequiredDetail(target: Any, vararg names: String): Any =
 private fun readListDetail(target: Any, vararg names: String): List<Any> = readRequiredDetail(target, *names) as List<Any>
 private fun readStringDetail(target: Any, vararg names: String): String = readRequiredDetail(target, *names) as String
 private fun readBooleanDetail(target: Any, vararg names: String): Boolean = readRequiredDetail(target, *names) as Boolean
-private fun readNumberDetail(target: Any, vararg names: String): Number = readRequiredDetail(target, *names) as Number
+private fun readNumberDetail(target: Any, vararg names: String): Long =
+    generatedNumericAsLong(readRequiredDetail(target, *names))

@@ -68,6 +68,26 @@ class AppCoreGatewayPolicyTest {
     }
 
     @Test
+    fun generatedUnsignedCountersRejectSignedIntOverflow() {
+        assertEquals(0, generatedNumericAsInt(0u))
+        assertEquals(73, generatedNumericAsInt(73uL))
+        assertEquals(Int.MAX_VALUE, generatedNumericAsInt(Int.MAX_VALUE.toULong()))
+        assertTrue(runCatching { generatedNumericAsInt(Int.MAX_VALUE.toULong() + 1uL) }.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(runCatching { generatedNumericAsInt(-1L) }.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(runCatching { generatedNumericAsInt(ULong.MAX_VALUE) }.exceptionOrNull() is IllegalArgumentException)
+    }
+
+    @Test
+    fun productionSourceAndLibraryDetailsUseSharedUnsignedConversion() {
+        val source = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppSourceAnalysisGateway.kt").readText()
+        val details = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppLibraryDetailsGateway.kt").readText()
+        assertFalse(source.contains("as Number?"))
+        assertFalse(details.contains("as Number?"))
+        assertTrue(source.contains("::generatedNumericAsLong"))
+        assertTrue(details.contains("::generatedNumericAsLong"))
+    }
+
+    @Test
     fun productionGatewayIsTheOnlyLayerThatNamesGeneratedUniffiService() {
         val source = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppCoreGateway.kt").readText()
         val controls = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppDownloadControlGateway.kt").readText()
