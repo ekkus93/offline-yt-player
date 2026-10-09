@@ -14,6 +14,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -168,12 +169,20 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             runCatching { compose.onNodeWithText(TITLE, substring = true).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText("Download setup").assertIsDisplayed()
-        // This host-driven phase isolates the real scheduler/core/Library/process-death path.
-        // Select the fixture quality through the source preference and verify the actual
-        // scheduler argument below. ProductionComposeBehaviorTest separately exercises
-        // Options -> Select -> Apply; combined options + process-death E2E remains open.
-        // The options-return transition is unreliable in the software-emulated host
-        // cold-start fixture and must not mask evidence for the remaining runtime steps.
+        // Exercise Options -> explicit quality selection -> Apply in this same
+        // production Add-to-scheduler-to-cold-start pipeline, not only in an
+        // isolated Compose behavior test. Select away and back to the target
+        // quality so the final enqueue must carry the user's actual choice.
+        compose.onNodeWithText("Options").performClick()
+        compose.waitUntil(15_000) {
+            runCatching { compose.onNodeWithText("Download options").assertIsDisplayed() }.isSuccess
+        }
+        compose.onNodeWithText("Select Fixture default").performScrollTo().performClick()
+        compose.onNodeWithText("Select Fixture WAV").performScrollTo().performClick()
+        compose.onNodeWithText("Apply options").performScrollTo().performClick()
+        compose.waitUntil(15_000) {
+            runCatching { compose.onNodeWithText("Download setup").assertIsDisplayed() }.isSuccess
+        }
         runCatching {
             compose.waitUntil(30_000) {
                 runCatching { compose.onNodeWithText("Download").assertIsEnabled() }.isSuccess
