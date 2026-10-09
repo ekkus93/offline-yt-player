@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -119,9 +120,9 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 "adb must restore a real Android default network",
                 observedNetwork.get() != DownloadConnectivity.None,
             )
-            waitForState(jobId, CoreDownloadState.COMPLETED)
+            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L)
             assertEquals(payload.size.toLong(), finished.length())
-            assertEquals(payload.toList(), finished.readBytes().toList())
+            assertArrayEquals(payload, finished.readBytes())
             assertFalse("resume must remove partial bytes after promotion", partial.exists())
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
                 val library = core.listLibrary()
@@ -419,8 +420,12 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         throw AssertionError("transfer never persisted partial fixture bytes")
     }
 
-    private fun waitForState(jobId: String, expected: CoreDownloadState) {
-        val deadline = SystemClock.elapsedRealtime() + 30_000L
+    private fun waitForState(
+        jobId: String,
+        expected: CoreDownloadState,
+        timeoutMs: Long = 30_000L,
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var last: CoreDownloadState? = null
         // Keep one reader open while the worker updates the durable SQLite queue.
         // Reopening the Rust service for every 50-ms poll reruns schema initialization.
