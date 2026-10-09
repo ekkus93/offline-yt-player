@@ -74,6 +74,7 @@ jobs:
             if [ "$status" -ne 0 ]; then echo "Base smoke Gradle log:"; cat app/build/reports/androidSmokeLogs/base-smoke-gradle.log || true; echo "Base smoke failure summary:"; python3 scripts/summarize_android_test_failures.py || true; fi;
             if [ "$status" -eq 0 ]; then sh scripts/run_required_android_smoke.sh || status=$?; fi;
             python3 scripts/register_download_setup_golden_variant.py || exit $?;
+            git diff --exit-code -- app/src/androidTest/java/com/ekkus/offlineytplayer/ui/ProductionComposeGoldenTest.kt || exit $?;
             golden_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest > app/build/reports/androidSmokeLogs/golden-gradle.log 2>&1 || golden_status=$?;
             mkdir -p app/build/reports/androidGoldens;

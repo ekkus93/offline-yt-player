@@ -92,6 +92,7 @@ class ProductionComposeGoldenTest {
         setResolvedAddContent()
         compose.onNodeWithText("Options").performClick()
         compose.onNodeWithText("Quality choices").assertIsDisplayed()
+        compose.waitForIdle()
         assertGolden("download_setup")
     }
 
@@ -226,7 +227,7 @@ class ProductionComposeGoldenTest {
             "library_populated" to setOf("69a0c4a62f147af7b3fbccfc09fb3e9952a6491ad6e0ccb263d1a92e1f097c32", "6be56fdbea5f3a875ec625514c059a59824777488758b4086568c2603fdfe628", "6fb3b3b7a8309990987a2b2ce3bb46fa50943cede0f59b9f8b48894088eee64c", "cae9c4866d3097c0f15c3345ef348de0db7fd3cf5849b169f9515930821e30dd"),
             "add_invalid" to setOf("a0de221ecc84f92c725c6077d121ec3e9b11d07351dc20cf67eb5db62bf28a6e", "64feb00fe7a58a43e49b1dfc66055894145b9ce7d3e15c40ab2f23069e5c2d14", "ce03c82ba712fcc083fc7fdb0ea19149b2555f22dae11d8b7f3b98d4d4282ea9", "43f380e7cb6f67e84165ebbb1286ffb7f4942501cb79256cedfa1a14404b4795"),
             "add_resolved" to setOf("0a57f16ceed3ac30f5f2ef26a2bd56f92991018788dc64a64bdb0ca654174d8c", "6a2ea0e3e5bddbe0a32a33b671c112fe5e548c0c3dfeaa885b3c8d6a2d34722a"),
-            "download_setup" to setOf("400b8f89775e011c0e2e285aca7bab40bfe0c099546a2e42c71ff3928adb1958", "afb9a1a883beadc48b61658c6d43f7cc96819db7bb0705453d4a7bb5f5651476", "464ee553fe778bec26dae8daffabc11fb9ce946ccb21f40005ae1eb8ee0e8f49"),
+            "download_setup" to setOf("400b8f89775e011c0e2e285aca7bab40bfe0c099546a2e42c71ff3928adb1958", "afb9a1a883beadc48b61658c6d43f7cc96819db7bb0705453d4a7bb5f5651476", "464ee553fe778bec26dae8daffabc11fb9ce946ccb21f40005ae1eb8ee0e8f49", "9cfd346c4254a4510e5a363212d9e8d0992813e45c2c749007c6cd62b0facd72", "577c0cb6e2d2d0ca32722243d648184a44a75b2b6ae14d9fb14077656fee00d0"),
             "downloads_active" to setOf("6724d5eef99d0d639c7dbe5812a4dd744757be9cd4b3d73f8b1d85da0b874b02"),
             "downloads_failure" to setOf("6c4cbb55f97ef254429332d5ed31397c777debcc789a8840bfc7ae40d023a89a"),
             "player" to setOf("bf3575836add842e2d9dae445c77c1194a6247ff26f9adac3a7851c3bd353f77", "9d29c633509966b60823cde060d681cb3dbd7b9849607c5576bb7879797b0ed2", "ac97f999b0b98dac7c76d0098a8c509bb80c5149a6c9a98b3882fa663c2e5f6e"),
