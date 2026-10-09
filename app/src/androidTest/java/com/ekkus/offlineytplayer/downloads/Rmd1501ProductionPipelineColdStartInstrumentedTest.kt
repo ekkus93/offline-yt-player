@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -148,6 +149,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
 
         compose.waitUntil(60_000) {
             runCatching { compose.onNodeWithText("Analyze").assertIsEnabled() }.isSuccess
+
         }
         compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(60_000) {
@@ -160,8 +162,16 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         // Do not wait for the transient, off-viewport status message on the small API-29
         // emulator. Wait for the actual enabled Download action after leaving options;
         // the selected quality is verified against the scheduler's enqueue arguments below.
-        compose.waitUntil(30_000) {
-            runCatching { compose.onNodeWithText("Download").assertIsEnabled() }.isSuccess
+        runCatching {
+            compose.waitUntil(30_000) {
+                runCatching { compose.onNodeWithText("Download").assertIsEnabled() }.isSuccess
+            }
+        }.getOrElse { error ->
+            throw AssertionError(
+                "Download action did not become enabled after Apply options. " +
+                    "Compose semantics: " + compose.onRoot(useUnmergedTree = true).printToString(),
+                error,
+            )
         }
         compose.onNodeWithText("Download").performClick()
 
@@ -298,6 +308,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
     private class FixtureSourceGateway(
         private val analysis: CoreSourceAnalysis,
     ) : AppSourceAnalysisGateway {
+
         override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> =
             CoreGatewayResult(value = analysis.copy(sourceUrl = sourceUrl), error = null)
 
@@ -448,6 +459,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
                 } catch (error: SocketTimeoutException) {
                     failure.set(AssertionError("RMD-1501 fixture server was not contacted", error))
                 } catch (error: Throwable) {
+
                     failure.set(error)
                 }
             }

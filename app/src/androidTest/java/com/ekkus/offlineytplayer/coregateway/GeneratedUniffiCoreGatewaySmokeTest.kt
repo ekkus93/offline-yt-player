@@ -11,11 +11,15 @@ import androidx.media3.session.SessionToken
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.downloads.AndroidDownloadExecutionScheduler
+import com.ekkus.offlineytplayer.downloads.DownloadConnectivity
+import com.ekkus.offlineytplayer.downloads.DownloadForegroundService
 import com.ekkus.offlineytplayer.downloads.DownloadNetworkPreference
 import com.ekkus.offlineytplayer.downloads.DownloadScheduleRequest
 import com.ekkus.offlineytplayer.downloads.DownloadSchedulerKind
 import com.ekkus.offlineytplayer.playback.PlaybackSessionService
+import java.io.Closeable
 import java.net.InetAddress
+import java.net.SocketException
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -96,7 +100,8 @@ class GeneratedUniffiCoreGatewaySmokeTest {
         val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
         val mediaUrl = listOf("http", "://", "127.0.0.1:", server.localPort.toString(), "/media.mp4").joinToString("")
         val serverThread = thread(start = true, name = "rmd-502a-fixture-server") {
-            server.accept().use { socket ->
+            try {
+                server.accept().use { socket ->
                 val input = socket.getInputStream().bufferedReader()
                 while (true) {
                     val line = input.readLine() ?: break
@@ -108,9 +113,22 @@ class GeneratedUniffiCoreGatewaySmokeTest {
                     output.write(payload)
                     output.flush()
                 }
+                }
+            } catch (error: SocketException) {
+                // Cleanup may close an uncontacted listener after the test has
+                // already failed. Do not let a background exception hide the
+                // original queue/worker failure from the test report.
+                if (!server.isClosed) throw error
             }
         }
 
+        // This suite validates the packaged scheduler/UniFFI worker, not Android's
+        // real network callbacks (covered separately by RMD-1506). A software-emulated
+        // CI device can report no default network despite its reachable loopback fixture.
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { _, onChanged ->
+            onChanged(DownloadConnectivity.Unmetered)
+            Closeable { }
+        }
         try {
             System.loadLibrary("offline_yt_core")
             GeneratedUniffiCoreGateway.open(database.absolutePath).close()
@@ -148,7 +166,10 @@ class GeneratedUniffiCoreGatewaySmokeTest {
             val localVideoPath = context.filesDir.resolve(playbackAsset.videoRelativePath!!).absolutePath
             assertEquals(itemDir.resolve("video.mp4").absolutePath, localVideoPath)
             assertCompletedLibraryItemRoutesToMediaSession(context, jobId, localVideoPath)
+
         } finally {
+            context.stopService(android.content.Intent(context, DownloadForegroundService::class.java))
+            DownloadForegroundService.connectivityObserverFactoryForTesting = null
             server.close()
             serverThread.join(1_000)
             itemDir.deleteRecursively()
