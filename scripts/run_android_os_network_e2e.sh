@@ -75,9 +75,13 @@ grep -q 'OK (1 test)' "$LOG" || {
 # A device with no discoverable saved Wi-Fi SSID cannot qualify this additional
 # case; retain an explicit artifact note rather than inventing success.
 adb shell cmd netpolicy list wifi-networks > "$DIR/wifi-networks-before.txt" 2>&1 || true
-METERED_SSID=$(sed -n '/;false[[:space:]]*$/ { s/^[[:space:]]*//; s/;false[[:space:]]*$//; p; q; }' "$DIR/wifi-networks-before.txt")
+# Android may report a default-unmetered Wi-Fi network as ;none,
+# meaning no explicit metered override; ;false is not the only eligible case.
+# Trim optional quotes as required by cmd netpolicy set metered-network.
+cat "$DIR/wifi-networks-before.txt"
+METERED_SSID=$(sed -n -E '/;(false|none)[[:space:]]*$/ { s/^[[:space:]]*//; s/;(false|none)[[:space:]]*$//; p; q; }' "$DIR/wifi-networks-before.txt" | tr -d '"')
 if [[ -z "$METERED_SSID" ]]; then
-    echo "WIFI_ONLY_METERED_UNAVAILABLE: no initially unmetered Wi-Fi SSID" | tee "$DIR/wifi-only-metered-result.txt"
+    echo "WIFI_ONLY_METERED_UNAVAILABLE: no saved Wi-Fi SSID with false/none policy" | tee "$DIR/wifi-only-metered-result.txt"
     exit 0
 fi
 echo "WIFI_ONLY_METERED_SSID_FOUND: $METERED_SSID" | tee "$DIR/wifi-only-metered-result.txt"
