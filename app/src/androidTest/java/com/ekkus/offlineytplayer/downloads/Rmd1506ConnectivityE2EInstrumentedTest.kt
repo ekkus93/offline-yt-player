@@ -137,6 +137,101 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         }
     }
 
+
+    /**
+     * Host-only Android Wi-Fi-only acceptance: the host toggles the device's
+     * saved Wi-Fi SSID metered override using cmd netpolicy. Unlike the JVM
+     * policy tests this must observe actual ConnectivityManager callbacks and
+     * real generated-core worker state transitions.
+     */
+    @Test
+    fun hostDrivenWifiOnlyMeteredWifiPausesAndUnmeteredWifiResumes() {
+        assumeTrue(
+            "requires adb Wi-Fi metered override",
+            InstrumentationRegistry.getArguments().getString("rmdHostWifiMetered") == "true",
+        )
+        deleteRuntimeState()
+        DownloadForegroundService.connectivityObserverFactoryForTesting = null
+        System.loadLibrary("offline_yt_core")
+        val signals = File(requireNotNull(context.getExternalFilesDir(null)), "rmd1506-host")
+            .apply { mkdirs() }
+        val network = AtomicReference(DownloadConnectivity.None)
+        val observer = AndroidDownloadConnectivityObserver(context, network::set)
+        val jobId = "rmd-1506-wifi-metered"
+        val payload = ByteArray(8 * 1024 * 1024) { (it % 247).toByte() }
+        val relativePath = "items/rmd-1506-wifi-metered/video.mp4"
+        val partial = File(context.filesDir, "items/rmd-1506-wifi-metered/.video.mp4.partial")
+        val finished = File(context.filesDir, relativePath)
+        val server = SlowRangeFixtureServer(payload).also { it.start() }
+        observer.start()
+        try {
+            val networkDeadline = SystemClock.elapsedRealtime() + 20_000L
+            while (
+                network.get() != DownloadConnectivity.Unmetered &&
+                SystemClock.elapsedRealtime() < networkDeadline
+            ) SystemClock.sleep(50L)
+            assertEquals(
+                "host must expose a real unmetered Wi-Fi default network",
+                DownloadConnectivity.Unmetered,
+                network.get(),
+            )
+            GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { controls ->
+                val enqueued = controls.enqueue(jobId)
+                assertNull(enqueued.error)
+                assertEquals(true, enqueued.value)
+            }
+            seedDurableWork(jobId, server.mediaUrl, relativePath, payload.size)
+            assertTrue(
+                AndroidDownloadExecutionScheduler(context).schedule(
+                    DownloadScheduleRequest(
+                        queueItemId = jobId,
+                        networkPreference = DownloadNetworkPreference.WifiOnly,
+                    ),
+                ).accepted,
+            )
+            waitForState(jobId, CoreDownloadState.DOWNLOADING)
+            waitForPartialBytes(partial)
+            signals.resolve("wifi-ready").writeText("WifiOnly transfer started on genuine unmetered Wi-Fi")
+            val meteredDeadline = SystemClock.elapsedRealtime() + 45_000L
+            while (
+                network.get() != DownloadConnectivity.Metered &&
+                SystemClock.elapsedRealtime() < meteredDeadline
+            ) SystemClock.sleep(50L)
+            assertEquals(
+                "host metered override must reach the real Android observer",
+                DownloadConnectivity.Metered,
+                network.get(),
+            )
+            waitForState(jobId, CoreDownloadState.PAUSED)
+            assertTrue("metered Wi-Fi pause retains partial bytes", partial.length() > 0L)
+            assertFalse("metered Wi-Fi pause cannot promote final bytes", finished.exists())
+            signals.resolve("wifi-paused").writeText("real metered Wi-Fi paused WifiOnly durable transfer")
+            val unmeteredDeadline = SystemClock.elapsedRealtime() + 45_000L
+            while (
+                network.get() != DownloadConnectivity.Unmetered &&
+                SystemClock.elapsedRealtime() < unmeteredDeadline
+            ) SystemClock.sleep(50L)
+            assertEquals(
+                "clearing metered override must restore the real eligible Wi-Fi callback",
+                DownloadConnectivity.Unmetered,
+                network.get(),
+            )
+            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L)
+            assertArrayEquals(payload, finished.readBytes())
+            assertFalse("completed Wi-Fi-only download must remove partial", partial.exists())
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val library = core.listLibrary()
+                assertNull(library.error)
+                assertTrue(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
+            }
+            signals.resolve("wifi-complete").writeText("real unmetered Wi-Fi resumed and completed Library item")
+        } finally {
+            observer.close()
+            context.stopService(Intent(context, DownloadForegroundService::class.java))
+            server.close()
+        }
+    }
+
     @Test
     fun activeTransferPausesForConnectivityAndWifiOnlyResumesOnlyOnUnmeteredNetwork() {
         deleteRuntimeState()
