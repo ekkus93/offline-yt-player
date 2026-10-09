@@ -280,8 +280,30 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
             val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
             val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
             try {
+                // The video-only fixture is short. It can reach STATE_ENDED before
+                // this independent observer attaches. Seek to its start and pause
+                // the canonical session so the decoder track proof is deterministic.
+                val attachDeadline = SystemClock.elapsedRealtime() + 10_000L
+                var correctItemAttached = false
+                while (SystemClock.elapsedRealtime() < attachDeadline) {
+                    instrumentation.runOnMainSync {
+                        correctItemAttached =
+                            observer.currentMediaItem?.localConfiguration?.uri?.path == videoFile.absolutePath &&
+                                observer.currentMediaItem?.let(LocalPlaybackPolicy::splitAudioPathFrom) ==
+                                    audioFile.absolutePath
+                    }
+                    if (correctItemAttached) break
+                    SystemClock.sleep(50)
+                }
+                assertTrue("cold-started canonical session must reopen both local asset paths", correctItemAttached)
+                instrumentation.runOnMainSync {
+                    observer.pause()
+                    observer.seekTo(0L)
+                    observer.prepare()
+                }
                 var readyWithSelectedVideoAndAudio = false
-                val deadline = SystemClock.elapsedRealtime() + 10_000L
+                var diagnostics = "No session state observed"
+                val deadline = SystemClock.elapsedRealtime() + 15_000L
                 while (SystemClock.elapsedRealtime() < deadline) {
                     instrumentation.runOnMainSync {
                         val groups = observer.currentTracks.groups
@@ -294,19 +316,21 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
                                 (0 until group.length).any(group::isTrackSelected)
                         }
                         val current = observer.currentMediaItem
+                        diagnostics = "state=${observer.playbackState}, " +
+                            "error=${observer.playerError}, selectedVideo=$selectedVideo, " +
+                            "selectedAudio=$selectedAudio, position=${observer.currentPosition}, " +
+                            "media=${current?.localConfiguration?.uri}"
                         readyWithSelectedVideoAndAudio =
                             observer.playbackState == Player.STATE_READY &&
-                                current != null &&
-                                current.localConfiguration?.uri?.path == videoFile.absolutePath &&
+                                current?.localConfiguration?.uri?.path == videoFile.absolutePath &&
                                 LocalPlaybackPolicy.splitAudioPathFrom(current) == audioFile.absolutePath &&
-                                selectedVideo &&
-                                selectedAudio
+                                selectedVideo && selectedAudio
                     }
                     if (readyWithSelectedVideoAndAudio) break
                     SystemClock.sleep(50)
                 }
                 assertTrue(
-                    "cold-started canonical session must merge persisted local video and audio offline",
+                    "cold-started canonical session must merge persisted local video and audio offline; $diagnostics",
                     readyWithSelectedVideoAndAudio,
                 )
             } finally {

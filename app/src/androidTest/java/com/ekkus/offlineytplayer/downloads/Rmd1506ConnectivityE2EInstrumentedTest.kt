@@ -252,8 +252,8 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             {
               "source": {
                 "provider": "direct-fixture",
-                "media_id": "rmd-1506-connectivity",
-                "canonical_url": "https://fixture.invalid/rmd-1506-connectivity"
+                "media_id": "$jobId",
+                "canonical_url": "https://fixture.invalid/$jobId"
               },
               "title": "RMD-1506 connectivity fixture",
               "quality": {
@@ -328,17 +328,23 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
     private fun waitForState(jobId: String, expected: CoreDownloadState) {
         val deadline = SystemClock.elapsedRealtime() + 30_000L
         var last: CoreDownloadState? = null
-        while (SystemClock.elapsedRealtime() < deadline) {
-            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+        // Keep one reader open while the worker updates the durable SQLite queue.
+        // Reopening the Rust service for every 50-ms poll reruns schema initialization.
+        GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+            while (SystemClock.elapsedRealtime() < deadline) {
                 val queue = core.listDownloadQueue()
                 assertNull(queue.error)
-                last = queue.value?.firstOrNull { it.jobId == jobId }?.state
+                val snapshot = queue.value?.firstOrNull { it.jobId == jobId }
+                last = snapshot?.state
+                if (last == expected) return
+                if (last == CoreDownloadState.FAILED || last == CoreDownloadState.CANCELED) {
+                    throw AssertionError(
+                        "job $jobId entered terminal state $last while waiting for $expected; " +
+                            "lastError=${snapshot?.lastError}",
+                    )
+                }
+                SystemClock.sleep(50)
             }
-            if (last == expected) return
-            if (last == CoreDownloadState.FAILED || last == CoreDownloadState.CANCELED) {
-                throw AssertionError("job entered terminal state $last while waiting for $expected")
-            }
-            SystemClock.sleep(50)
         }
         throw AssertionError("timed out waiting for $expected; last=$last")
     }
