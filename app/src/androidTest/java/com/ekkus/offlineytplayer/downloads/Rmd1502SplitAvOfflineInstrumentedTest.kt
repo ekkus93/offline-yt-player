@@ -24,6 +24,7 @@ import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGatew
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 import com.ekkus.offlineytplayer.playback.PlaybackSessionService
+import java.io.Closeable
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -210,6 +211,13 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
             audioUrl = server.baseUrl + "/audio.wav",
             audioBytes = audio.size,
         )
+        // Host cold-start seed must exercise the real foreground scheduler/core worker
+        // without requiring the software-emulator default-network callback.
+        // RMD-1506 separately qualifies actual OS network transition callbacks.
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { _, onChanged ->
+            onChanged(DownloadConnectivity.Unmetered)
+            Closeable { }
+        }
         val scheduled = AndroidDownloadExecutionScheduler(context).schedule(
             DownloadScheduleRequest(queueItemId = jobId),
         )

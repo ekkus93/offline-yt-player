@@ -26,6 +26,7 @@ import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 import com.ekkus.offlineytplayer.playback.LocalSubtitleTrack
 import com.ekkus.offlineytplayer.playback.PlaybackSessionService
+import java.io.Closeable
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -64,6 +65,7 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
     @After
     fun cleanRuntimeState() {
         context.stopService(Intent(context, DownloadForegroundService::class.java))
+        DownloadForegroundService.connectivityObserverFactoryForTesting = null
         context.stopService(Intent(context, PlaybackSessionService::class.java))
         if (coldStartPhase() != "seed") {
             deleteRuntimeState()
@@ -242,6 +244,13 @@ class Rmd1503SubtitleOfflineInstrumentedTest {
             subtitleUrl = server.baseUrl + "/captions.vtt",
             subtitleBytes = subtitle.size,
         )
+        // Host cold-start seed must exercise the real foreground scheduler/core worker
+        // without requiring the software-emulator default-network callback.
+        // RMD-1506 separately qualifies actual OS network transition callbacks.
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { _, onChanged ->
+            onChanged(DownloadConnectivity.Unmetered)
+            Closeable { }
+        }
         val scheduled = AndroidDownloadExecutionScheduler(context).schedule(
             DownloadScheduleRequest(queueItemId = jobId),
         )
