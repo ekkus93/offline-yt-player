@@ -38,6 +38,7 @@ import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.ui.DownloadsScreenState
 import com.ekkus.offlineytplayer.ui.LibraryScreenState
 import com.ekkus.offlineytplayer.ui.OfflineYTPlayerApp
+import java.io.Closeable
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -81,6 +82,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
     fun cleanAfter() {
         MainActivityDependencyOverrides.clearForInstrumentation()
         context.stopService(Intent(context, DownloadForegroundService::class.java))
+        DownloadForegroundService.connectivityObserverFactoryForTesting = null
         context.stopService(Intent(context, PlaybackSessionService::class.java))
         if (coldStartPhase() != "seed") {
             deleteRuntimeState()
@@ -132,6 +134,15 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             scheduler = AndroidDownloadExecutionScheduler(context),
             settingsSnapshot = { AppSettingsSnapshot() },
         )
+        // This seed phase qualifies loopback transfer through the real Android
+        // scheduler, foreground service and generated core worker. A software
+        // emulator may report no eligible default network even when loopback is
+        // reachable; isolate that OS-callback prerequisite from the fixture.
+        // RMD-1506 requires separate, real OS callback qualification.
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { _, onChanged ->
+            onChanged(DownloadConnectivity.Unmetered)
+            Closeable { }
+        }
 
         GeneratedUniffiCoreGateway.open(database.absolutePath).use { }
 
