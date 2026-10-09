@@ -202,15 +202,18 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         assertEquals("fixture-wave", selectedOptions.get()?.qualityChoiceId)
         var lastQueueState: CoreDownloadState? = null
         val completionDeadline = SystemClock.elapsedRealtime() + 25_000L
-        while (SystemClock.elapsedRealtime() < completionDeadline) {
-            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+        // Reuse one core connection while the Android foreground worker writes to
+        // the same database. Reopening FfiCoreService during every 100-ms poll
+        // reruns its SQLite initialization concurrently with a live transfer.
+        GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+            while (SystemClock.elapsedRealtime() < completionDeadline) {
                 val queue = core.listDownloadQueue()
                 assertNull(queue.error)
                 lastQueueState = queue.value?.firstOrNull { it.jobId == SOURCE_URL }?.state
+                if (lastQueueState == CoreDownloadState.COMPLETED) break
+                if (lastQueueState == CoreDownloadState.FAILED || lastQueueState == CoreDownloadState.CANCELED) break
+                SystemClock.sleep(100)
             }
-            if (lastQueueState == CoreDownloadState.COMPLETED) break
-            if (lastQueueState == CoreDownloadState.FAILED || lastQueueState == CoreDownloadState.CANCELED) break
-            SystemClock.sleep(100)
         }
         assertEquals(
             "the scheduled Android foreground worker must complete fixture work; last durable queue state",
