@@ -425,6 +425,11 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             """.trimIndent()
 
             SQLiteDatabase.openDatabase(databasePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+                // Seed schema and queue rows atomically. The instrumentation process
+                // and the generated Rust worker can open the same SQLite database;
+                // partially visible fixture schema is not a valid production state.
+                db.beginTransaction()
+                try {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS download_work_items (
@@ -472,6 +477,10 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
                         put("display_title", TITLE)
                     },
                 )
+                db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
+                }
             }
         }
     }
