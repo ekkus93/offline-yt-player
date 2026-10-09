@@ -19,6 +19,7 @@ import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
 import com.ekkus.offlineytplayer.coregateway.CoreSourceQualityChoice
+import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.DownloadSelectionOptions
 import com.ekkus.offlineytplayer.downloads.DownloadConnectivity
 import com.ekkus.offlineytplayer.downloads.DownloadForegroundService
@@ -133,14 +134,30 @@ class Rmd1504ShareE2EInstrumentedTest {
 
             server.joinAndRethrow()
 
+            // The fixture socket closing is not a durable completion signal:
+            // the generated worker must still promote the asset and persist
+            // the Library record. Avoid re-clicking the navigation tab during
+            // each Compose poll; navigate once after durable core completion.
+            val completedFile = File(context.filesDir, "items/rmd-1504-share/video.mp4")
+            compose.waitUntil(45_000) {
+                completedFile.isFile &&
+                    completedFile.length() == payload.size.toLong() &&
+                    runCatching {
+                        GeneratedUniffiCoreGateway.open(
+                            File(context.filesDir, DATABASE_NAME).absolutePath,
+                        ).use { gateway ->
+                            gateway.listLibrary().value.orEmpty().any { item ->
+                                item.completed && item.displayTitle == title
+                            }
+                        }
+                    }.getOrDefault(false)
+            }
+            compose.onNodeWithText("Library").performClick()
             compose.waitUntil(30_000) {
-                runCatching {
-                    compose.onNodeWithText("Library").performClick()
-                    compose.onNodeWithText(title).assertIsDisplayed()
-                }.isSuccess
+                runCatching { compose.onNodeWithText(title).assertIsDisplayed() }.isSuccess
             }
             compose.onNodeWithText(title).assertIsDisplayed()
-            assertTrue(File(context.filesDir, "items/rmd-1504-share/video.mp4").isFile)
+            assertTrue(completedFile.isFile)
 
             // Exercise the real app navigation stack after entering through ACTION_SEND.
             compose.onNodeWithText("Add").performClick()
