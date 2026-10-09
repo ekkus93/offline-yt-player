@@ -148,6 +148,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
 
         compose.waitUntil(60_000) {
             runCatching { compose.onNodeWithText("Analyze").assertIsEnabled() }.isSuccess
+
         }
         compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(60_000) {
@@ -157,14 +158,11 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         compose.onNodeWithText("Options").performClick()
         compose.onNodeWithText("Select Fixture WAV").performClick()
         compose.onNodeWithText("Apply options").performClick()
-        // The confirmation can be outside the small API-29 emulator viewport. Assert that
-        // Apply committed the state in the Compose tree; actual chosen quality is verified
-        // against the production scheduler's enqueue arguments below.
+        // Do not wait for the transient, off-viewport status message on the small API-29
+        // emulator. Wait for the actual enabled Download action after leaving options;
+        // the selected quality is verified against the scheduler's enqueue arguments below.
         compose.waitUntil(30_000) {
-            runCatching {
-                compose.onNodeWithText("Download options applied.").assertExists()
-                compose.onNodeWithText("Download").assertIsEnabled()
-            }.isSuccess
+            runCatching { compose.onNodeWithText("Download").assertIsEnabled() }.isSuccess
         }
         compose.onNodeWithText("Download").performClick()
 
@@ -297,6 +295,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         header.putInt(pcmBytes)
         return header.array() + ByteArray(pcmBytes)
     }
+
 
     private class FixtureSourceGateway(
         private val analysis: CoreSourceAnalysis,
@@ -448,6 +447,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
                             }
                         }
                     }
+
                 } catch (error: SocketTimeoutException) {
                     failure.set(AssertionError("RMD-1501 fixture server was not contacted", error))
                 } catch (error: Throwable) {
