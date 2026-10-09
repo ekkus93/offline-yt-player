@@ -1,6 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
 import android.graphics.BitmapFactory
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,23 +73,68 @@ internal enum class AppDestination(val label: String, val accessibilityLabel: St
 internal enum class SettingsSection(val label: String) { Downloads("Downloads"), Playback("Playback"), Storage("Storage"), Appearance("Appearance"), About("About") }
 internal object PortraitLayoutPolicy { const val BottomDestinationCount = 4; const val CompactPortraitHeightDp = 640; const val LargeFontScale = 1.30f; const val PrimarySetupControlCount = 4; const val AdvancedOptionsRowCount = 4; const val SettingsHubRowCount = 5; const val MaxSettingsRows = 5; fun primaryControlsFit(heightDp: Int, fontScale: Float): Boolean { val reservedChrome = 144; val minimumContent = if (fontScale >= LargeFontScale) 180 else 160; return heightDp - reservedChrome >= minimumContent } }
 
-@Composable internal fun OfflineYTPlayerApp(initialSharedUrl: String? = null, libraryState: LibraryScreenState = LibraryScreenState.Unavailable("Library repository is not connected yet; no empty-library claim is being made."), downloadsState: DownloadsScreenState = DownloadsScreenState.Unavailable("Downloads repository is not connected yet; no empty-queue claim is being made."), downloadControlGateway: AppDownloadControlGateway? = null, sourceAnalysisGateway: AppSourceAnalysisGateway? = null, libraryDetailsGatewayProvider: () -> AppLibraryDetailsGateway? = { null }, libraryMutationGatewayProvider: () -> AppLibraryMutationGateway? = { null }, libraryRootPath: String? = null, onLibraryQueryChanged: (String) -> Unit = {}, settingsSnapshot: AppSettingsSnapshot = AppSettingsSnapshot(), onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit = {}) {
+@Composable
+internal fun OfflineYTPlayerApp(
+    initialSharedUrl: String? = null,
+    libraryState: LibraryScreenState = LibraryScreenState.Unavailable(
+        "Library repository is not connected yet; no empty-library claim is being made.",
+    ),
+    downloadsState: DownloadsScreenState = DownloadsScreenState.Unavailable(
+        "Downloads repository is not connected yet; no empty-queue claim is being made.",
+    ),
+    downloadControlGateway: AppDownloadControlGateway? = null,
+    sourceAnalysisGateway: AppSourceAnalysisGateway? = null,
+    libraryDetailsGatewayProvider: () -> AppLibraryDetailsGateway? = { null },
+    libraryMutationGatewayProvider: () -> AppLibraryMutationGateway? = { null },
+    libraryRootPath: String? = null,
+    onLibraryQueryChanged: (String) -> Unit = {},
+    settingsSnapshot: AppSettingsSnapshot = AppSettingsSnapshot(),
+    onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit = {},
+) {
     OfflineYTPlayerTheme(settingsSnapshot.appearance) {
-        var destination by rememberSaveable(initialSharedUrl) { mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add) }
+        var destination by rememberSaveable(initialSharedUrl) {
+            mutableStateOf(if (initialSharedUrl == null) AppDestination.Library else AppDestination.Add)
+        }
+        // Bottom destinations are real navigation transitions: Android Back must
+        // restore the prior destination, including when launched from ACTION_SEND.
+        // Store only stable destination names to survive activity recreation.
+        var backStack by rememberSaveable(initialSharedUrl) {
+            mutableStateOf(arrayListOf<String>())
+        }
         val destinationStateHolder = rememberSaveableStateHolder()
         var playbackAsset by remember { mutableStateOf<LocalPlaybackAsset?>(null) }
+
+        fun navigate(next: AppDestination) {
+            if (destination == next) return
+            backStack = ArrayList((backStack + destination.name).takeLast(32))
+            destination = next
+        }
+
+        BackHandler(enabled = playbackAsset != null || backStack.isNotEmpty()) {
+            if (playbackAsset != null) {
+                playbackAsset = null
+            } else {
+                val previous = backStack.lastOrNull()
+                backStack = ArrayList(backStack.dropLast(1))
+                destination = AppDestination.entries.firstOrNull { it.name == previous }
+                    ?: AppDestination.Library
+            }
+        }
+
         val activePlaybackAsset = playbackAsset
         if (activePlaybackAsset != null) {
-            PortraitPlayerScreen(activePlaybackAsset, settingsSnapshot, onUpdateSettings) { playbackAsset = null }
+            PortraitPlayerScreen(activePlaybackAsset, settingsSnapshot, onUpdateSettings) {
+                playbackAsset = null
+            }
         } else {
-            FixedRegionScaffold(destination.label, destination, { destination = it }) { padding ->
+            FixedRegionScaffold(destination.label, destination, ::navigate) { padding ->
                 destinationStateHolder.SaveableStateProvider(destination.name) {
                     DestinationContent(
                         destination, padding, initialSharedUrl, libraryState, downloadsState,
                         downloadControlGateway, sourceAnalysisGateway, libraryDetailsGatewayProvider,
                         libraryMutationGatewayProvider, libraryRootPath, onLibraryQueryChanged,
                         settingsSnapshot, onUpdateSettings,
-                        { destination = AppDestination.Add }, { playbackAsset = it },
+                        { navigate(AppDestination.Add) }, { playbackAsset = it },
                     )
                 }
             }
