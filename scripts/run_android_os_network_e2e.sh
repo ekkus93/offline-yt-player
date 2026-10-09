@@ -103,9 +103,23 @@ fi
 # exit 255). In that case the already-qualified OS network-loss lane remains
 # successful, while metered acceptance is explicitly UNAVAILABLE, not qualified.
 if ! adb shell cmd netpolicy set metered-network "$METERED_SSID" true > "$DIR/wifi-metered-control-probe.log" 2>&1; then
-    echo "WIFI_ONLY_METERED_UNAVAILABLE: emulator rejected metered control probe" | tee -a "$DIR/wifi-only-metered-result.txt"
-    cat "$DIR/wifi-metered-control-probe.log"
-    exit 0
+    # The isolated AOSP emulator may permit root adbd even though its shell
+    # identity cannot modify network policy. Try once without weakening the
+    # actual callback/worker qualification. Never do this on a user device.
+    echo "WIFI_ONLY_METERED_SHELL_DENIED: probing ephemeral CI emulator adb-root access" | tee -a "$DIR/wifi-only-metered-result.txt"
+    adb root > "$DIR/wifi-metered-adb-root.log" 2>&1 || true
+    if ! timeout 20 adb wait-for-device > "$DIR/wifi-metered-adb-wait.log" 2>&1; then
+        echo "WIFI_ONLY_METERED_ADB_ERROR: emulator went offline during root probe" | tee -a "$DIR/wifi-only-metered-result.txt"
+        exit 1
+    fi
+    ROOT_UID=$(adb shell id -u 2>/dev/null | tr -d '\r' || true)
+    if [[ "$ROOT_UID" != "0" ]] || ! adb shell cmd netpolicy set metered-network "$METERED_SSID" true > "$DIR/wifi-metered-root-probe.log" 2>&1; then
+        echo "WIFI_ONLY_METERED_UNAVAILABLE: metered override rejected after optional CI emulator root probe" | tee -a "$DIR/wifi-only-metered-result.txt"
+        cat "$DIR/wifi-metered-control-probe.log" "$DIR/wifi-metered-adb-root.log"
+        if [[ -f "$DIR/wifi-metered-root-probe.log" ]]; then cat "$DIR/wifi-metered-root-probe.log"; fi
+        exit 0
+    fi
+    echo "WIFI_ONLY_METERED_ADB_ROOT_SUPPORTED: metered control probe applied" | tee -a "$DIR/wifi-only-metered-result.txt"
 fi
 adb shell cmd netpolicy list wifi-networks > "$DIR/wifi-metered-control-state.txt" 2>&1 || true
 cat "$DIR/wifi-metered-control-state.txt"
