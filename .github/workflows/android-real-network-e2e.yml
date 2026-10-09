@@ -1,0 +1,62 @@
+name: Android real network E2E
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-real-network-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api29-network-transition:
+    name: API 29 host-controlled OS network loss and resume
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact head
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: "false"
+      - name: Build pinned Android Rust core
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup target add aarch64-linux-android x86_64-linux-android
+          sdkmanager "ndk;30.0.16248370" "platforms;android-37.0" "build-tools;37.0.0"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export CC_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export AR_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export CC_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          cargo build -p offline-yt-core --target aarch64-linux-android
+          cargo build -p offline-yt-core --target x86_64-linux-android
+      - name: Toggle real Android network while foreground download is active
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
+          script: bash scripts/run_android_os_network_e2e.sh
+      - name: Upload host OS-network evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-real-network-evidence-${{ github.run_id }}
+          path: app/build/reports/androidNetworkE2E
+          if-no-files-found: ignore
+          retention-days: 7

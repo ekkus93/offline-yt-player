@@ -8,6 +8,7 @@ import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
@@ -27,6 +28,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -40,6 +42,98 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         context.stopService(Intent(context, DownloadForegroundService::class.java))
         DownloadForegroundService.connectivityObserverFactoryForTesting = null
         deleteRuntimeState()
+    }
+
+    /**
+     * Runs only from the host-controlled OS connectivity lane. Normal smoke
+     * deliberately skips it: changing real device network state requires adb
+     * while instrumentation is still running. The production service and
+     * AndroidDownloadConnectivityObserver have no injected connectivity seam.
+     */
+    @Test
+    fun hostDrivenOsConnectivityLossPausesAndRestoresForegroundTransfer() {
+        assumeTrue(
+            "requires host-driven adb network controls",
+            InstrumentationRegistry.getArguments().getString("rmdHostNetworkTransitions") == "true",
+        )
+        deleteRuntimeState()
+        DownloadForegroundService.connectivityObserverFactoryForTesting = null
+        System.loadLibrary("offline_yt_core")
+        val signals = File(requireNotNull(context.getExternalFilesDir(null)), "rmd1506-host")
+            .apply { deleteRecursively(); mkdirs() }
+        val observedNetwork = AtomicReference(DownloadConnectivity.None)
+        val observer = AndroidDownloadConnectivityObserver(context, observedNetwork::set)
+        val jobId = "rmd-1506-os-network"
+        val payload = ByteArray(8 * 1024 * 1024) { (it % 251).toByte() }
+        val relativePath = "items/rmd-1506-os-network/video.mp4"
+        val partial = File(context.filesDir, "items/rmd-1506-os-network/.video.mp4.partial")
+        val finished = File(context.filesDir, relativePath)
+        val server = SlowRangeFixtureServer(payload).also { it.start() }
+        observer.start()
+        try {
+            val initialDeadline = SystemClock.elapsedRealtime() + 20_000L
+            while (
+                observedNetwork.get() == DownloadConnectivity.None &&
+                SystemClock.elapsedRealtime() < initialDeadline
+            ) SystemClock.sleep(50)
+            assertTrue(
+                "host must supply a real default Android network before scheduling",
+                observedNetwork.get() != DownloadConnectivity.None,
+            )
+            GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { controls ->
+                val result = controls.enqueue(jobId)
+                assertNull(result.error)
+                assertEquals(true, result.value)
+            }
+            seedDurableWork(jobId, server.mediaUrl, relativePath, payload.size)
+            assertTrue(
+                AndroidDownloadExecutionScheduler(context).schedule(
+                    DownloadScheduleRequest(jobId, networkPreference = DownloadNetworkPreference.AnyNetwork),
+                ).accepted,
+            )
+            waitForState(jobId, CoreDownloadState.DOWNLOADING)
+            waitForPartialBytes(partial)
+            signals.resolve("ready").writeText("real network active, durable worker downloading")
+
+            val disconnectDeadline = SystemClock.elapsedRealtime() + 45_000L
+            while (
+                observedNetwork.get() != DownloadConnectivity.None &&
+                SystemClock.elapsedRealtime() < disconnectDeadline
+            ) SystemClock.sleep(50)
+            assertEquals(
+                "adb must cause a real Android default-network loss callback",
+                DownloadConnectivity.None,
+                observedNetwork.get(),
+            )
+            waitForState(jobId, CoreDownloadState.PAUSED)
+            assertTrue("network pause must retain resumable partial bytes", partial.length() > 0L)
+            assertFalse("network pause must not promote completed media", finished.exists())
+            signals.resolve("paused").writeText("actual OS callback durably paused foreground work")
+
+            val reconnectDeadline = SystemClock.elapsedRealtime() + 45_000L
+            while (
+                observedNetwork.get() == DownloadConnectivity.None &&
+                SystemClock.elapsedRealtime() < reconnectDeadline
+            ) SystemClock.sleep(50)
+            assertTrue(
+                "adb must restore a real Android default network",
+                observedNetwork.get() != DownloadConnectivity.None,
+            )
+            waitForState(jobId, CoreDownloadState.COMPLETED)
+            assertEquals(payload.size.toLong(), finished.length())
+            assertEquals(payload.toList(), finished.readBytes().toList())
+            assertFalse("resume must remove partial bytes after promotion", partial.exists())
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val library = core.listLibrary()
+                assertNull(library.error)
+                assertTrue(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
+            }
+            signals.resolve("complete").writeText("real OS loss/resume completed durable local item")
+        } finally {
+            observer.close()
+            context.stopService(Intent(context, DownloadForegroundService::class.java))
+            server.close()
+        }
     }
 
     @Test

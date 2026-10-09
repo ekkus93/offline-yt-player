@@ -865,6 +865,9 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Restore eligible network.
 - [ ] Verify legal resume.
 - [ ] Repeat with Wi-Fi-only/metered policy where emulator controls permit.
+
+**RMD-1506 real OS connectivity qualification lane (pending exact-head execution):** `Rmd1506ConnectivityE2EInstrumentedTest.hostDrivenOsConnectivityLossPausesAndRestoresForegroundTransfer` runs a real generated core foreground download while `scripts/run_android_os_network_e2e.sh` toggles Wi-Fi/data/airplane mode through adb. Its handshake requires a real active-network callback, durable `PAUSED` state with retained partial bytes, a restored callback, and `COMPLETED` Library/bytes with no leaked partials. The separate `.github/workflows/android-real-network-e2e.yml` uploads host/runtime evidence and rejects skipped/absent tests. Do not check OS transition subtasks until a passing exact-head run confirms the emulator actually exposes the requested default-network transitions; if the emulator cannot simulate a transition, record that limitation without falsely treating a skipped test as proof.
+
 - [ ] **RMD-1506b — Do not equate unmetered transports with Wi-Fi.** Production `DownloadConnectivityMapper` previously classified any unmetered network (including Ethernet, cellular, or VPN) as `Unmetered`, allowing a Wi-Fi-only download without a Wi-Fi transport. Require correct Wi-Fi-transport mapping, deterministic JVM policy tests, packaged Android capability mapping, and passing exact-head CI/Android smoke before checking. This fixes the policy-boundary bug but does not replace the six host-driven OS network transition requirements above.
 - [x] **RMD-1506a — Foreground-service observer reuse.** Verify a second schedule/resume command dispatches newly queued durable work when the connectivity observer is already registered and no new network callback arrives; require packaged Android test and exact-head CI before checking.
 
