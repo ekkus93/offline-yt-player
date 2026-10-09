@@ -279,7 +279,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         buildString {
             append("  ".repeat(depth))
             append(node.config)
-            append('\\n')
+            append(System.lineSeparator())
             if (depth < 20) {
                 node.children.forEach { append(describeSemanticsTree(it, depth + 1)) }
             }
