@@ -305,10 +305,20 @@ class DownloadForegroundService : Service() {
     }
 
     private fun currentDownloadState(queueItemId: String): CoreDownloadState? =
-        GeneratedUniffiCoreGateway.open(downloadDatabasePath()).use { core ->
-            core.listDownloadQueue().value
-                ?.firstOrNull { it.jobId == queueItemId }
-                ?.state
+        try {
+            GeneratedUniffiCoreGateway.open(downloadDatabasePath()).use { core ->
+                core.listDownloadQueue().value
+                    ?.firstOrNull { it.jobId == queueItemId }
+                    ?.state
+            }
+        } catch (_: Exception) {
+            // A stale service callback may run after its app-private DB has been
+            // removed during recovery/reset or instrumentation teardown. Do not
+            // crash the Android process from this background settlement thread.
+            // Startup reconciliation is responsible for durable recovery if the
+            // database becomes available again. Never log raw FFI diagnostics.
+            android.util.Log.w("OfflineYTDownload", "Durable queue unavailable while settling worker")
+            null
         }
 
     private fun dispatchControlAction(intent: Intent): Boolean = try {

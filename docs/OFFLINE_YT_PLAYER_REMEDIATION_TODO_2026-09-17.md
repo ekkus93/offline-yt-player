@@ -888,6 +888,10 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1506 — Connectivity E2E
 
+- [ ] **RMD-1506c — Foreground worker settlement must not race SQLite teardown/reset.** Prove the production settlement path handles an unavailable database without crashing the Android process, and ensure the real second-schedule instrumentation waits for service settlement before removing its fixture database. Require passing exact-head CI and Android smoke, preserving the separately unqualified host metered-network checkbox.
+
+**RMD-1506c — Foreground-worker teardown/read race (2026-10-09, pending exact-head qualification):** Android smoke runs `38001588673` on `cb1a969950ef7c15e910e46edd9059b6b4d2f669` and `38001667506` on `d58be1daa37521c1c0db2eadfa4ae9d9b91c730a` failed `secondScheduleDuringActiveTransferDispatchesAfterFirstWorkerWithoutNewNetworkCallback`: the durable COM-PLETED state was visible before service worker settlement finished, then test teardown removed the SQLite DB and a background `currentDownloadState` open threw `FfiCoreServiceOpenException.Persistence`. The instrumentation now waits for foreground notification dismissal after the two completed fixture jobs before database cleanup. Production worker settlement handles a failed late DB reopen with a bounded, non-sensitive warning rather than an uncaught background exception. Qualify both with a passing exact-head normal CI and API-29 Android smoke run before checking this subtask; do not count the expected host-network-only assumption skip as a failure.\n\n
+
 - [x] Start transfer.
 - [x] Remove network.
 - [x] Verify waiting/pause state.

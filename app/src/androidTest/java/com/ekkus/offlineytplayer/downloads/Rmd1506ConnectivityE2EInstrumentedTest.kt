@@ -360,6 +360,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             assertEquals(payload.toList(), File(context.filesDir, relativePath).readBytes().toList())
             assertEquals("registered observer must be reused", 1, registrations.get())
             assertEquals("no additional connectivity callback may drive the worker", 1, callbacks.get())
+            waitForServiceToSettleAfterCompletion()
         } finally {
             context.stopService(serviceIntent)
             DownloadForegroundService.connectivityObserverFactoryForTesting = null
@@ -414,6 +415,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             assertEquals(secondPayload.toList(), File(context.filesDir, secondPath).readBytes().toList())
             assertEquals("observer must not be registered twice", 1, registrations.get())
             assertEquals("no second network callback may be needed", 1, callbacks.get())
+            waitForServiceToSettleAfterCompletion()
         } finally {
             context.stopService(Intent(context, DownloadForegroundService::class.java))
             DownloadForegroundService.connectivityObserverFactoryForTesting = null
@@ -430,6 +432,19 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             SystemClock.sleep(50)
         }
         throw AssertionError("foreground service did not register its notification")
+    }
+
+    private fun waitForServiceToSettleAfterCompletion() {
+        // A COMPLETED durable snapshot can be observed before the foreground
+        // worker's finally/settlement code has finished reopening SQLite.
+        // Do not erase the DB on test teardown until its notification is gone.
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        val deadline = SystemClock.elapsedRealtime() + 15_000L
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (manager.activeNotifications.none { it.id == DownloadServicePolicy.NotificationId }) return
+            SystemClock.sleep(50L)
+        }
+        throw AssertionError("foreground worker did not settle after completing fixture download")
     }
 
     private fun seedDurableWork(
