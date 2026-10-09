@@ -2,6 +2,8 @@ package com.ekkus.offlineytplayer.coregateway
 
 import android.content.ComponentName
 import android.content.ContentValues
+import android.content.Intent
+import android.app.NotificationManager
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.SystemClock
@@ -13,6 +15,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.downloads.AndroidDownloadExecutionScheduler
 import com.ekkus.offlineytplayer.downloads.DownloadConnectivity
 import com.ekkus.offlineytplayer.downloads.DownloadForegroundService
+import com.ekkus.offlineytplayer.downloads.DownloadServicePolicy
 import com.ekkus.offlineytplayer.downloads.DownloadNetworkPreference
 import com.ekkus.offlineytplayer.downloads.DownloadScheduleRequest
 import com.ekkus.offlineytplayer.downloads.DownloadSchedulerKind
@@ -91,6 +94,21 @@ class GeneratedUniffiCoreGatewaySmokeTest {
     @Test
     fun androidSchedulerFallbackCompletesDurableFixtureIntoLibrary() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        // Stop any service left running by a prior instrumentation test before
+        // deleting the shared database or installing this fixture's callback.
+        context.stopService(Intent(context, DownloadForegroundService::class.java))
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        val stopDeadline = SystemClock.elapsedRealtime() + 5_000
+        while (
+            notificationManager.activeNotifications.any { it.id == DownloadServicePolicy.NotificationId } &&
+            SystemClock.elapsedRealtime() < stopDeadline
+        ) {
+            SystemClock.sleep(50)
+        }
+        assertFalse(
+            "previous foreground service must stop before fixture setup",
+            notificationManager.activeNotifications.any { it.id == DownloadServicePolicy.NotificationId },
+        )
         val database = context.filesDir.resolve("offline-yt-player.sqlite3")
         val itemDir = context.filesDir.resolve("items/rmd-502a-foreground")
         database.delete()
