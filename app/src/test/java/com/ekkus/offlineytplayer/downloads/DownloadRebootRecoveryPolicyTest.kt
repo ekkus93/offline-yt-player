@@ -29,10 +29,4 @@ class DownloadRebootRecoveryPolicyTest {
         assertFalse(DownloadBootRecovery.OpensCredentialProtectedStorageOnBoot)
     }
 
-    @Test
-    fun servicePolicyKeepsDurableRecoveryRequirementForSchedulerWiring() {
-        assertTrue(DownloadServicePolicy.SupportsBootRecovery)
-        assertTrue(DownloadServicePolicy.ReconcilesDurableQueueOnStart)
-        assertTrue(DownloadServicePolicy.FailsInterruptedTransfersExplicitly)
-    }
 }

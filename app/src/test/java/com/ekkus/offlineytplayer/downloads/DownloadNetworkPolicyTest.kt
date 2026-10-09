@@ -1,8 +1,6 @@
 package com.ekkus.offlineytplayer.downloads
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DownloadNetworkPolicyTest {
@@ -106,11 +104,4 @@ class DownloadNetworkPolicyTest {
         )
     }
 
-    @Test
-    fun networkPreferenceCannotBeSilentlyViolated() {
-        assertTrue(DownloadNetworkPolicy.SupportsWifiOnly)
-        assertTrue(DownloadNetworkPolicy.PausesOnConnectivityLoss)
-        assertFalse(DownloadNetworkPolicy.SilentPreferenceViolationAllowed)
-        assertTrue(DownloadServicePolicy.HonorsNetworkPreference)
-    }
 }

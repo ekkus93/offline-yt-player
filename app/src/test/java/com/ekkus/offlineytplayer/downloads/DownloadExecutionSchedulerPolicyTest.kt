@@ -40,7 +40,6 @@ class DownloadExecutionSchedulerPolicyTest {
         assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(26))
         assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(33))
         assertFalse(DownloadExecutionSchedulerPolicy.usesForegroundFallback(34))
-        assertTrue(DownloadServicePolicy.ReconcilesDurableQueueOnStart)
         assertTrue(DownloadExecutionSchedulerPolicy.UsesSharedDurableQueue)
         assertEquals(DownloadForegroundService.ACTION_SCHEDULE_WORK, "com.ekkus.offlineytplayer.download.SCHEDULE_WORK")
         assertEquals(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, DownloadUserInitiatedJobService.ExtraQueueItemId)

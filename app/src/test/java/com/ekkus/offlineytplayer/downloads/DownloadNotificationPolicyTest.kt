@@ -6,12 +6,6 @@ import org.junit.Test
 
 class DownloadNotificationPolicyTest {
     @Test
-    fun notificationPolicyExposesRequiredActionsAndTerminalReporting() {
-        assertTrue(DownloadServicePolicy.SupportsPauseResumeCancel)
-        assertTrue(DownloadServicePolicy.ReportsCompletionAndFailure)
-    }
-
-    @Test
     fun activeNotificationIsOngoingProgressWithVisibleControls() {
         val service = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundService.kt").readText()
         assertTrue(service.contains("setOngoing(true)"))

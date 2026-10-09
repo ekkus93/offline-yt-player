@@ -37,9 +37,6 @@ internal enum class DownloadNetworkDecision {
 }
 
 internal object DownloadNetworkPolicy {
-    const val SupportsWifiOnly = true
-    const val PausesOnConnectivityLoss = true
-    const val SilentPreferenceViolationAllowed = false
 
     fun decision(
         preference: DownloadNetworkPreference,
@@ -66,12 +63,6 @@ internal object DownloadServicePolicy {
     const val ChannelId = "offline_downloads"
     const val NotificationId = 4100
     const val DefaultConcurrentDownloads = 2
-    const val SupportsPauseResumeCancel = true
-    const val ReportsCompletionAndFailure = true
-    const val ReconcilesDurableQueueOnStart = true
-    const val HonorsNetworkPreference = true
-    const val SupportsBootRecovery = true
-    const val FailsInterruptedTransfersExplicitly = true
 
     /**
      * The maximum is owned by the portable core and exported through UniFFI. Android deliberately
@@ -149,7 +140,6 @@ class DownloadForegroundService : Service() {
             ACTION_CONNECTIVITY_RETRY,
             ACTION_SCHEDULE_WORK,
             -> configureActiveWork(intent, queueItemId)
-            ACTION_RECONCILE_AFTER_REBOOT -> Unit
         }
         startForeground(DownloadServicePolicy.NotificationId, activeNotification(queueItemId))
         if (
@@ -396,7 +386,6 @@ class DownloadForegroundService : Service() {
         const val ACTION_CANCEL = "com.ekkus.offlineytplayer.download.CANCEL"
         const val ACTION_STOP = "com.ekkus.offlineytplayer.download.STOP"
         const val ACTION_CONNECTIVITY_RETRY = "com.ekkus.offlineytplayer.download.CONNECTIVITY_RETRY"
-        const val ACTION_RECONCILE_AFTER_REBOOT = "com.ekkus.offlineytplayer.download.RECONCILE_AFTER_REBOOT"
         const val ACTION_SCHEDULE_WORK = "com.ekkus.offlineytplayer.download.SCHEDULE_WORK"
         const val EXTRA_QUEUE_ITEM_ID = "queue_item_id"
         const val EXTRA_NETWORK_PREFERENCE = "network_preference"

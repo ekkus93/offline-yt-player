@@ -12,7 +12,6 @@ class DownloadForegroundServicePolicyTest {
         assertEquals("offline_downloads", DownloadServicePolicy.ChannelId)
         assertTrue(DownloadServicePolicy.NotificationId > 0)
         assertEquals(2, DownloadServicePolicy.DefaultConcurrentDownloads)
-        assertTrue(DownloadServicePolicy.ReconcilesDurableQueueOnStart)
     }
 
     @Test

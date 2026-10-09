@@ -1025,6 +1025,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1802 — Code review after remediation
 
+**Independent code-review finding (2026-10-09, pending final exact-head qualification):** legacy Android download policies contained unused `const val true` feature claims—`ReportsCompletionAndFailure`, `ReconcilesDurableQueueOnStart`, boot recovery, Wi-Fi preference, notification actions, and pause/failure behavior—asserted solely by policy-only JVM tests. The production foreground service does not itself post separate terminal notifications, and its `ACTION_RECONCILE_AFTER_REBOOT` branch was a no-op; recovery instead occurs in the production startup `GeneratedUniffiCoreGateway.reconcileStartup` path, while real notification Pause/Resume/Cancel is covered by `Rmd1507NotificationControlInstrumentedTest`. Those dead declarations and their circular tests have been removed, without treating this cleanup as proof of feature completion; existing behavioral/packaged CI remains the acceptance gate. Full Rust/Android audit and RMD-1800 closeout remain open.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.
