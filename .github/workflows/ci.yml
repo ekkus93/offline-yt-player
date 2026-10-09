@@ -29,6 +29,8 @@ jobs:
         run: python3 -m unittest tests/test_assert_android_smoke_execution.py
       - name: Exact-head Compose golden preflight tests
         run: python3 -m unittest tests/test_register_download_setup_golden_variant.py
+      - name: Android exact-SHA workflow concurrency tests
+        run: python3 -m unittest tests/test_android_workflow_concurrency.py
 
   rust:
     name: Rust fmt clippy test

@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-real-network-e2e-${{ github.ref }}
+  group: android-real-network-e2e-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:

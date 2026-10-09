@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-cold-start-${{ github.ref }}
+  group: android-cold-start-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
