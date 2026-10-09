@@ -521,9 +521,11 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Persist on appropriate stop/session transitions.
 - [x] Apply documented completion threshold/reset behavior.
 - [x] Add restart/resume tests.
-- [ ] **RMD-906a — Prove packaged unsigned playback-position UniFFI calls.** Android cold-start run `37913457733` reproduced a production crash: reflective lookup of `ffiSavePlaybackPosition` by an unmangled JVM name fails when generated Kotlin parameters include `ULong`. The production gateway now calls the typed binding directly (implementation `a8f741c01f92ac2bf201ad5ffaf763b1339ba00e`). Require a non-skipped packaged Android smoke regression, successful offline cold-start playback/position persistence, and passing exact-head CI before checking; source-text assertions alone are not qualification evidence.
+- [x] **RMD-906a — Prove packaged unsigned playback-position UniFFI calls.** Android cold-start run `37913457733` reproduced a production crash: reflective lookup of `ffiSavePlaybackPosition` by an unmangled JVM name fails when generated Kotlin parameters include `ULong`. The production gateway now calls the typed binding directly (implementation `a8f741c01f92ac2bf201ad5ffaf763b1339ba00e`). Require a non-skipped packaged Android smoke regression, successful offline cold-start playback/position persistence, and passing exact-head CI before checking; source-text assertions alone are not qualification evidence.
 
 **Evidence (RMD-901 through RMD-906):** `PlaybackSessionService` is the sole production `ExoPlayer` owner, builds one `MediaSession`, enables audio-focus handling and audio-becoming-noisy handling, and releases both player/session in service destruction. Production `PortraitPlayerScreen` constructs no `ExoPlayer`; it connects to the service through `SessionToken`/`MediaController.Builder`, binds `PlayerView` to that controller, routes seek/play-pause/speed and Media3 text/audio track selection through the controller, and releases/cancels the controller lifecycle-safely. `SplitAudioMediaSourceFactory` creates a `MergingMediaSource` when the local playback request carries a separate audio asset, while `LocalPlaybackPolicy` rejects remote playback URIs. Persisted subtitle/audio tracks are carried in `LocalPlaybackAsset`, exposed as real labels, selected through Media3 track parameters, and audio selection is disabled unless multiple tracks exist. Playback position is restored from persisted library state, periodically persisted at `PositionPersistCadenceMs`, persisted on disposal, and reset at the documented near-end completion threshold through `persistedPositionForStop`. `LocalPlaybackPolicyTest` covers split A/V, local-only paths, subtitle/audio track propagation, selection eligibility, restored position, bounded persistence cadence, and completion reset; `OfflinePlaybackQualificationTest` covers cold-start/local-only playback planning. These paths/tests were present on exact master `f62aa7aa5d72d3dccd87b9d4e50f60ec62ce7754`, which passed CI `37675821415`, Android smoke `37675821448`, Android FGS timeout `37675821387`, Supply chain `37675821421`, CI evidence `37675821384`, and Deterministic E2E fixture `37675821443`. RMD-907 remains unchecked because controller/system-command behavioral qualification is a distinct device-level acceptance boundary.
+
+**RMD-906a packaged-runtime acceptance:** `GeneratedUniffiPlaybackPositionGateway` invokes typed unsigned `ffiSavePlaybackPosition`; `GeneratedUniffiCoreGatewaySmokeTest` in the packaged Android APK saves position `1234` for a **completed Library record**, then reopens it through the real generated core gateway and verifies the durable position. The separate host-driven RMD-1501 cold-start phase also verifies playable offline MediaSession state after force-stop and shutdown of the source fixture. JVM position cadence/reset/restart policy tests remain. Exact `master` SHA `a9044a1415239f84cef1a90412b9099aeab2d8c4` passed CI `37984663297`, Android smoke `37984663480`, Android FGS timeout `37984663324`, Supply chain `37984663294`, CI evidence `37984663332`, deterministic fixture `37984663412`, Android cold start `37984663429`, and Android real network E2E `37984663317`.
 
 ### RMD-907 — MediaSession behavioral qualification
 
@@ -553,11 +555,13 @@ This checklist repairs the implementation and qualification gaps found during th
 
 - [x] Open canonical playback session for selected completed item.
 - [x] Reject/disable play for incomplete/corrupt items with explanation.
-- [ ] **RMD-1002a — Library Play begins canonical local playback.** Host-driven cold-start run `37915151203` showed that tapping Library `Play` launched `PortraitPlayerScreen`, but it called `MediaController.prepare()` without `play()`, leaving `playWhenReady=false`. Qualify the explicit production playback transition using `Rmd1501ProductionPipelineColdStartInstrumentedTest.verifyAfterHostForceStopPlaysPersistedLocalItemWithoutSourceNetwork` with network disabled, together with passing exact-head CI, before checking.
+- [x] **RMD-1002a — Library Play begins canonical local playback.** Host-driven cold-start run `37915151203` showed that tapping Library `Play` launched `PortraitPlayerScreen`, but it called `MediaController.prepare()` without `play()`, leaving `playWhenReady=false`. Qualify the explicit production playback transition using `Rmd1501ProductionPipelineColdStartInstrumentedTest.verifyAfterHostForceStopPlaysPersistedLocalItemWithoutSourceNetwork` with network disabled, together with passing exact-head CI, before checking.
 
 **Evidence (RMD-1002 partial):** `LibraryPlaybackRoute` now fail-closes invalid/incomplete/remote playback rows, exposes an unavailable reason, and the Library UI renders that explanation. JVM policy coverage and the intentionally changed Library goldens were qualified on current master `fecfdf48ccbe419caca9c20af18a8dbaef4bdc9d` with all six exact-head workflows green. The canonical playback launch requirement is now reconciled from current-master production wiring and exact-head qualification; see `docs/RMD_1002_1006_LIBRARY_DOWNLOADS_UX_RECONCILIATION_2026-10-07.md`.
 
 
+
+**RMD-1002a accepted playback transition:** `PlaybackScreen.kt` explicitly invokes `MediaController.play()` after preparation, and `Rmd1501ProductionPipelineColdStartInstrumentedTest.verifyAfterHostForceStopPlaysPersistedLocalItemWithoutSourceNetwork` taps Library `Play` after OS force-stop/network shutdown and asserts `STATE_READY`, `playWhenReady=true`, and the persisted local media URI on the canonical MediaSession. Exact `master` SHA `a9044a1415239f84cef1a90412b9099aeab2d8c4` passed CI `37984663297`, Android smoke `37984663480`, Android FGS timeout `37984663324`, Supply chain `37984663294`, CI evidence `37984663332`, deterministic fixture `37984663412`, Android cold start `37984663429`, and Android real network E2E `37984663317`.
 
 ### RMD-1003 — Library Details action
 
@@ -739,10 +743,12 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Create emulator-compatible instrumentation setup.
 - [x] Ensure CI executes `connected...AndroidTest` or managed-device equivalent.
 - [x] Upload useful failure artifacts/screenshots.
-- [ ] **RMD-1401a — Make instrumentation execution observable.** Require the Android smoke workflow to fail if generated-UniFFI gateway, production Share E2E, or real-worker connectivity instrumented classes did not execute non-skipped test cases; unit-test the report guard, and record exact-head Android smoke plus normal CI proof before checking this item. This prevents a green smoke workflow with absent/skipped required tests from qualifying production runtime behavior.
-- [ ] **RMD-1401b — Correct generated-UniFFI unsigned number mapping.** The newly exposed packaged Android gateway test fails because generated Kotlin `ULong` values are not `java.lang.Number`. Convert all numeric FFI record fields (including optional fields) without unsafe casts or silent unsigned overflow, cover the conversion in deterministic JVM tests, and require passing exact-head CI plus the packaged Android smoke path before checking this item. This is a release-blocking production boundary defect, not a test-only workaround.
+- [x] **RMD-1401a — Make instrumentation execution observable.** Require the Android smoke workflow to fail if generated-UniFFI gateway, production Share E2E, or real-worker connectivity instrumented classes did not execute non-skipped test cases; unit-test the report guard, and record exact-head Android smoke plus normal CI proof before checking this item. This prevents a green smoke workflow with absent/skipped required tests from qualifying production runtime behavior.
+- [x] **RMD-1401b — Correct generated-UniFFI unsigned number mapping.** The newly exposed packaged Android gateway test fails because generated Kotlin `ULong` values are not `java.lang.Number`. Convert all numeric FFI record fields (including optional fields) without unsafe casts or silent unsigned overflow, cover the conversion in deterministic JVM tests, and require passing exact-head CI plus the packaged Android smoke path before checking this item. This is a release-blocking production boundary defect, not a test-only workaround.
 
 **Evidence (RMD-1401):** Android instrumentation infrastructure is established by `app/src/androidTest/java/com/ekkus/offlineytplayer/AndroidRuntimeSmokeTest.kt`, Gradle packaging/build support for emulator-compatible `x86_64` native Rust libraries alongside `arm64-v8a`, fast-gate APK/native-library verification, and `.github/workflows/android-smoke.yml`. The smoke workflow runs `connectedDebugAndroidTest` on an API-29 AOSP x86_64 emulator scoped to `com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest`, preserving bounded Gradle reports and logcat/artifact evidence on failure. This is intentionally the smallest runtime smoke lane required by the acceleration plan; behavioral Compose, golden, accessibility/layout, and deterministic E2E qualification remain open under RMD-1402 through RMD-1507 and final RMD-1803 closeout. Qualified/merged evidence: PR #318 merged as `751b1762861f795aed1245c1fe48b9e521019856` from exact implementation head `a0f3fd7970ce7dbe3cb697ac082f902ba4c2c5e9`, with PR CI `35809009062` and Android-smoke run `35809009026` passing on exact head, then post-merge master CI `35812405751` and post-merge Android-smoke run `35812405807` passing on merge commit `751b1762861f795aed1245c1fe48b9e521019856`.
+
+**RMD-1401a/b executable/unsigned binding acceptance:** `scripts/run_required_android_smoke.sh` runs packaged generated-UniFFI, Share, connectivity mapping, and real-worker RMD-1506 classes separately and rejects missing/skipped XML evidence using `scripts/assert_android_smoke_execution.py`. Normal CI runs `tests/test_assert_android_smoke_execution.py` in its governance job. The typed unsigned `ULong/UInt/UShort/UByte` conversion with overflow checks is covered by `GeneratedNumericConversionTest`; the Android smoke tests exercise packaged Rust binding outputs, durable queue, and actual worker. Exact `master` SHA `a9044a1415239f84cef1a90412b9099aeab2d8c4` passed CI `37984663297`, Android smoke `37984663480`, Android FGS timeout `37984663324`, Supply chain `37984663294`, CI evidence `37984663332`, deterministic fixture `37984663412`, Android cold start `37984663429`, and Android real network E2E `37984663317`.
 
 ### RMD-1402 — Replace policy-only screen qualification with behavioral Compose tests
 
@@ -799,38 +805,44 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1501 — Offline fixture E2E
 
-- [ ] Start from clean app state.
-- [ ] Analyze deterministic fixture through the same app pipeline used by production.
-- [ ] Select quality/options.
-- [ ] Schedule through real background runtime abstraction.
-- [ ] Download real fixture assets.
-- [ ] Verify completed Library item.
-- [ ] Disable network.
+- [x] Start from clean app state.
+- [x] Analyze deterministic fixture through the same app pipeline used by production.
+- [x] Select quality/options.
+- [x] Schedule through real background runtime abstraction.
+- [x] Download real fixture assets.
+- [x] Verify completed Library item.
+- [x] Disable network.
 
-- [ ] Kill/cold-start app.
-- [ ] Play completed local item through MediaSession-owned player.
-- [ ] Assert no network request is needed for completed playback.
+- [x] Kill/cold-start app.
+- [x] Play completed local item through MediaSession-owned player.
+- [x] Assert no network request is needed for completed playback.
+
+**RMD-1501 full deterministic pipeline acceptance:** `Rmd1501ProductionPipelineColdStartInstrumentedTest` resets app-private state; drives production Compose Add/Analyze/Download Setup, Options, selection away from and back to `Fixture WAV`, and Apply; verifies the actual chosen enqueue option; schedules via `AndroidDownloadExecutionScheduler` into the foreground service and generated Rust worker; confirms byte-for-byte fixture asset, completed durable queue and Library descriptor. Host CI then force-stops the app, disables Wi-Fi/data, enables airplane mode, and runs a new instrumentation process. It taps Library Play and verifies canonical MediaSession `STATE_READY`/`playWhenReady` from the local file after the HTTP fixture server has exited. Both RMD-1501 phases logged `OK (1 test)` in cold-start run `37984663429`. Exact `master` SHA `a9044a1415239f84cef1a90412b9099aeab2d8c4` passed CI `37984663297`, Android smoke `37984663480`, Android FGS timeout `37984663324`, Supply chain `37984663294`, CI evidence `37984663332`, deterministic fixture `37984663412`, Android cold start `37984663429`, and Android real network E2E `37984663317`. Live YouTube provider/service-policy approval remains separately gated.
 
 ### RMD-1502 — Split A/V offline E2E
 
 - [x] Download separate local video/audio fixture assets.
 - [x] Persist both assets.
-- [ ] Cold-start offline.
+- [x] Cold-start offline.
 - [x] Play synchronized merged A/V through canonical session.
 
 **RMD-1502 packaged split-A/V E2E increment (qualified partial path):** `Rmd1502SplitAvOfflineInstrumentedTest` uses deterministic four-second H.264 Baseline MP4 video-only and PCM WAV audio assets, schedules both through the production API-29 background scheduler and generated core worker, shuts down the fixture server after both assets persist, verifies the production Library playback descriptor retains distinct local video/audio paths, opens the item through production `MainActivity`, and verifies the canonical MediaSession reaches `STATE_READY` with both persisted local video and audio tracks selected while the source server is unavailable. Exact master `61ede07f770ed1283b3cf1b2fa514b544895ed70` passed CI `37777571178`, Android smoke `37777571126`, Android FGS timeout `37777571176`, Supply chain `37777571113`, CI evidence `37777571166`, and Deterministic E2E fixture `37777571246`. The download, persistence, and synchronized merged-offline-playback subtasks are qualified; true OS process-kill/cold-start remains open.
+
+**RMD-1502 real process-death acceptance:** Host-driven `Rmd1502SplitAvOfflineInstrumentedTest` passed separate video-only MP4 + PCM WAV download/persistence and network-disabled verification after `adb am force-stop`. `LocalPlaybackPolicy` preserves the separate audio identity through the MediaSession-transmitted media ID; `SplitAudioMediaSourceFactory` merges the sources, and the restored controller observes selected AUDIO and VIDEO at `STATE_READY`. Both phases report `OK (1 test)` in `37984663429`. Exact `master` SHA `a9044a1415239f84cef1a90412b9099aeab2d8c4` passed CI `37984663297`, Android smoke `37984663480`, Android FGS timeout `37984663324`, Supply chain `37984663294`, CI evidence `37984663332`, deterministic fixture `37984663412`, Android cold start `37984663429`, and Android real network E2E `37984663317`.
 
 ### RMD-1503 — Subtitle offline E2E
 
 - [x] Download fixture subtitle track.
 
 - [x] Persist language/format.
-- [ ] Cold-start offline.
+- [x] Cold-start offline.
 - [x] Select/display local subtitle track.
 
 **RMD-1503 production playback-descriptor repair (pending exact-head qualification):** remediation review found that persisted subtitle assets retained provider-neutral identity in Rust (`subtitle:<language>:<track_id>` plus MIME) but `FfiLibraryPlaybackAsset` exported only video/audio paths, so production Android Library playback silently dropped subtitles before constructing `LocalPlaybackAsset`. The playback descriptor now exports validated local subtitle path/language/format/track/MIME records, Android maps them to app-private `LocalSubtitleTrack` entries, and `LibraryPlaybackRoute` carries them into the canonical player. Rust and JVM tests cover the descriptor and route. RMD-1503 remains unchecked until packaged Android offline download/reopen/player evidence qualifies the behavior.
 
 **RMD-1503 packaged offline subtitle E2E increment (qualified partial path):** `Rmd1503SubtitleOfflineInstrumentedTest` schedules a two-asset WAV + WebVTT fixture through the production API-29 background scheduler and generated core worker, shuts down the only HTTP fixture server, reopens persisted Library/playback descriptors, verifies subtitle path/language/format/track/MIME identity, launches production `MainActivity`, opens the canonical MediaSession-owned player, verifies the local subtitle configuration is exposed offline, and verifies Media3 selects the persisted `en` text track before the UI disables it. Exact master `61ede07f770ed1283b3cf1b2fa514b544895ed70` passed CI `37777571178`, Android smoke `37777571126`, Android FGS timeout `37777571176`, Supply chain `37777571113`, CI evidence `37777571166`, and Deterministic E2E fixture `37777571246`. The subtitle download, persisted language/format, and local select/display subtasks are qualified; actual OS process-kill/cold-start evidence remains open.
+
+**RMD-1503 real process-death acceptance:** `Rmd1503SubtitleOfflineInstrumentedTest` passed subtitle seed/persistence and host-driven force-stop/network-disabled verification in separate instrumentation processes. The cold-start production Library/MediaSession playback route selects the retained local English WebVTT text track; both phases report `OK (1 test)` in `37984663429`. Exact `master` SHA `a9044a1415239f84cef1a90412b9099aeab2d8c4` passed CI `37984663297`, Android smoke `37984663480`, Android FGS timeout `37984663324`, Supply chain `37984663294`, CI evidence `37984663332`, deterministic fixture `37984663412`, Android cold start `37984663429`, and Android real network E2E `37984663317`.
 
 ### RMD-1504 — Share E2E
 
@@ -859,16 +871,20 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1506 — Connectivity E2E
 
-- [ ] Start transfer.
-- [ ] Remove network.
-- [ ] Verify waiting/pause state.
-- [ ] Restore eligible network.
-- [ ] Verify legal resume.
+- [x] Start transfer.
+- [x] Remove network.
+- [x] Verify waiting/pause state.
+- [x] Restore eligible network.
+- [x] Verify legal resume.
+**RMD-1506 real OS network acceptance (five subtasks):** `hostDrivenOsConnectivityLossPausesAndRestoresForegroundTransfer` uses the real Android default-network observer, foreground-service scheduling, durable Rust queue and download worker, and a slow loopback fixture. `scripts/run_android_os_network_e2e.sh` waits for the live worker, disables Wi-Fi/data and enables airplane mode, requires a durable PAUSED state with retained partial bytes and no final file, restores the network, and requires COMPLETED, byte-equal local media, Library record and cleaned partial. Run `37984663317` passed a non-skipped `OK (1 test)` and uploaded the host evidence. Exact `master` SHA `a9044a1415239f84cef1a90412b9099aeab2d8c4` passed CI `37984663297`, Android smoke `37984663480`, Android FGS timeout `37984663324`, Supply chain `37984663294`, CI evidence `37984663332`, deterministic fixture `37984663412`, Android cold start `37984663429`, and Android real network E2E `37984663317`. The distinct Wi-Fi-only/metered OS case remains **unchecked**.
+
 - [ ] Repeat with Wi-Fi-only/metered policy where emulator controls permit.
 
 **RMD-1506 real OS connectivity qualification lane (pending exact-head execution):** `Rmd1506ConnectivityE2EInstrumentedTest.hostDrivenOsConnectivityLossPausesAndRestoresForegroundTransfer` runs a real generated core foreground download while `scripts/run_android_os_network_e2e.sh` toggles Wi-Fi/data/airplane mode through adb. Its handshake requires a real active-network callback, durable `PAUSED` state with retained partial bytes, a restored callback, and `COMPLETED` Library/bytes with no leaked partials. The separate `.github/workflows/android-real-network-e2e.yml` uploads host/runtime evidence and rejects skipped/absent tests. Do not check OS transition subtasks until a passing exact-head run confirms the emulator actually exposes the requested default-network transitions; if the emulator cannot simulate a transition, record that limitation without falsely treating a skipped test as proof.
 
-- [ ] **RMD-1506b — Do not equate unmetered transports with Wi-Fi.** Production `DownloadConnectivityMapper` previously classified any unmetered network (including Ethernet, cellular, or VPN) as `Unmetered`, allowing a Wi-Fi-only download without a Wi-Fi transport. Require correct Wi-Fi-transport mapping, deterministic JVM policy tests, packaged Android capability mapping, and passing exact-head CI/Android smoke before checking. This fixes the policy-boundary bug but does not replace the six host-driven OS network transition requirements above.
+**RMD-1506b transport-boundary acceptance:** Production `DownloadConnectivityMapper.fromCapabilities` derives Wi-Fi from the actual `TRANSPORT_WIFI` flag, not from an unmetered-cost flag. `DownloadNetworkPolicy` denies unmetered non-Wi-Fi transport under Wi-Fi-only, while retaining it for unrestricted downloads; `DownloadConnectivityMapperTest` and `DownloadNetworkPolicyTest` cover policy, with packaged `DownloadConnectivityObserverInstrumentedTest` mapping real Android capabilities. Exact `master` SHA `a9044a1415239f84cef1a90412b9099aeab2d8c4` passed CI `37984663297`, Android smoke `37984663480`, Android FGS timeout `37984663324`, Supply chain `37984663294`, CI evidence `37984663332`, deterministic fixture `37984663412`, Android cold start `37984663429`, and Android real network E2E `37984663317`.
+
+- [x] **RMD-1506b — Do not equate unmetered transports with Wi-Fi.** Production `DownloadConnectivityMapper` previously classified any unmetered network (including Ethernet, cellular, or VPN) as `Unmetered`, allowing a Wi-Fi-only download without a Wi-Fi transport. Require correct Wi-Fi-transport mapping, deterministic JVM policy tests, packaged Android capability mapping, and passing exact-head CI/Android smoke before checking. This fixes the policy-boundary bug but does not replace the six host-driven OS network transition requirements above.
 - [x] **RMD-1506a — Foreground-service observer reuse.** Verify a second schedule/resume command dispatches newly queued durable work when the connectivity observer is already registered and no new network callback arrives; require packaged Android test and exact-head CI before checking.
 
 
