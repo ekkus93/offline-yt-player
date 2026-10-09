@@ -148,7 +148,6 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
 
         compose.waitUntil(60_000) {
             runCatching { compose.onNodeWithText("Analyze").assertIsEnabled() }.isSuccess
-
         }
         compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(60_000) {
@@ -295,7 +294,6 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         header.putInt(pcmBytes)
         return header.array() + ByteArray(pcmBytes)
     }
-
 
     private class FixtureSourceGateway(
         private val analysis: CoreSourceAnalysis,
@@ -447,7 +445,6 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
                             }
                         }
                     }
-
                 } catch (error: SocketTimeoutException) {
                     failure.set(AssertionError("RMD-1501 fixture server was not contacted", error))
                 } catch (error: Throwable) {
