@@ -382,8 +382,10 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             enqueue(jobId, DownloadSelectionOptions(choiceId))
 
         override fun enqueue(jobId: String, options: DownloadSelectionOptions): CoreGatewayResult<Boolean> {
-            selectedOptions.set(options)
+            // The test's selectedOptions latch is an enqueue completion signal.
+            // Publish it only after all fixture rows have committed atomically.
             seed(jobId)
+            selectedOptions.set(options)
             return CoreGatewayResult(value = true, error = null)
         }
 
