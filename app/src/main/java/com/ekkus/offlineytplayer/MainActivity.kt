@@ -314,6 +314,11 @@ internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenStat
 ): DownloadsScreenState {
     error?.let { return DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
     val snapshots = value ?: return DownloadsScreenState.Failed("Download queue data is unavailable.")
+    if (snapshots.any { it.jobId.isBlank() } ||
+        snapshots.map { it.jobId }.toSet().size != snapshots.size
+    ) {
+        return DownloadsScreenState.Failed("Download queue identity metadata is invalid.")
+    }
     if (snapshots.any { titlesByJobId[it.jobId].isNullOrBlank() }) {
         return DownloadsScreenState.Failed("Download presentation metadata is unavailable.")
     }
