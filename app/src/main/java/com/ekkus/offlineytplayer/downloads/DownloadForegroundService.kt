@@ -102,6 +102,15 @@ internal object DownloadForegroundTimeoutStore {
     }
 }
 
+/** Immediate handoff is legal only after the worker actually claimed executable work. */
+internal object ForegroundWorkerRelaunchPolicy {
+    fun shouldRelaunch(
+        claimed: Boolean,
+        state: CoreDownloadState?,
+        decision: DownloadNetworkDecision,
+    ): Boolean = claimed && state == CoreDownloadState.QUEUED && decision == DownloadNetworkDecision.Allow
+}
+
 class DownloadForegroundService : Service() {
     private val workerRunning = AtomicBoolean(false)
     private val controlExecutor: ExecutorService = Executors.newSingleThreadExecutor { task ->
@@ -260,18 +269,18 @@ class DownloadForegroundService : Service() {
         if (!workerRunning.compareAndSet(false, true)) return
 
         Thread {
+            var claimed = false
             try {
-                DownloadWorkerExecutor.execute(this, queueItemId)
+                claimed = DownloadWorkerExecutor.execute(this, queueItemId)
             } finally {
-
                 workerRunning.set(false)
-                settleWorkerAfterExecution(queueItemId)
+                settleWorkerAfterExecution(queueItemId, claimed)
             }
         }.start()
     }
 
     @Synchronized
-    private fun settleWorkerAfterExecution(queueItemId: String) {
+    private fun settleWorkerAfterExecution(queueItemId: String, claimed: Boolean) {
         if (activeQueueItemId != queueItemId) {
             // A newer schedule/resume command can replace the active job while the previous
             // worker is still running. Its observer-reuse kick sees workerRunning=true and
@@ -304,10 +313,12 @@ class DownloadForegroundService : Service() {
             state = currentDownloadState(queueItemId)
         }
 
-        if (state == CoreDownloadState.QUEUED && lastNetworkDecision == DownloadNetworkDecision.Allow) {
+        if (ForegroundWorkerRelaunchPolicy.shouldRelaunch(claimed, state, lastNetworkDecision)) {
             launchWorkerIfEligible(queueItemId)
             return
         }
+        // A no-claim result must not hot-loop on the same unexecutable/stale queue
+        // identity. Leave durable state to the next legal scheduling/recovery event.
         if (
             state == CoreDownloadState.PAUSED &&
             connectivityPauseRegistry.wasPausedByConnectivity(queueItemId)

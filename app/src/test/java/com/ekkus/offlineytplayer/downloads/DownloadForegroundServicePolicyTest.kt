@@ -8,6 +8,30 @@ import org.junit.Test
 
 class DownloadForegroundServicePolicyTest {
     @Test
+    fun unclaimedQueuedWorkerDoesNotImmediatelySpinAnotherWorker() {
+        assertFalse(ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+            claimed = false,
+            state = com.ekkus.offlineytplayer.coregateway.CoreDownloadState.QUEUED,
+            decision = DownloadNetworkDecision.Allow,
+        ))
+        assertTrue(ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+            claimed = true,
+            state = com.ekkus.offlineytplayer.coregateway.CoreDownloadState.QUEUED,
+            decision = DownloadNetworkDecision.Allow,
+        ))
+        assertFalse(ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+            claimed = true,
+            state = com.ekkus.offlineytplayer.coregateway.CoreDownloadState.COMPLETED,
+            decision = DownloadNetworkDecision.Allow,
+        ))
+        assertFalse(ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+            claimed = true,
+            state = com.ekkus.offlineytplayer.coregateway.CoreDownloadState.QUEUED,
+            decision = DownloadNetworkDecision.PauseForConnectivity,
+        ))
+    }
+
+    @Test
     fun foregroundServicePolicyIsUserVisibleAndBounded() {
         assertEquals("offline_downloads", DownloadServicePolicy.ChannelId)
         assertTrue(DownloadServicePolicy.NotificationId > 0)

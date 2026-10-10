@@ -59,7 +59,9 @@ class Rmd1507NotificationControlInstrumentedTest {
         ContextCompat.startForegroundService(
             context,
             Intent(context, DownloadForegroundService::class.java)
-                .setAction(DownloadForegroundService.ACTION_CONNECTIVITY_RETRY)
+                // Drive the real foreground notification without starting a worker:
+                // this fixture deliberately has no executable source plan. Resume later
+                // uses the actual production notification PendingIntent/control path.
                 .putExtra(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, jobId),
         )
         val notification = waitForDownloadNotification().notification
