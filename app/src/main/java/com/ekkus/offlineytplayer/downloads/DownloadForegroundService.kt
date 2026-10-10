@@ -209,7 +209,12 @@ class DownloadForegroundService : Service() {
             ).also { it.start() }
     }
 
+    @Synchronized
     private fun handleConnectivityChange(connectivity: DownloadConnectivity) {
+        // ConnectivityManager callbacks are ordered, but each event is dispatched onto a
+        // separate worker thread. Ignore a superseded event rather than letting an old
+        // network-loss task pause a transfer after a newer eligible-network callback.
+        if (connectivity != lastConnectivity) return
         val queueItemId = activeQueueItemId ?: return
         val decision = DownloadNetworkPolicy.decision(activeNetworkPreference, connectivity)
         lastNetworkDecision = decision
@@ -255,6 +260,7 @@ class DownloadForegroundService : Service() {
         }.start()
     }
 
+    @Synchronized
     private fun settleWorkerAfterExecution(queueItemId: String) {
         if (activeQueueItemId != queueItemId) {
             // A newer schedule/resume command can replace the active job while the previous

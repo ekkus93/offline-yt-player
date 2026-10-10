@@ -112,8 +112,10 @@ internal class AndroidDownloadConnectivityObserver(
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            val capabilities = connectivityManager.getNetworkCapabilities(network)
-            onConnectivityChanged(DownloadConnectivityMapper.fromCapabilities(capabilities))
+            // Android delivers onCapabilitiesChanged immediately after onAvailable. Avoid
+            // synchronous capability queries inside callbacks: they can return stale state.
+            // Remain fail-closed until the framework supplies the new network's capabilities.
+            onConnectivityChanged(DownloadConnectivity.None)
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -135,11 +137,11 @@ internal class AndroidDownloadConnectivityObserver(
 
     fun start() {
         if (registered) return
-        // Register before sampling so a default-network transition cannot fall into the gap
-        // between the initial snapshot and callback registration.
+        // The registered default-network callback delivers the initial onAvailable and
+        // onCapabilitiesChanged pair. Sampling activeNetwork here can race that sequence
+        // and overwrite a newer callback with an obsolete connectivity snapshot.
         connectivityManager.registerDefaultNetworkCallback(callback)
         registered = true
-        emitCurrentConnectivity()
     }
 
     override fun close() {
@@ -148,11 +150,6 @@ internal class AndroidDownloadConnectivityObserver(
         registered = false
     }
 
-    private fun emitCurrentConnectivity() {
-        val capabilities = connectivityManager.activeNetwork
-            ?.let(connectivityManager::getNetworkCapabilities)
-        onConnectivityChanged(DownloadConnectivityMapper.fromCapabilities(capabilities))
-    }
 }
 
 internal data class DownloadConnectivityCoordinatorReport(
