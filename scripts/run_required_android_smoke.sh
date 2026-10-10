@@ -7,6 +7,7 @@ set -eu
 for required_class in \
     com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest \
     com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest \
+    com.ekkus.offlineytplayer.Rmd1802SettingsObserverInstrumentedTest \
     com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest \
     com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest
 do
