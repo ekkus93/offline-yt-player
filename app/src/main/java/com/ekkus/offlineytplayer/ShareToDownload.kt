@@ -10,7 +10,6 @@ internal sealed class ShareToDownloadRoute {
     data class DownloadSetup(
         val url: String,
         val backStackDestination: ShareBackStackDestination = ShareBackStackDestination.Library,
-        val preservesFixedControlLayout: Boolean = true,
     ) : ShareToDownloadRoute()
 }
 

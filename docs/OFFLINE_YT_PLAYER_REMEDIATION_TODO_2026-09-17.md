@@ -1037,6 +1037,9 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1802 — Code review after remediation
 
+**RMD-1802 stale declarative-test cleanup (2026-10-09, pending exact-head qualification):** after removing `LocalPlaybackPolicy.UsesNetworkUris`, one JVM test still referenced that deleted flag and broke Android unit-test compilation. The test now relies on its existing executable remote-URI rejection and local-route assertions. The same pass removed `ShareToDownloadRoute.DownloadSetup.preservesFixedControlLayout = true` and its assertion; Share routing continues to test the real URL and Library back-stack route while compact/fixed layout remains covered by packaged Compose layout qualification.
+
+
 **RMD-1802 download-presentation binding-drift finding (2026-10-09, pending exact-head qualification):** independent review found that `DownloadPresentationGateway.titlesByJobId` converted a missing or wrong-typed generated `items` property into an empty list. That could hide UniFFI binding drift and fabricate fallback presentation state. The mapper now requires a generated list; production bootstrap and periodic refresh catch mapper failures and surface a bounded Downloads-unavailable state instead of crashing or treating the metadata as empty. `DownloadPresentationGatewayMappingTest` covers present, missing, and wrong-typed `items`. The same exact-head repair also applies the Rust formatting required by `cargo fmt --check` after the preceding YouTube parser-test hardening commit.
 
 

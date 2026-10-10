@@ -22,7 +22,6 @@ class ShareToDownloadPolicyTest {
         route as ShareToDownloadRoute.DownloadSetup
         assertEquals("https://example.invalid/video", route.url)
         assertEquals(ShareBackStackDestination.Library, route.backStackDestination)
-        assertTrue(route.preservesFixedControlLayout)
     }
 
     @Test
