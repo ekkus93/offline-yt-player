@@ -176,6 +176,23 @@ fn collect_partial_files(root: &Path, partials: &mut Vec<PathBuf>) -> Result<(),
     if !root.exists() {
         return Ok(());
     }
+    let root_metadata = std::fs::symlink_metadata(root).map_err(|error| {
+        CoreError::new(
+            ErrorKind::Persistence,
+            format!(
+                "failed to inspect managed media root {}: {error}",
+                root.display()
+            ),
+            true,
+        )
+    })?;
+    if root_metadata.file_type().is_symlink() {
+        return Err(CoreError::new(
+            ErrorKind::InvalidInput,
+            "managed media root must not contain symlink traversal",
+            false,
+        ));
+    }
     for entry in std::fs::read_dir(root).map_err(|error| {
         CoreError::new(
             ErrorKind::Persistence,
@@ -194,7 +211,7 @@ fn collect_partial_files(root: &Path, partials: &mut Vec<PathBuf>) -> Result<(),
             )
         })?;
         let path = entry.path();
-        let metadata = entry.metadata().map_err(|error| {
+        let file_type = entry.file_type().map_err(|error| {
             CoreError::new(
                 ErrorKind::Persistence,
                 format!(
@@ -204,9 +221,16 @@ fn collect_partial_files(root: &Path, partials: &mut Vec<PathBuf>) -> Result<(),
                 true,
             )
         })?;
-        if metadata.is_dir() {
+        if file_type.is_symlink() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "managed media root must not contain symlink traversal",
+                false,
+            ));
+        }
+        if file_type.is_dir() {
             collect_partial_files(&path, partials)?;
-        } else if metadata.is_file()
+        } else if file_type.is_file()
             && path
                 .file_name()
                 .and_then(|value| value.to_str())
@@ -365,6 +389,24 @@ mod tests {
             .unwrap();
         assert_eq!(repair.state, DownloadState::Failed);
         assert_eq!(repair.last_error.unwrap().kind, ErrorKind::MissingAsset);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_backed_reconciliation_rejects_symlink_traversal_without_touching_outside_partial() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let outside_partial = outside.path().join("outside.partial");
+        std::fs::write(&outside_partial, b"outside bytes").unwrap();
+        symlink(outside.path(), root.path().join("linked")).unwrap();
+        let store = LibraryStore::open_in_memory().unwrap();
+
+        let error = reconcile_startup_with_library_root(&store, root.path()).unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(std::fs::read(&outside_partial).unwrap(), b"outside bytes");
     }
 
     #[test]
