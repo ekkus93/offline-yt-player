@@ -16,3 +16,10 @@
 Fix the established cause with regression coverage; obtain a non-skipped passing Android smoke run on the exact new candidate including RMD-1504, Compose behavior, golden, and accessibility suites, and requalify other exact-head workflows. Keep RMD-1800/global checkboxes open until the complete matrix passes. Keep the external legal/service-policy release gate separate.
 
 Both Ralph Bridge rerun calls were blocked by the execution safety layer on 2026-10-10; a dispatch request for profile `android-smoke` was rejected as invalid. No rerun was accepted.
+
+## Exact-head recovery and remaining review
+
+- Production settings observer fix: `00f37d1c49e87990fc4d52fe62c0d98900ca828d`.
+- Smoke execution fix: `0488fa5eff0d4fea3c4651eab995a0cddbe02271` isolates `Rmd1802SettingsObserverInstrumentedTest` through `scripts/run_required_android_smoke.sh` so the required non-skipped test is actually executed.
+- Exact-head API-29 smoke passed: https://github.com/ekkus93/offline-yt-player/actions/runs/38071487987 (job `114269626991`). Exact-head CI `38071487927`, FGS timeout `38071487896`, cold start `38071488055`, real-network E2E `38071488022`, deterministic fixture `38071487926`, supply chain `38071487969`, and CI evidence `38071488124` passed.
+- The previous missing required-test result was an invocation/verification mismatch, now fixed. A passing smoke suite does not alone conclusively identify the root cause of the earlier Compose snapshot exception. Preserve full RMD-1802 code review and exact-head RMD-1803 closeout requirements.

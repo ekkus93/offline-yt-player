@@ -348,6 +348,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-601 — Library repository wiring
 
+
 - [x] Replace `emptyList<LibraryRowModel>()` production data with repository-backed state.
 
 - [x] Implement list/search/detail observation.
@@ -699,6 +700,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1301 — Unify Android/core URL validation
 
+
 - [x] Define one supported URL contract.
 - [x] Align Share/Add validation with core source recognition.
 - [x] Reject unsupported schemes/hosts/oversized inputs consistently.
@@ -1049,6 +1051,7 @@ This checklist repairs the implementation and qualification gaps found during th
 **RMD-1802 policy-claim cleanup and UIDT job-ID overflow (2026-10-09, pending exact-head qualification):** removed unused unconditional capability booleans from Android connectivity, resume, notification permission, UIDT scheduling, foreground-timeout, Share routing, About diagnostics, and portrait-coverage policy objects, along with circular assertions that only checked those booleans. Existing real gateway/coordinator JVM tests and packaged Android instrumentation remain the behavioral qualification evidence; this removal alone does not prove runtime capability. Independent review also found that `stableJobId` used `Int.absoluteValue` on a Java string hash; `Int.MIN_VALUE` overflows and yields an ID outside the reserved job range. The scheduler now widens to Long before taking the absolute value, with `minimumIntHashStillProducesJobIdInsideReservedRange` covering the known minimum-hash input. RMD-1802 and engineering closeout remain unchecked pending exact-head qualification and continued Rust/Android review.
 
 
+
 **RMD-1802 playback/UI policy-only cleanup (2026-10-09, pending exact-head qualification):** `PlaybackSessionPolicy` previously exposed four unconditional `true` claims for lock-screen controls, headset controls, audio focus, and noisy-audio handling, with `PlaybackSessionPolicyTest.mediaSessionPolicyCoversPlatformPlaybackControls` merely asserting those booleans. The dead declarations and circular test are removed. Existing `PlaybackSessionBehaviorInstrumentedTest` instead exercises two real MediaControllers sharing a MediaSession, system media keys, seek, and playback transitions; production `PlaybackSessionService` configures Media3 audio focus and becoming-noisy handling. Also remove `SettingToggle`'s silent default no-op callback so every production settings toggle must receive an explicit mutation callback. Do not count these static edits as a substitute for Android behavioral qualification.
 
 
@@ -1058,6 +1061,8 @@ This checklist repairs the implementation and qualification gaps found during th
 **RMD-1802 library-mutation binding-drift finding (2026-10-09, pending exact-head qualification):** independent review found that the production Android library mutation gateway converted a missing or wrong-typed generated UniFFI boolean property into `false`. A binding-shape regression could therefore make Rename/Remove appear to have made no change instead of surfacing an integration failure. The mapper now requires an actual generated Boolean and fails closed for missing/wrong-typed properties; `AppLibraryMutationGatewayMappingTest` covers true/false, missing-property, and wrong-type cases. Do not mark the review closed until exact-head CI qualifies this fix.
 
 **RMD-1802 Android smoke failure (2026-10-10; open):** exact `master` `f07033c291ae284437b26834441e3cacd6baf745` failed Android smoke run `38019697278` in `Rmd1504ShareE2EInstrumentedTest` with a Compose `SnapshotStateObserver` multithreaded-access exception, while seven other exact-head workflows passed. See `docs/RMD_1802_ANDROID_SMOKE_SNAPSHOT_FAILURE_2026-10-10.md` for evidence and required investigation. This blocks RMD-1802/RMD-1803 closeout; do not check them or infer a root cause from the exception alone.
+
+**RMD-1802 Android smoke recovery and production-path review (2026-10-10, exact candidate `0488fa5eff0d4fea3c4651eab995a0cddbe02271`):** the new settings-observer regression was moved to the individually executed required instrumentation runner in `scripts/run_required_android_smoke.sh`; Android smoke `38071487987` (API-29 job `114269626991`) passed. Same exact-head passes: CI `38071487927`, Android FGS timeout `38071487896`, Android cold start `38071488055`, Android real-network E2E `38071488022`, deterministic fixture E2E `38071487926`, Supply chain `38071487969`, and CI evidence `38071488124`. This supersedes the earlier missing-test execution failure at `00f37d1c49e87990fc4d52fe62c0d98900ca828d`, but does not by itself establish the root cause of the earlier Compose snapshot exception or close the independent review. A subsequent production review found `MainActivity.toLibraryScreenState` silently mapped a missing/failed playback index to empty assets, causing completed media to appear unplayable instead of surfacing an integration failure; the next code change must fail closed and qualify this mapping with JVM tests. Keep RMD-1802/RMD-1803 and global closeout boxes open until the new exact head passes and review is complete.
 
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.

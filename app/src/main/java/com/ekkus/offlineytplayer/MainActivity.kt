@@ -167,7 +167,9 @@ class MainActivity : ComponentActivity() {
             val openedCore = core.getOrNull()
             val startupReconciliation = openedCore?.reconcileStartup()
             val startupFailure = startupReconciliation?.error
-            val initialPlaybackAssets = if (startupFailure == null) playback.getOrNull()?.listPlaybackAssets() else null
+            val initialPlaybackAssets = if (startupFailure == null) {
+                runCatching { playback.getOrNull()?.listPlaybackAssets() }.getOrNull()
+            } else null
             val initialTitles = if (startupFailure == null) {
                 runCatching { presentations.getOrThrow().titlesByJobId() }
             } else {
@@ -215,7 +217,7 @@ class MainActivity : ComponentActivity() {
                             // Capture before blocking FFI so a stop/restart cannot publish an old result.
                             val token = statePublicationGate.capture()
                             if (token != null) {
-                                val playbackResult = libraryPlaybackGateway?.listPlaybackAssets()
+                                val playbackResult = runCatching { libraryPlaybackGateway?.listPlaybackAssets() }.getOrNull()
                                 runOnUiThread {
                                     if (!isDestroyed && statePublicationGate.permits(token)) {
                                         uiState.libraryState = result.toLibraryScreenState(libraryRoot, playbackResult)
@@ -259,12 +261,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
+internal fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
     libraryRoot: File,
     playbackAssets: CoreGatewayResult<List<CoreLibraryPlaybackAsset>>? = null,
 ): LibraryScreenState {
     error?.let { return LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
-    val playbackByItemId = playbackAssets?.value.orEmpty().associateBy { it.itemId }
+    // A missing, failed, or malformed playback-gateway result is not an empty library.
+    // Treat it as an unavailable playback index instead of silently disabling Play for every item.
+    val availablePlaybackAssets = playbackAssets?.takeIf { it.error == null }?.value
+        ?: return LibraryScreenState.Failed("Library playback metadata is unavailable.")
+    val playbackByItemId = availablePlaybackAssets.associateBy { it.itemId }
     return LibraryScreenState.Ready(value.orEmpty().map { item ->
         val playback = playbackByItemId[item.itemId]
         LibraryRowModel(
