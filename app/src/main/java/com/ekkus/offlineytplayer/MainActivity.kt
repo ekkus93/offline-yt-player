@@ -164,7 +164,7 @@ class MainActivity : ComponentActivity() {
             val startupFailure = startupReconciliation?.error
             val initialPlaybackAssets = if (startupFailure == null) playback.getOrNull()?.listPlaybackAssets() else null
             val initialTitles = if (startupFailure == null) {
-                runCatching { presentations.getOrNull()?.titlesByJobId().orEmpty() }
+                runCatching { presentations.getOrThrow().titlesByJobId() }
             } else {
                 Result.success(emptyMap())
             }
@@ -221,7 +221,10 @@ class MainActivity : ComponentActivity() {
                         onDownloads = { result ->
                             val token = statePublicationGate.capture()
                             if (token != null) {
-                                val titles = runCatching { downloadPresentationGateway?.titlesByJobId().orEmpty() }
+                                val titles = runCatching {
+                                    checkNotNull(downloadPresentationGateway) { "Download presentation gateway is unavailable" }
+                                        .titlesByJobId()
+                                }
                                 runOnUiThread {
                                     if (!isDestroyed && statePublicationGate.permits(token)) {
                                         uiState.downloadsState = titles.fold(
