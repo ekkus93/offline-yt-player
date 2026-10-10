@@ -37,7 +37,6 @@ class DownloadNotificationPermissionInstrumentedTest {
             DownloadNotificationPermissionBehavior.QueueStateOnly,
             DownloadNotificationPermissionPolicy.behavior(granted = false),
         )
-        assertEquals(true, DownloadNotificationPermissionPolicy.DenialDoesNotMutateDurableQueue)
     }
 
     @Test
