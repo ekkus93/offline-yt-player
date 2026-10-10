@@ -60,7 +60,10 @@ impl DurableDownloadWorkStore {
             ));
         }
         if !work.plan.assets.iter().any(|asset| {
-            matches!(asset.kind, crate::MediaKind::Video | crate::MediaKind::Audio)
+            matches!(
+                asset.kind,
+                crate::MediaKind::Video | crate::MediaKind::Audio
+            )
         }) {
             return Err(CoreError::new(
                 ErrorKind::NoCompatibleFormat,
