@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.ekkus.offlineytplayer.MainActivity
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
@@ -18,6 +20,8 @@ import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
 import java.io.Closeable
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 internal enum class DownloadNetworkPreference {
     AnyNetwork,
@@ -100,6 +104,11 @@ internal object DownloadForegroundTimeoutStore {
 
 class DownloadForegroundService : Service() {
     private val workerRunning = AtomicBoolean(false)
+    private val controlExecutor: ExecutorService = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "offline-yt-notification-controls").apply { isDaemon = true }
+    }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile private var serviceDestroyed = false
     @Volatile private var activeQueueItemId: String? = null
     @Volatile private var activeNetworkPreference = DownloadNetworkPreference.AnyNetwork
     @Volatile private var lastConnectivity = DownloadConnectivity.None
@@ -125,16 +134,16 @@ class DownloadForegroundService : Service() {
             }
             ACTION_PAUSE -> {
                 queueItemId?.let(connectivityPauseRegistry::clearPausedByConnectivity)
-                dispatchControlAction(intent)
+                dispatchControlActionOffMain(intent)
             }
             ACTION_RESUME -> {
                 queueItemId?.let(connectivityPauseRegistry::clearPausedByConnectivity)
-                dispatchControlAction(intent)
                 configureActiveWork(intent, queueItemId)
+                dispatchControlActionOffMain(intent, activateObserverOnSuccess = true)
             }
             ACTION_CANCEL -> {
                 queueItemId?.let(connectivityPauseRegistry::clearPausedByConnectivity)
-                dispatchControlAction(intent)
+                dispatchControlActionOffMain(intent)
             }
             ACTION_CONNECTIVITY_RETRY,
             ACTION_SCHEDULE_WORK,
@@ -143,7 +152,6 @@ class DownloadForegroundService : Service() {
         startForeground(DownloadServicePolicy.NotificationId, activeNotification(queueItemId))
         if (
             intent?.action == ACTION_SCHEDULE_WORK ||
-            intent?.action == ACTION_RESUME ||
             intent?.action == ACTION_CONNECTIVITY_RETRY
         ) {
             ensureConnectivityObserver()
@@ -164,6 +172,8 @@ class DownloadForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        serviceDestroyed = true
+        controlExecutor.shutdown()
         connectivityObserver?.close()
         connectivityObserver = null
         settingsStore?.close()
@@ -325,6 +335,23 @@ class DownloadForegroundService : Service() {
             android.util.Log.w("OfflineYTDownload", "Durable queue unavailable while settling worker")
             null
         }
+
+    private fun dispatchControlActionOffMain(
+        intent: Intent,
+        activateObserverOnSuccess: Boolean = false,
+    ) {
+        // Service.onStartCommand runs on the Android main thread; the generated UniFFI
+        // control gateway enforces an off-main contract. Serialized dispatch preserves
+        // user notification action order without blocking foreground-service startup.
+        controlExecutor.execute {
+            val updated = dispatchControlAction(intent)
+            if (updated && activateObserverOnSuccess) {
+                mainHandler.post {
+                    if (!serviceDestroyed) ensureConnectivityObserver()
+                }
+            }
+        }
+    }
 
     private fun dispatchControlAction(intent: Intent): Boolean = try {
         GeneratedUniffiDownloadControlGateway.open(downloadDatabasePath()).use { gateway ->
