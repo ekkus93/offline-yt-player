@@ -103,7 +103,9 @@ pub fn redact_sensitive(input: &str) -> String {
     ];
     let mut output = String::with_capacity(input.len());
     for line in input.lines() {
-        let lower = line.to_ascii_lowercase();
+        // Diagnostic renderers may indent header lines. Never treat indentation as a
+        // reason to leave a credential-bearing header unredacted.
+        let lower = line.trim_start().to_ascii_lowercase();
         let redacted = if sensitive_names.iter().any(|name| lower.starts_with(name)) {
             line.split_once(':').map_or_else(
                 || "[REDACTED]".to_string(),
@@ -205,6 +207,19 @@ mod tests {
         assert!(!output.contains("sig="));
         assert!(!output.contains("frag-"));
         assert!(output.contains("REDACTED"));
+    }
+
+    #[test]
+    fn indented_sensitive_headers_are_redacted() {
+        let marker = "RMD1802_INDENTED_HEADER_SECRET";
+        let input = format!(
+            "  Authorization: Bearer {marker}\n\tCookie: session={marker}\n  X-Api-Key: {marker}"
+        );
+        let output = redact_sensitive(&input);
+        assert!(!output.contains(marker), "{output}");
+        assert!(output.contains("Authorization: [REDACTED]"));
+        assert!(output.contains("Cookie: [REDACTED]"));
+        assert!(output.contains("X-Api-Key: [REDACTED]"));
     }
 
     #[test]
