@@ -559,6 +559,41 @@ mod tests {
     }
 
     #[test]
+    fn retry_replayed_asset_does_not_double_count_prior_progress() {
+        let data = b"retry fixture".repeat(64);
+        let server = FixtureServer::start(data.clone());
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut prior = snapshot("retry-progress", DownloadState::RetryWait);
+        prior.bytes_downloaded = data.len() as u64;
+        prior.total_bytes = Some(data.len() as u64);
+        prior.attempt = 1;
+        prior.retry_at_epoch_ms = Some(10_000);
+        store.save_download_snapshot(&prior).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+
+        let report = worker
+            .execute_ready_at(
+                &[plan("retry-progress", format!("{}/retry.mp4", server.address), data.len())],
+                &AtomicBool::new(false),
+                10_000,
+            )
+            .unwrap();
+        assert_eq!(report.completed, vec!["retry-progress"]);
+        let completed = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(completed.state, DownloadState::Completed);
+        assert_eq!(completed.attempt, 2);
+        assert_eq!(completed.bytes_downloaded, data.len() as u64);
+        let CoreEvent::DownloadProgress { bytes_downloaded, total_bytes, .. } =
+            report.progress_events.last().unwrap()
+        else {
+            panic!("expected progress event");
+        };
+        assert_eq!(*bytes_downloaded, data.len() as u64);
+        assert_eq!(*total_bytes, Some(data.len() as u64));
+    }
+
+    #[test]
     fn retryable_failure_enters_retry_wait_with_attempt_and_error() {
         let store = LibraryStore::open_in_memory().unwrap();
         store
