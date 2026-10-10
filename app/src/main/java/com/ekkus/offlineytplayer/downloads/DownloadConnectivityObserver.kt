@@ -176,11 +176,21 @@ internal class DownloadConnectivityCoordinator(
         queue.error?.let { error ->
             return DownloadConnectivityCoordinatorReport(decision = decision, errors = listOf(error))
         }
+        // A null successful result is not an empty queue: silently skipping the
+        // connectivity decision could leave active transfers running on a blocked network.
+        val snapshots = queue.value ?: return DownloadConnectivityCoordinatorReport(
+            decision = decision,
+            errors = listOf(CoreGatewayError(
+                kind = "repository_unavailable",
+                message = "Download queue data is unavailable.",
+                retryable = true,
+            )),
+        )
 
         val paused = mutableListOf<String>()
         val resumed = mutableListOf<String>()
         val errors = mutableListOf<CoreGatewayError>()
-        for (snapshot in queue.value.orEmpty()) {
+        for (snapshot in snapshots) {
             when {
                 decision == DownloadNetworkDecision.PauseForConnectivity && snapshot.shouldPauseForConnectivity() -> {
                     val result = controlGateway.pause(snapshot.jobId)

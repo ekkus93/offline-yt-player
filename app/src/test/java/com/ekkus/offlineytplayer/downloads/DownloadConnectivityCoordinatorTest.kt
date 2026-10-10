@@ -10,6 +10,28 @@ import org.junit.Test
 
 class DownloadConnectivityCoordinatorTest {
     @Test
+    fun malformedSuccessfulQueueCannotBypassConnectivityPolicy() {
+        val controls = FakeDownloadControlGateway()
+        val core = object : com.ekkus.offlineytplayer.coregateway.AppCoreGateway by FakeCoreGateway() {
+            override fun listDownloadQueue(): com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreDownloadSnapshot>> =
+                com.ekkus.offlineytplayer.coregateway.CoreGatewayResult(null, null)
+        }
+        val coordinator = DownloadConnectivityCoordinator(
+            coreGateway = core,
+            controlGateway = controls,
+            networkPreference = { DownloadNetworkPreference.WifiOnly },
+        )
+
+        val report = coordinator.onConnectivityChanged(DownloadConnectivity.Metered)
+
+        assertEquals(DownloadNetworkDecision.PauseForConnectivity, report.decision)
+        assertEquals(1, report.errors.size)
+        assertEquals("repository_unavailable", report.errors.single().kind)
+        assertTrue(controls.pausedJobIds.isEmpty())
+        assertTrue(controls.resumedJobIds.isEmpty())
+    }
+
+    @Test
     fun lostConnectivityPausesPendingAndActiveDurableWork() {
         val controls = FakeDownloadControlGateway()
         val pauses = InMemoryDownloadConnectivityPauseRegistry()
