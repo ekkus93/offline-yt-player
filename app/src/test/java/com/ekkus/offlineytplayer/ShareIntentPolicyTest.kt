@@ -30,7 +30,7 @@ class ShareIntentPolicyTest {
         assertTrue(activity.contains("GeneratedUniffiSourceAnalysisGateway.open()"))
         assertTrue(activity.contains("DownloadPresentationGateway.open(databasePath)"))
         assertTrue(activity.contains("bootstrapExecutor.execute"))
-        assertTrue(activity.contains("listLibrary(uiState.libraryQuery).toLibraryScreenState(libraryRoot, initialPlaybackAssets)"))
+        assertTrue(activity.contains("readInitialLibraryStateSafely(uiState.libraryQuery, libraryRoot, initialPlaybackAssets)"))
         assertTrue(activity.contains("downloadControlGateway = downloadControlGateway"))
         assertTrue(activity.contains("sourceAnalysisGateway = sourceAnalysisGateway"))
     }
