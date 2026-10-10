@@ -10,7 +10,8 @@ for required_class in \
     com.ekkus.offlineytplayer.Rmd1802SettingsObserverInstrumentedTest \
     com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest \
     com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest \
-    com.ekkus.offlineytplayer.downloads.Rmd1507NotificationControlInstrumentedTest
+    com.ekkus.offlineytplayer.downloads.Rmd1507NotificationControlInstrumentedTest \
+    com.ekkus.offlineytplayer.ui.Rmd1802DownloadsControlThreadingInstrumentedTest
 do
     class_name=${required_class##*.}
     report_dir="app/build/reports/androidSmokeLogs/required-${class_name}-results"

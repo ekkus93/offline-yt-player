@@ -67,10 +67,14 @@ internal object DownloadRowControlBinding {
         action: DownloadRowAction,
         jobId: String,
         gateway: AppDownloadControlGateway,
-    ): Boolean = when (action) {
-        DownloadRowAction.Pause -> gateway.pause(jobId).isSuccess
-        DownloadRowAction.Resume -> gateway.resume(jobId).isSuccess
-        DownloadRowAction.Cancel -> gateway.cancel(jobId).isSuccess
-        DownloadRowAction.Retry -> gateway.retry(jobId).isSuccess
+    ): Boolean {
+        val result = when (action) {
+            DownloadRowAction.Pause -> gateway.pause(jobId)
+            DownloadRowAction.Resume -> gateway.resume(jobId)
+            DownloadRowAction.Cancel -> gateway.cancel(jobId)
+            DownloadRowAction.Retry -> gateway.retry(jobId)
+        }
+        // A successful FFI call can still report an illegal/no-op state transition.
+        return result.error == null && result.value == true
     }
 }

@@ -444,6 +444,7 @@ internal fun DownloadsScreen(
     state: DownloadsScreenState = DownloadsScreenState.Unavailable("Downloads repository is not connected yet; no empty-queue claim is being made."),
     controlGateway: AppDownloadControlGateway? = null,
 ) {
+    val scope = rememberCoroutineScope()
     var filter by rememberSaveable { mutableStateOf("All") }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
     val rows = (state as? DownloadsScreenState.Ready)?.rows.orEmpty()
@@ -473,12 +474,23 @@ internal fun DownloadsScreen(
                                 row,
                                 { action ->
                                     val gateway = controlGateway
-                                    message = if (gateway == null) {
-                                        "Download control gateway is not connected for ${row.title}."
-                                    } else if (DownloadRowControlBinding.invoke(action, row.id, gateway)) {
-                                        "${action.name} requested for ${row.title}."
+                                    if (gateway == null) {
+                                        message = "Download control gateway is not connected for ${row.title}."
                                     } else {
-                                        "${action.name} failed for ${row.title}."
+                                        // UniFFI download controls reject Android main-thread calls.
+                                        // Only publish the result back to Compose after the IO dispatch.
+                                        scope.launch {
+                                            val updated = withContext(Dispatchers.IO) {
+                                                runCatching {
+                                                    DownloadRowControlBinding.invoke(action, row.id, gateway)
+                                                }.getOrDefault(false)
+                                            }
+                                            message = if (updated) {
+                                                "${action.name} requested for ${row.title}."
+                                            } else {
+                                                "${action.name} failed for ${row.title}."
+                                            }
+                                        }
                                     }
                                 },
                                 { selected -> message = "${selected.title}: ${DownloadScreenPolicy.detail(selected)}" },
