@@ -2,6 +2,7 @@ use crate::{
     DownloadPolicy, DownloadWorkItem, DownloadWorker, DurableDownloadWorkStore,
     FfiCoreServiceOpenError, FfiError, LibraryStore,
 };
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -122,6 +123,8 @@ impl FfiDownloadWorkerService {
             ));
         };
 
+        validate_asset_identities(&work.plan.assets)?;
+
         let worker = DownloadWorker::new(
             LibraryStore::open(&self.database_path)?,
             &self.library_root,
@@ -152,5 +155,65 @@ impl FfiDownloadWorkerService {
             canceled,
             error: None,
         })
+    }
+}
+
+fn validate_asset_identities(assets: &[crate::DownloadPlanAsset]) -> Result<(), crate::CoreError> {
+    let mut ids = HashSet::with_capacity(assets.len());
+    let mut paths = HashSet::with_capacity(assets.len());
+    for asset in assets {
+        if asset.asset_id.trim().is_empty() || !ids.insert(asset.asset_id.as_str()) {
+            return Err(crate::CoreError::new(
+                crate::ErrorKind::InvalidInput,
+                "download plan has blank or duplicate asset IDs",
+                false,
+            ));
+        }
+        if asset.relative_path.trim().is_empty()
+            || !paths.insert(asset.relative_path.as_str())
+        {
+            return Err(crate::CoreError::new(
+                crate::ErrorKind::InvalidInput,
+                "download plan has blank or duplicate asset output paths",
+                false,
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod asset_identity_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_blank_and_duplicate_asset_identifiers_and_paths() {
+        let original = crate::DownloadPlanAsset {
+            asset_id: "video".into(),
+            kind: crate::MediaKind::Video,
+            url: "http://127.0.0.1:1/unreachable".into(),
+            relative_path: "items/job/video.mp4".into(),
+            expected_bytes: None,
+            expected_sha256: None,
+            mime_type: None,
+        };
+        let mut distinct = original.clone();
+        distinct.asset_id = "audio".into();
+        distinct.relative_path = "items/job/audio.mp4".into();
+        assert!(validate_asset_identities(&[original.clone(), distinct.clone()]).is_ok());
+
+        for defect in 0..4 {
+            let mut conflicting = distinct.clone();
+            match defect {
+                0 => conflicting.asset_id = original.asset_id.clone(),
+                1 => conflicting.relative_path = original.relative_path.clone(),
+                2 => conflicting.asset_id = "  ".into(),
+                3 => conflicting.relative_path = "  ".into(),
+                _ => unreachable!(),
+            }
+            let error = validate_asset_identities(&[original.clone(), conflicting]).unwrap_err();
+            assert_eq!(error.kind, crate::ErrorKind::InvalidInput);
+            assert!(!error.retryable);
+        }
     }
 }
