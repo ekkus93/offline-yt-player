@@ -169,6 +169,7 @@ mod tests {
             plan: DownloadPlan {
                 source: SourceIdentity::new("fixture", "media-1"),
                 title: "Fixture".into(),
+                duration_ms: Some(42_000),
                 quality: QualityChoice {
                     choice_id: "720p".into(),
                     label: "720p".into(),

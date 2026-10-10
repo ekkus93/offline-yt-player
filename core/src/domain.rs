@@ -156,6 +156,8 @@ pub struct DownloadPlanAsset {
 pub struct DownloadPlan {
     pub source: SourceIdentity,
     pub title: String,
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
     pub quality: QualityChoice,
     pub assets: Vec<DownloadPlanAsset>,
 }

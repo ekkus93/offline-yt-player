@@ -261,6 +261,7 @@ impl MediaSource for YouTubeSource {
             Ok(DownloadPlan {
                 source: media.source.clone(),
                 title: media.title.clone(),
+                duration_ms: media.duration_ms,
                 quality: choice,
                 assets,
             })

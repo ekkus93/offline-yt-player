@@ -51,6 +51,7 @@ fn durable_cancel_stops_active_work_and_persists_terminal_state() {
                 canonical_url: None,
             },
             title: "Cancel fixture".into(),
+            duration_ms: None,
             quality: QualityChoice {
                 choice_id: "fixture".into(),
                 label: "720p".into(),

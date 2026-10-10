@@ -230,7 +230,7 @@ impl DownloadWorker {
             item_id: item.job_id.clone(),
             source: item.plan.source.clone(),
             display_title: item.plan.title.clone(),
-            duration_ms: None,
+            duration_ms: item.plan.duration_ms,
             quality_label: item.plan.quality.label.clone(),
             assets,
             created_at_epoch_ms: item.created_at_epoch_ms,
@@ -414,6 +414,7 @@ mod tests {
                     canonical_url: Some(format!("https://fixture.invalid/{job_id}")),
                 },
                 title: format!("Video {job_id}"),
+                duration_ms: Some(60_000),
                 quality: QualityChoice {
                     choice_id: "fixture".into(),
                     label: "720p".into(),
@@ -471,6 +472,7 @@ mod tests {
         assert!(store.staged_job_ids().unwrap().is_empty());
         let item = store.get("job-a").unwrap().unwrap();
         assert!(item.completed);
+        assert_eq!(item.duration_ms, Some(60_000));
         assert_eq!(item.assets[0].bytes, data.len() as u64);
         let jobs = store.load_download_snapshots().unwrap();
         assert_eq!(jobs[0].state, DownloadState::Completed);

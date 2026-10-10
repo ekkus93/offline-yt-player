@@ -71,6 +71,7 @@ fn plan(job_id: &str, url: String, bytes: usize) -> DownloadWorkItem {
                 canonical_url: Some(format!("https://fixture.invalid/{job_id}")),
             },
             title: format!("Recovered {job_id}"),
+            duration_ms: None,
             quality: QualityChoice {
                 choice_id: "fixture".into(),
                 label: "fixture".into(),

@@ -201,6 +201,7 @@ impl MediaSource for DirectFixtureSource {
             Ok(DownloadPlan {
                 source: media.source.clone(),
                 title: media.title.clone(),
+                duration_ms: media.duration_ms,
                 quality: QualityChoice {
                     choice_id: choice_id.into(),
                     label: "720p".into(),
