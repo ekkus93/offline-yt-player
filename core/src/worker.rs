@@ -167,7 +167,10 @@ impl DownloadWorker {
         now_epoch_ms: u64,
     ) -> Result<Vec<CoreEvent>, CoreError> {
         if !item.plan.assets.iter().any(|asset| {
-            matches!(asset.kind, crate::MediaKind::Video | crate::MediaKind::Audio)
+            matches!(
+                asset.kind,
+                crate::MediaKind::Video | crate::MediaKind::Audio
+            )
         }) {
             return Err(CoreError::new(
                 ErrorKind::NoCompatibleFormat,
@@ -474,7 +477,10 @@ mod tests {
         let snapshot = store.load_download_snapshots().unwrap().remove(0);
         assert_eq!(snapshot.state, DownloadState::Failed);
         assert_eq!(snapshot.bytes_downloaded, 0);
-        assert_eq!(snapshot.last_error.unwrap().kind, ErrorKind::NoCompatibleFormat);
+        assert_eq!(
+            snapshot.last_error.unwrap().kind,
+            ErrorKind::NoCompatibleFormat
+        );
     }
 
     #[test]
@@ -495,7 +501,10 @@ mod tests {
         assert!(store.get("thumbnail-only").unwrap().is_none());
         let snapshot = store.load_download_snapshots().unwrap().remove(0);
         assert_eq!(snapshot.state, DownloadState::Failed);
-        assert_eq!(snapshot.last_error.unwrap().kind, ErrorKind::NoCompatibleFormat);
+        assert_eq!(
+            snapshot.last_error.unwrap().kind,
+            ErrorKind::NoCompatibleFormat
+        );
     }
 
     #[test]
