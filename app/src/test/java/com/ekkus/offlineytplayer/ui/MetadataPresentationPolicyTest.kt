@@ -2,8 +2,6 @@ package com.ekkus.offlineytplayer.ui
 
 import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MetadataPresentationPolicyTest {
@@ -21,7 +19,6 @@ class MetadataPresentationPolicyTest {
         assertEquals("YouTube", compact.source)
         assertEquals(2, MetadataPresentationPolicy.PrimaryTitleMaxLines)
         assertEquals(3, MetadataPresentationPolicy.PrimaryMetadataFieldCount)
-        assertFalse(MetadataPresentationPolicy.PrimaryScreenUsesUnboundedMetadata)
     }
 
     @Test
@@ -53,7 +50,6 @@ class MetadataPresentationPolicyTest {
         val details = MetadataPresentationPolicy.details(
             mapOf("Codec" to "H.264", "Description" to "Long source description"),
         )
-        assertTrue(MetadataPresentationPolicy.LongDetailsUseDedicatedRegion)
         assertEquals(
             listOf(
                 MetadataDetailRow("Codec", "H.264"),

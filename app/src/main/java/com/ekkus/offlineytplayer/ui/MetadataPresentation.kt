@@ -17,8 +17,6 @@ internal data class MetadataDetailRow(
 internal object MetadataPresentationPolicy {
     const val PrimaryTitleMaxLines = 2
     const val PrimaryMetadataFieldCount = 3
-    const val PrimaryScreenUsesUnboundedMetadata = false
-    const val LongDetailsUseDedicatedRegion = true
 
     fun compact(
         title: String,

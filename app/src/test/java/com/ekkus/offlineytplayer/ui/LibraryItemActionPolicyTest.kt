@@ -26,7 +26,5 @@ class LibraryItemActionPolicyTest {
         val policy = LibraryItemActionPolicy(renameEnabled = false)
         assertTrue(policy.requiresConfirmation(LibraryItemAction.Remove))
         assertFalse(policy.requiresConfirmation(LibraryItemAction.Play))
-        assertFalse(LibraryItemActionPolicy.DestructiveActionIsSwipeOnly)
-        assertTrue(LibraryItemActionPolicy.RemoveDeletesDeviceCopy)
     }
 }

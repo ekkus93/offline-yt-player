@@ -1,7 +1,6 @@
 package com.ekkus.offlineytplayer.ui
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,12 +24,6 @@ class PlayerScreenLayoutPolicyTest {
             PlayerScreenLayoutPolicy.secondaryLabels,
         )
         assertEquals(3, PlayerScreenLayoutPolicy.SecondaryControlCount)
-    }
-
-    @Test
-    fun playerDoesNotExposeLandscapeOrScrollDependentPrimaryControls() {
-        assertFalse(PlayerScreenLayoutPolicy.SupportsLandscapeAction)
-        assertFalse(PlayerScreenLayoutPolicy.RequiresPrimaryControlScrolling)
     }
 
     @Test

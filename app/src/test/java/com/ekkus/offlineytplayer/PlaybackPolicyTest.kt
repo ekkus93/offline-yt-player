@@ -14,7 +14,6 @@ import org.junit.Test
 class PlaybackPolicyTest {
     @Test
     fun completedPlaybackCannotUseNetworkUris() {
-        assertFalse(LocalPlaybackPolicy.UsesNetworkUris)
         val failure = runCatching {
             LocalPlaybackPolicy.validate(LocalPlaybackAsset("https://example.invalid/video.mp4", title = "Remote"))
         }
@@ -26,8 +25,6 @@ class PlaybackPolicyTest {
         assertEquals(16f / 9f, PlayerLayoutPolicy.VideoAspectRatio)
         assertEquals(3, PlayerLayoutPolicy.PrimaryTransportActions)
         assertEquals(3, PlayerLayoutPolicy.SecondaryControlActions)
-        assertFalse(PlayerLayoutPolicy.HasScrollingControls)
-        assertFalse(PlayerLayoutPolicy.HasLandscapeAction)
     }
 
     @Test

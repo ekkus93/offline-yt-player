@@ -66,8 +66,6 @@ internal object LocalPlaybackPolicy {
     const val SkipIntervalMs = 10_000L
     const val NearEndCompletedThresholdMs = 30_000L
     const val PositionPersistCadenceMs = 5_000L
-    const val UsesNetworkUris = false
-    const val SupportsLandscapeAction = false
 
     fun validate(asset: LocalPlaybackAsset): LocalPlaybackAsset {
         require(asset.videoPath.isNotBlank()) { "video path is required" }

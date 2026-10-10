@@ -32,8 +32,6 @@ internal data class PlayerUiState(
 internal object PlayerScreenLayoutPolicy {
     const val VideoAspectRatioWidth = 16
     const val VideoAspectRatioHeight = 9
-    const val SupportsLandscapeAction = false
-    const val RequiresPrimaryControlScrolling = false
     const val PrimaryTransportControlCount = 3
     const val SecondaryControlCount = 3
     const val CompactPortraitHeightDp = 640

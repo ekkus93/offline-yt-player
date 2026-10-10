@@ -15,7 +15,6 @@ class OfflinePlaybackQualificationTest {
             startPositionMs = 12_000L,
         )
         val plan = LocalPlaybackPolicy.mediaSourcePlanFor(fixture)
-        assertFalse(LocalPlaybackPolicy.UsesNetworkUris)
         assertFalse(plan.videoPath.startsWith("http"))
         assertEquals(12_000L, plan.startPositionMs)
     }

@@ -44,8 +44,6 @@ internal object PlayerLayoutPolicy {
     const val VideoAspectRatio = 16f / 9f
     const val PrimaryTransportActions = 3
     const val SecondaryControlActions = 3
-    const val HasScrollingControls = false
-    const val HasLandscapeAction = false
 }
 
 @Composable

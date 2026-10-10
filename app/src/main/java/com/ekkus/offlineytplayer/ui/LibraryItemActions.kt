@@ -19,9 +19,4 @@ internal data class LibraryItemActionPolicy(
         }
 
     fun requiresConfirmation(action: LibraryItemAction): Boolean = action == LibraryItemAction.Remove
-
-    companion object {
-        const val DestructiveActionIsSwipeOnly = false
-        const val RemoveDeletesDeviceCopy = true
-    }
 }
