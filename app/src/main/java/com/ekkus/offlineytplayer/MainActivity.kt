@@ -288,16 +288,20 @@ private fun CoreLibraryItem.libraryDetail(playback: CoreLibraryPlaybackAsset?): 
     playback?.takeUnless { it.playable }?.unavailableReason?.let(SourceMetadataPolicy::diagnostic),
 ).joinToString(" · ")
 
-private fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenState(
-    titlesByJobId: Map<String, String> = emptyMap(),
+internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenState(
+    titlesByJobId: Map<String, String>,
 ): DownloadsScreenState {
     error?.let { return DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
-    return DownloadsScreenState.Ready(value.orEmpty().map { snapshot ->
+    val snapshots = value.orEmpty()
+    if (snapshots.any { titlesByJobId[it.jobId].isNullOrBlank() }) {
+        return DownloadsScreenState.Failed("Download presentation metadata is unavailable.")
+    }
+    return DownloadsScreenState.Ready(snapshots.map { snapshot ->
         val total = snapshot.totalBytes
         val percent = if (total != null && total > 0) ((snapshot.bytesDownloaded.coerceAtMost(total) * 100L) / total).toInt() else 0
         DownloadRowModel(
             id = snapshot.jobId,
-            title = SourceMetadataPolicy.title(titlesByJobId[snapshot.jobId].orEmpty()),
+            title = SourceMetadataPolicy.title(checkNotNull(titlesByJobId[snapshot.jobId])),
             state = snapshot.state.toUiState(),
             percent = percent,
             size = if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes",

@@ -96,7 +96,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
                 bitrateBps = readSourceNullable(option, "bitrateBps", "bitrate_bps")?.let(::generatedNumericAsLong),
             )
         }
-        val containerOptions = readSourceRequired(media, "containerOptions", "container_options") as List<*>
+        val containerOptions = readRequiredSourceStringList(media, "containerOptions", "container_options")
         val preferred = qualityOptions.firstOrNull()
         return CoreGatewayResult(
             CoreSourceAnalysis(
@@ -109,7 +109,7 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
                 qualityOptions = qualityOptions,
                 subtitleOptions = subtitleOptions,
                 audioOptions = audioOptions,
-                containerOptions = containerOptions.filterIsInstance<String>(),
+                containerOptions = containerOptions,
                 sourceProvider = readSourceString(sourceIdentity, "provider"),
                 sourceMediaId = readSourceString(sourceIdentity, "mediaId", "media_id"),
             ),
@@ -177,6 +177,16 @@ private fun readSourceNullable(target: Any, vararg names: String): Any? {
 @Suppress("UNCHECKED_CAST")
 private fun readSourceList(target: Any, vararg names: String): List<Any> =
     readSourceRequired(target, *names) as List<Any>
+
+internal fun readRequiredSourceStringList(target: Any, vararg names: String): List<String> {
+    val value = readSourceRequired(target, *names)
+    val list = value as? List<*>
+        ?: error("Generated property ${names.joinToString("/")} is not a List")
+    return list.mapIndexed { index, item ->
+        item as? String
+            ?: error("Generated property ${names.joinToString("/")}[$index] is not a String")
+    }
+}
 
 private fun readSourceString(target: Any, vararg names: String): String =
     readSourceRequired(target, *names) as String

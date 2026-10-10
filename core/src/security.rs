@@ -136,9 +136,8 @@ fn redact_url_token(token: &str) -> String {
         (None, None) => return token.to_string(),
     };
     let (prefix, url_and_suffix) = token.split_at(start);
-    let url_text = url_and_suffix.trim_end_matches(|c: char| {
-        matches!(c, ')' | ']' | '}' | ',' | ';' | '\'' | '"' | '>')
-    });
+    let url_text = url_and_suffix
+        .trim_end_matches(|c: char| matches!(c, ')' | ']' | '}' | ',' | ';' | '\'' | '"' | '>'));
     let suffix = &url_and_suffix[url_text.len()..];
 
     Url::parse(url_text).map_or_else(
@@ -213,15 +212,11 @@ mod tests {
     fn wrapped_and_prefixed_signed_urls_are_redacted() {
         let marker = "RMD1802_WRAPPED_URL_SECRET";
         let inputs = [
-            format!(
-                "url=\"https://cdn.example/video?sig={marker}#fragment-{marker}\","
-            ),
+            format!("url=\"https://cdn.example/video?sig={marker}#fragment-{marker}\","),
             format!(
                 "request=(HTTPS://user:{marker}@cdn.example/video?token={marker}#fragment-{marker})"
             ),
-            format!(
-                "target=<https://cdn.example/video?signature={marker}#fragment-{marker}>"
-            ),
+            format!("target=<https://cdn.example/video?signature={marker}#fragment-{marker}>"),
         ];
 
         for input in inputs {
