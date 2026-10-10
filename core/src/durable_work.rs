@@ -60,8 +60,11 @@ impl DurableDownloadWorkStore {
             ));
         }
         let plan_json = serde_json::to_string(&work.plan).map_err(json_error)?;
-        let connection = self.connection()?;
-        connection
+        // Work execution and its user-facing display metadata must never drift apart.
+        // If either write fails (for example, storage exhaustion), roll back both.
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction().map_err(db_error)?;
+        transaction
             .execute(
                 "INSERT INTO download_work_items(job_id, plan_json, created_at_epoch_ms)
                  VALUES(?1, ?2, ?3)
@@ -71,7 +74,7 @@ impl DurableDownloadWorkStore {
                 params![work.job_id, plan_json, to_i64(work.created_at_epoch_ms)?],
             )
             .map_err(db_error)?;
-        connection
+        transaction
             .execute(
                 "INSERT INTO download_presentations(job_id, display_title)
                  VALUES(?1, ?2)
@@ -79,7 +82,7 @@ impl DurableDownloadWorkStore {
                 params![work.job_id, work.plan.title],
             )
             .map_err(db_error)?;
-        Ok(())
+        transaction.commit().map_err(db_error)
     }
 
     pub fn load_all(&self) -> Result<Vec<DurableDownloadWorkItem>, CoreError> {
@@ -215,6 +218,25 @@ mod tests {
             reopened.load_presentations().unwrap(),
             vec![("fixture-job".into(), "Fixture".into())]
         );
+    }
+
+    #[test]
+    fn failed_presentation_write_rolls_back_executable_plan() {
+        let temp = tempdir().unwrap();
+        let store = DurableDownloadWorkStore::open(temp.path().join("library.sqlite3")).unwrap();
+        {
+            let connection = store.connection().unwrap();
+            connection.execute_batch(
+                "CREATE TRIGGER reject_presentation
+                 BEFORE INSERT ON download_presentations
+                 BEGIN SELECT RAISE(ABORT, 'simulated presentation write failure'); END;",
+            ).unwrap();
+        }
+
+        let error = store.save(&work()).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Persistence);
+        assert!(store.load_all().unwrap().is_empty());
+        assert!(store.load_presentations().unwrap().is_empty());
     }
 
     #[test]
