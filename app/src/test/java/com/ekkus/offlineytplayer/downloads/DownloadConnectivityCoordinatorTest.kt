@@ -32,6 +32,66 @@ class DownloadConnectivityCoordinatorTest {
     }
 
     @Test
+    fun throwingQueueReadReturnsErrorInsteadOfEscapingConnectivityCallback() {
+        val delegate = FakeCoreGateway()
+        val gateway = object : com.ekkus.offlineytplayer.coregateway.AppCoreGateway by delegate {
+            override fun listDownloadQueue(): com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<List<CoreDownloadSnapshot>> =
+                throw IllegalStateException("private url query token")
+        }
+        val controls = FakeDownloadControlGateway()
+        val coordinator = DownloadConnectivityCoordinator(
+            coreGateway = gateway,
+            controlGateway = controls,
+            networkPreference = { DownloadNetworkPreference.WifiOnly },
+        )
+        val report = coordinator.onConnectivityChanged(DownloadConnectivity.Metered)
+        assertEquals(DownloadNetworkDecision.PauseForConnectivity, report.decision)
+        assertEquals("repository_unavailable", report.errors.single().kind)
+        assertTrue(!report.errors.single().message.contains("private url"))
+        assertTrue(controls.pausedJobIds.isEmpty())
+    }
+
+    @Test
+    fun throwingPauseDoesNotInventConnectivityPauseSuccess() {
+        val delegate = FakeDownloadControlGateway()
+        val controls = object : com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway by delegate {
+            override fun pause(jobId: String): com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<Boolean> =
+                throw IllegalStateException("private url query token")
+        }
+        val registry = InMemoryDownloadConnectivityPauseRegistry()
+        val coordinator = DownloadConnectivityCoordinator(
+            coreGateway = FakeCoreGateway(initialDownloads = listOf(snapshot("job-1", CoreDownloadState.DOWNLOADING))),
+            controlGateway = controls,
+            networkPreference = { DownloadNetworkPreference.WifiOnly },
+            connectivityPauseRegistry = registry,
+        )
+        val report = coordinator.onConnectivityChanged(DownloadConnectivity.Metered)
+        assertEquals("download_control_unavailable", report.errors.single().kind)
+        assertTrue(report.pausedJobIds.isEmpty())
+        assertTrue(!registry.wasPausedByConnectivity("job-1"))
+        assertTrue(!report.errors.single().message.contains("private url"))
+    }
+
+    @Test
+    fun throwingResumeKeepsConnectivityPauseRegistered() {
+        val controls = object : com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway by FakeDownloadControlGateway() {
+            override fun resume(jobId: String): com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<Boolean> =
+                throw IllegalStateException("private url query token")
+        }
+        val registry = InMemoryDownloadConnectivityPauseRegistry().apply { markPausedByConnectivity("job-1") }
+        val coordinator = DownloadConnectivityCoordinator(
+            coreGateway = FakeCoreGateway(initialDownloads = listOf(snapshot("job-1", CoreDownloadState.PAUSED))),
+            controlGateway = controls,
+            networkPreference = { DownloadNetworkPreference.AnyNetwork },
+            connectivityPauseRegistry = registry,
+        )
+        val report = coordinator.onConnectivityChanged(DownloadConnectivity.Unmetered)
+        assertEquals("download_control_unavailable", report.errors.single().kind)
+        assertTrue(report.resumedJobIds.isEmpty())
+        assertTrue(registry.wasPausedByConnectivity("job-1"))
+    }
+
+    @Test
     fun lostConnectivityPausesPendingAndActiveDurableWork() {
         val controls = FakeDownloadControlGateway()
         val pauses = InMemoryDownloadConnectivityPauseRegistry()

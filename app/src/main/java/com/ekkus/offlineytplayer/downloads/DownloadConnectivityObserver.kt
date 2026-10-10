@@ -172,7 +172,18 @@ internal class DownloadConnectivityCoordinator(
 ) {
     fun onConnectivityChanged(connectivity: DownloadConnectivity): DownloadConnectivityCoordinatorReport {
         val decision = DownloadNetworkPolicy.decision(networkPreference(), connectivity)
-        val queue = coreGateway.listDownloadQueue()
+        val queue = try {
+            coreGateway.listDownloadQueue()
+        } catch (_: Exception) {
+            return DownloadConnectivityCoordinatorReport(
+                decision = decision,
+                errors = listOf(CoreGatewayError(
+                    "repository_unavailable",
+                    "Download queue is unavailable during connectivity enforcement.",
+                    true,
+                )),
+            )
+        }
         queue.error?.let { error ->
             return DownloadConnectivityCoordinatorReport(decision = decision, errors = listOf(error))
         }
@@ -193,7 +204,7 @@ internal class DownloadConnectivityCoordinator(
         for (snapshot in snapshots) {
             when {
                 decision == DownloadNetworkDecision.PauseForConnectivity && snapshot.shouldPauseForConnectivity() -> {
-                    val result = controlGateway.pause(snapshot.jobId)
+                    val result = controlSafely { controlGateway.pause(snapshot.jobId) }
                     result.error?.let(errors::add)
                     if (result.error == null && result.value == true) {
                         connectivityPauseRegistry.markPausedByConnectivity(snapshot.jobId)
@@ -203,7 +214,7 @@ internal class DownloadConnectivityCoordinator(
                 decision == DownloadNetworkDecision.Allow &&
                     snapshot.state == CoreDownloadState.PAUSED &&
                     connectivityPauseRegistry.wasPausedByConnectivity(snapshot.jobId) -> {
-                    val result = controlGateway.resume(snapshot.jobId)
+                    val result = controlSafely { controlGateway.resume(snapshot.jobId) }
                     result.error?.let(errors::add)
                     if (result.error == null && result.value == true) {
                         connectivityPauseRegistry.clearPausedByConnectivity(snapshot.jobId)
@@ -224,6 +235,15 @@ internal class DownloadConnectivityCoordinator(
             errors = errors,
         )
     }
+    private fun controlSafely(action: () -> com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<Boolean>): com.ekkus.offlineytplayer.coregateway.CoreGatewayResult<Boolean> =
+        try {
+            action()
+        } catch (_: Exception) {
+            com.ekkus.offlineytplayer.coregateway.CoreGatewayResult(
+                null,
+                CoreGatewayError("download_control_unavailable", "Download control is unavailable.", true),
+            )
+        }
 }
 
 private fun CoreDownloadSnapshot.shouldPauseForConnectivity(): Boolean = when (state) {
