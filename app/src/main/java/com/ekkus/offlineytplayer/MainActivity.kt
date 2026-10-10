@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadSnapshot
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayError
+import com.ekkus.offlineytplayer.coregateway.AppCoreGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryItem
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryPlaybackAsset
@@ -165,8 +166,7 @@ class MainActivity : ComponentActivity() {
             }
             val presentations = runCatching { DownloadPresentationGateway.open(databasePath) }
             val openedCore = core.getOrNull()
-            val startupReconciliation = openedCore?.reconcileStartup()
-            val startupFailure = startupReconciliation?.error
+            val startupFailure = openedCore?.reconcileStartupSafely()
             val initialPlaybackAssets = if (startupFailure == null) {
                 runCatching { playback.getOrNull()?.listPlaybackAssets() }.getOrNull()
             } else null
@@ -178,13 +178,13 @@ class MainActivity : ComponentActivity() {
             val initialLibrary = when {
                 core.isFailure -> LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> LibraryScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
-                else -> openedCore!!.listLibrary(uiState.libraryQuery).toLibraryScreenState(libraryRoot, initialPlaybackAssets)
+                else -> openedCore!!.readInitialLibraryStateSafely(uiState.libraryQuery, libraryRoot, initialPlaybackAssets)
             }
             val initialDownloads = when {
                 core.isFailure -> DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> DownloadsScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
                 initialTitles.isFailure -> DownloadsScreenState.Failed("Download presentation metadata is unavailable.")
-                else -> openedCore!!.listDownloadQueue().toDownloadsScreenState(initialTitles.getOrThrow())
+                else -> openedCore!!.readInitialDownloadsStateSafely(initialTitles.getOrThrow())
             }
             if (isFinishing || isDestroyed) {
                 core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); details.getOrNull()?.close(); mutations.getOrNull()?.close(); sources.getOrNull()?.close()
@@ -260,6 +260,35 @@ class MainActivity : ComponentActivity() {
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
+
+/** Keep initial FFI failures from leaving production screens stuck indefinitely in Loading. */
+internal fun AppCoreGateway.reconcileStartupSafely(): CoreGatewayError? =
+    runCatching { reconcileStartup() }.fold(
+        onSuccess = { result ->
+            result.error ?: if (result.value == null) CoreGatewayError(
+                "startup_unavailable",
+                "Startup reconciliation is unavailable.",
+                true,
+            ) else null
+        },
+        onFailure = {
+            CoreGatewayError("startup_unavailable", "Startup reconciliation is unavailable.", true)
+        },
+    )
+
+internal fun AppCoreGateway.readInitialLibraryStateSafely(
+    query: String?,
+    libraryRoot: File,
+    assets: CoreGatewayResult<List<CoreLibraryPlaybackAsset>>?,
+): LibraryScreenState = runCatching {
+    listLibrary(query).toLibraryScreenState(libraryRoot, assets)
+}.getOrElse { LibraryScreenState.Failed("Library repository data is unavailable.") }
+
+internal fun AppCoreGateway.readInitialDownloadsStateSafely(
+    titlesByJobId: Map<String, String>,
+): DownloadsScreenState = runCatching {
+    listDownloadQueue().toDownloadsScreenState(titlesByJobId)
+}.getOrElse { DownloadsScreenState.Failed("Download queue data is unavailable.") }
 
 internal fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
     libraryRoot: File,
