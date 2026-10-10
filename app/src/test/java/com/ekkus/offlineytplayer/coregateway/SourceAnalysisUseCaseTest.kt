@@ -17,6 +17,20 @@ class SourceAnalysisUseCaseTest {
     }
 
     @Test
+    fun unsupportedReplacementInvalidatesEarlierInFlightResolution() {
+        val useCase = SourceAnalysisUseCase(RecordingSourceGateway())
+        val earlier = useCase.begin(supportedWatchUrl()) as SourceAnalysisState.Loading
+
+        assertTrue(useCase.begin("unsupported replacement") is SourceAnalysisState.Unsupported)
+        val stale = useCase.complete(
+            earlier.ticket,
+            CoreGatewayResult(value = analysis(title = "stale"), error = null),
+        )
+
+        assertTrue(stale is SourceAnalysisState.Superseded)
+    }
+
+    @Test
     fun resolvedSourceUsesGatewayResultAndPreservesCuratedChoices() {
         val gateway = RecordingSourceGateway(
             result = CoreGatewayResult(value = analysis(title = "Resolved fixture"), error = null),

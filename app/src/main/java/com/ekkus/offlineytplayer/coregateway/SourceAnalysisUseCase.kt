@@ -19,7 +19,11 @@ class SourceAnalysisUseCase(
     @Synchronized
     fun begin(sourceUrl: String): SourceAnalysisState {
         val normalized = SupportedUrlPolicy.normalizeSupportedUrl(sourceUrl)
-            ?: return SourceAnalysisState.Unsupported("Enter a supported YouTube video URL")
+        if (normalized == null) {
+            // An invalid replacement request must invalidate any older in-flight result.
+            activeTicket = null
+            return SourceAnalysisState.Unsupported("Enter a supported YouTube video URL")
+        }
         val ticket = SourceAnalysisTicket(nextTicketId++, normalized)
         activeTicket = ticket
         return SourceAnalysisState.Loading(ticket)
