@@ -59,10 +59,12 @@ impl DurableDownloadWorkStore {
                 false,
             ));
         }
-        if work.plan.assets.is_empty() {
+        if !work.plan.assets.iter().any(|asset| {
+            matches!(asset.kind, crate::MediaKind::Video | crate::MediaKind::Audio)
+        }) {
             return Err(CoreError::new(
                 ErrorKind::NoCompatibleFormat,
-                "download plan contains no media assets",
+                "download plan contains no playable media assets",
                 false,
             ));
         }
@@ -209,6 +211,20 @@ mod tests {
         let store = DurableDownloadWorkStore::open(&database).unwrap();
         let mut item = work();
         item.plan.assets.clear();
+
+        let error = store.save(&item).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::NoCompatibleFormat);
+        assert!(store.load_all().unwrap().is_empty());
+        assert!(store.load_presentations().unwrap().is_empty());
+    }
+
+    #[test]
+    fn thumbnail_only_plan_cannot_be_persisted_as_executable_media() {
+        let temp = tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let store = DurableDownloadWorkStore::open(&database).unwrap();
+        let mut item = work();
+        item.plan.assets[0].kind = MediaKind::Thumbnail;
 
         let error = store.save(&item).unwrap_err();
         assert_eq!(error.kind, ErrorKind::NoCompatibleFormat);

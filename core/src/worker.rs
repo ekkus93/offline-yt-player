@@ -166,10 +166,12 @@ impl DownloadWorker {
         cancel: &AtomicBool,
         now_epoch_ms: u64,
     ) -> Result<Vec<CoreEvent>, CoreError> {
-        if item.plan.assets.is_empty() {
+        if !item.plan.assets.iter().any(|asset| {
+            matches!(asset.kind, crate::MediaKind::Video | crate::MediaKind::Audio)
+        }) {
             return Err(CoreError::new(
                 ErrorKind::NoCompatibleFormat,
-                "download plan contains no media assets",
+                "download plan contains no playable media assets",
                 false,
             ));
         }
@@ -472,6 +474,27 @@ mod tests {
         let snapshot = store.load_download_snapshots().unwrap().remove(0);
         assert_eq!(snapshot.state, DownloadState::Failed);
         assert_eq!(snapshot.bytes_downloaded, 0);
+        assert_eq!(snapshot.last_error.unwrap().kind, ErrorKind::NoCompatibleFormat);
+    }
+
+    #[test]
+    fn thumbnail_only_plan_cannot_complete_as_playable_media() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("thumbnail-only", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let mut work = plan("thumbnail-only", "http://127.0.0.1/unused".into(), 100);
+        work.plan.assets[0].kind = MediaKind::Thumbnail;
+
+        let report = worker
+            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
+            .unwrap();
+        assert_eq!(report.failed, vec!["thumbnail-only"]);
+        assert!(store.get("thumbnail-only").unwrap().is_none());
+        let snapshot = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(snapshot.state, DownloadState::Failed);
         assert_eq!(snapshot.last_error.unwrap().kind, ErrorKind::NoCompatibleFormat);
     }
 
