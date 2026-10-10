@@ -31,8 +31,23 @@ class SourceAnalysisUseCase(
         return analyzeBlocking(loading.ticket)
     }
 
-    fun analyzeBlocking(ticket: SourceAnalysisTicket): SourceAnalysisState =
-        complete(ticket, gateway.analyze(ticket.normalizedUrl))
+    fun analyzeBlocking(ticket: SourceAnalysisTicket): SourceAnalysisState {
+        val result = try {
+            gateway.analyze(ticket.normalizedUrl)
+        } catch (_: Exception) {
+            // Provider, binding, or transport failures may throw before returning an FFI
+            // result. Preserve the UI state machine without exposing URLs/credentials.
+            CoreGatewayResult(
+                null,
+                CoreGatewayError(
+                    kind = "SOURCE_ANALYSIS_UNAVAILABLE",
+                    message = "Source analysis is unavailable.",
+                    retryable = true,
+                ),
+            )
+        }
+        return complete(ticket, result)
+    }
 
     @Synchronized
     fun complete(

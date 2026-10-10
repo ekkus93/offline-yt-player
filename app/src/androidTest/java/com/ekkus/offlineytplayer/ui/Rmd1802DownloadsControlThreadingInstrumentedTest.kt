@@ -19,6 +19,33 @@ import org.junit.runner.RunWith
 class Rmd1802DownloadsControlThreadingInstrumentedTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun throwingLibraryDetailsGatewayShowsUnavailableWithoutCrashingComposition() {
+        val gateway = object : com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway {
+            override fun getDetails(itemId: String): CoreGatewayResult<com.ekkus.offlineytplayer.coregateway.CoreLibraryDetails?> {
+                throw IllegalStateException("private file path or URL")
+            }
+            override fun close() = Unit
+        }
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p")),
+                ),
+                onUpdateSettings = {},
+                onQueryChanged = {},
+                detailsGatewayProvider = { gateway },
+            )
+        }
+        compose.onNodeWithText("Details").performClick()
+        compose.waitUntil(10_000) {
+            runCatching {
+                compose.onNodeWithText("Library details are unavailable for Fixture video.").assertIsDisplayed()
+            }.isSuccess
+        }
+    }
+
     @Test fun visibleDownloadsPauseInvokesControlOffMainAndReportsDurableUpdate() {
         val calledOffMain = AtomicBoolean(false)
         val gateway = object : AppDownloadControlGateway by FakeDownloadControlGateway() {

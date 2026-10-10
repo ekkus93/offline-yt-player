@@ -61,6 +61,7 @@ import com.ekkus.offlineytplayer.settings.AppearanceSetting
 import com.ekkus.offlineytplayer.settings.LibraryLayoutSetting
 import com.ekkus.offlineytplayer.settings.ManagedCleanup
 import com.ekkus.offlineytplayer.settings.StorageSettingsManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -343,15 +344,23 @@ private fun AddScreen(
                     "Scheduling ${setupState.qualityLabel} download with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}…"
                 val jobId = setupState.sourceUrl
                 scope.launch {
-                    val result = withContext(Dispatchers.IO) {
-                        gateway.enqueue(
-                            jobId,
-                            DownloadSelectionOptions(
-                                qualityChoiceId = setupState.selectedQualityChoiceId,
-                                subtitleTrackId = setupState.selectedSubtitleTrackId,
-                                audioFormatId = setupState.selectedAudioFormatId,
-                            ),
-                        )
+                    val result = try {
+                        withContext(Dispatchers.IO) {
+                            gateway.enqueue(
+                                jobId,
+                                DownloadSelectionOptions(
+                                    qualityChoiceId = setupState.selectedQualityChoiceId,
+                                    subtitleTrackId = setupState.selectedSubtitleTrackId,
+                                    audioFormatId = setupState.selectedAudioFormatId,
+                                ),
+                            )
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        scheduling = false
+                        status = "Download scheduler is unavailable."
+                        return@launch
                     }
                     scheduling = false
                     result.error?.let {

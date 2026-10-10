@@ -45,6 +45,7 @@ import com.ekkus.offlineytplayer.resilience.RecoveryUiState
 import com.ekkus.offlineytplayer.settings.AppSettingsMutation
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.settings.LibraryLayoutSetting
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -210,7 +211,14 @@ internal fun LibraryScreen(
                             message = "Library rename is unavailable."
                         } else {
                             scope.launch {
-                                val result = withContext(Dispatchers.IO) { gateway.renameDisplayTitle(row.id, renameTitle) }
+                                val result = try {
+                                    withContext(Dispatchers.IO) { gateway.renameDisplayTitle(row.id, renameTitle) }
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    message = "Library rename is unavailable."
+                                    return@launch
+                                }
                                 message = result.error?.let { "Rename failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
                                     ?: result.value?.let { "Renamed to $it." }
                                     ?: "Rename did not change the item."
@@ -241,8 +249,15 @@ internal fun LibraryScreen(
                             message = "Library removal is unavailable."
                         } else {
                             scope.launch {
-                                val result = withContext(Dispatchers.IO) {
-                                    gateway.removeLibraryItem(root, row.id, confirmed = true)
+                                val result = try {
+                                    withContext(Dispatchers.IO) {
+                                        gateway.removeLibraryItem(root, row.id, confirmed = true)
+                                    }
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    message = "Library removal is unavailable."
+                                    return@launch
                                 }
                                 message = result.error?.let { "Remove failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
                                     ?: if (result.value == true) "Removed ${row.title} and its owned local assets." else "Remove did not change the item."
@@ -287,7 +302,14 @@ internal fun LibraryScreen(
                             } else {
                                 message = "Loading details for ${row.title}…"
                                 scope.launch {
-                                    val result = withContext(Dispatchers.IO) { gateway.getDetails(row.id) }
+                                    val result = try {
+                                        withContext(Dispatchers.IO) { gateway.getDetails(row.id) }
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (_: Exception) {
+                                        message = "Library details are unavailable for ${row.title}."
+                                        return@launch
+                                    }
                                     message = when {
                                         result.error != null -> "Library details failed: ${SourceMetadataPolicy.diagnostic(result.error.message)}"
                                         result.value == null -> "Library details are unavailable for ${row.title}."

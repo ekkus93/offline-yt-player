@@ -41,6 +41,22 @@ class SourceAnalysisUseCaseTest {
     }
 
     @Test
+    fun thrownSourceGatewayDoesNotCrashAndDoesNotRevealPrivateDiagnostics() {
+        val gateway = object : AppSourceAnalysisGateway {
+            override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> {
+                throw IllegalStateException("private signed source URL and credentials")
+            }
+            override fun close() = Unit
+        }
+        val state = SourceAnalysisUseCase(gateway).analyzeBlocking(supportedWatchUrl())
+        assertTrue(state is SourceAnalysisState.Failed)
+        val error = (state as SourceAnalysisState.Failed).error
+        assertEquals("SOURCE_ANALYSIS_UNAVAILABLE", error.kind)
+        assertEquals("Source analysis is unavailable.", error.message)
+        assertTrue(error.retryable)
+    }
+
+    @Test
     fun supersededRequestCannotPublishStaleResolution() {
         val useCase = SourceAnalysisUseCase(RecordingSourceGateway())
         val first = useCase.begin(supportedWatchUrl()) as SourceAnalysisState.Loading
