@@ -92,12 +92,31 @@ pub(crate) fn normalize_extracted_media(
 
 fn normalize_stream(stream: &ExtractedStream) -> Result<MediaFormat, CoreError> {
     validate_http_url(&stream.url)?;
-    let video = stream.video_codec.as_ref().map(|codec| VideoFormat {
-        width: stream.width.unwrap_or(0),
-        height: stream.height.unwrap_or(0),
-        fps: stream.fps,
-        codec: codec.clone(),
-    });
+    let video = match stream.video_codec.as_ref() {
+        Some(codec) => {
+            let width = stream.width.filter(|width| *width > 0).ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::SourceChanged,
+                    "YouTube video stream width was absent or invalid",
+                    false,
+                )
+            })?;
+            let height = stream.height.filter(|height| *height > 0).ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::SourceChanged,
+                    "YouTube video stream height was absent or invalid",
+                    false,
+                )
+            })?;
+            Some(VideoFormat {
+                width,
+                height,
+                fps: stream.fps,
+                codec: codec.clone(),
+            })
+        }
+        None => None,
+    };
     let audio = stream.audio_codec.as_ref().map(|codec| AudioFormat {
         codec: codec.clone(),
         bitrate_bps: stream.bitrate_bps,
@@ -478,6 +497,27 @@ mod tests {
         let ffi_debug = format!("{summary:?}");
         assert!(!ffi_debug.contains("SECRET_TOKEN"));
         assert!(!ffi_debug.contains("videoplayback"));
+    }
+
+    #[test]
+    fn video_stream_without_positive_dimensions_fails_closed() {
+        let mut extracted = fixture();
+        extracted.streams[0].width = None;
+        assert_eq!(
+            normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &extracted)
+                .unwrap_err()
+                .kind,
+            ErrorKind::SourceChanged
+        );
+
+        let mut extracted = fixture();
+        extracted.streams[0].height = Some(0);
+        assert_eq!(
+            normalize_extracted_media("https://youtu.be/dQw4w9WgXcQ", &extracted)
+                .unwrap_err()
+                .kind,
+            ErrorKind::SourceChanged
+        );
     }
 
     #[test]

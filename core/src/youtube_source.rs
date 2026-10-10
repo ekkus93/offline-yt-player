@@ -323,8 +323,13 @@ fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError> {
     let title = details
         .get("title")
         .and_then(Value::as_str)
+        .filter(|title| {
+            title
+                .chars()
+                .any(|character| !character.is_control() && !character.is_whitespace())
+        })
         .map(truncate_provider_title)
-        .unwrap_or_else(|| "Untitled".to_owned());
+        .ok_or_else(|| source_changed("YouTube video title was absent or blank"))?;
     let duration_ms = details
         .get("lengthSeconds")
         .and_then(Value::as_str)
@@ -401,7 +406,7 @@ fn parse_subtitles(v: &Value) -> Result<Vec<ExtractedSubtitle>, CoreError> {
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty() && s.len() <= MAX_PROVIDER_SUBTITLE_ID_BYTES)
             .map(str::to_owned)
-            .unwrap_or_else(|| format!("{language}-{index}"));
+            .ok_or_else(|| source_changed("YouTube caption track identity was invalid"))?;
         subtitles.push(ExtractedSubtitle {
             id,
             url: base_url.to_owned(),
@@ -427,14 +432,16 @@ fn parse_stream(v: &Value) -> Result<Option<ExtractedStream>, CoreError> {
         .unwrap_or("")
         .split(',')
         .map(str::trim)
+        .filter(|codec| !codec.is_empty())
         .collect::<Vec<_>>();
     let has_video = mime_base.starts_with("video/");
+    let id = v
+        .get("itag")
+        .and_then(Value::as_u64)
+        .filter(|id| *id > 0)
+        .ok_or_else(|| source_changed("YouTube stream identity was absent or invalid"))?;
     Ok(Some(ExtractedStream {
-        id: v
-            .get("itag")
-            .and_then(Value::as_u64)
-            .unwrap_or(0)
-            .to_string(),
+        id: id.to_string(),
         url: url.to_owned(),
         container,
         mime_type: Some(mime_base.to_owned()),
@@ -740,6 +747,49 @@ mod tests {
         let choices = futures::executor::block_on(source.choices(&media))
             .expect("live YouTube format curation failed");
         assert!(!choices.is_empty());
+    }
+
+    #[test]
+    fn missing_or_blank_provider_title_fails_closed() {
+        for title in [None, Some("   \n\t")] {
+            let mut details = serde_json::json!({
+                "lengthSeconds": "60",
+                "thumbnail": {"thumbnails": []}
+            });
+            if let Some(title) = title {
+                details["title"] = serde_json::Value::String(title.to_owned());
+            }
+            let player = serde_json::json!({
+                "playabilityStatus": {"status": "OK"},
+                "videoDetails": details,
+                "streamingData": {"formats": []}
+            });
+            assert_eq!(parse_player(&player).unwrap_err().kind, ErrorKind::SourceChanged);
+        }
+    }
+
+    #[test]
+    fn missing_stream_identity_fails_closed_instead_of_fabricating_zero() {
+        let stream = serde_json::json!({
+            "url": "https://media.example/video.mp4",
+            "mimeType": "video/mp4; codecs=\"avc1.42E01E, mp4a.40.2\"",
+            "width": 1280,
+            "height": 720
+        });
+        assert_eq!(parse_stream(&stream).unwrap_err().kind, ErrorKind::SourceChanged);
+    }
+
+    #[test]
+    fn missing_subtitle_identity_fails_closed_instead_of_fabricating_track_id() {
+        let player = serde_json::json!({
+            "captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [
+                {
+                    "baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=en",
+                    "languageCode": "en"
+                }
+            ]}}
+        });
+        assert_eq!(parse_subtitles(&player).unwrap_err().kind, ErrorKind::SourceChanged);
     }
 
     #[test]
