@@ -127,10 +127,26 @@ impl DownloadWorker {
         work_items: &'a [DownloadWorkItem],
         now_epoch_ms: u64,
     ) -> Result<Vec<(DurableDownloadSnapshot, &'a DownloadWorkItem)>, CoreError> {
-        let by_id: HashMap<&str, &DownloadWorkItem> = work_items
-            .iter()
-            .map(|item| (item.job_id.as_str(), item))
-            .collect();
+        // Reject ambiguous work identities before claiming or mutating any durable queue rows.
+        // Collecting directly into a HashMap silently picks the last conflicting plan.
+        let mut by_id: HashMap<&str, &DownloadWorkItem> =
+            HashMap::with_capacity(work_items.len());
+        for item in work_items {
+            if item.job_id.trim().is_empty() {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "download work job id must not be empty",
+                    false,
+                ));
+            }
+            if by_id.insert(item.job_id.as_str(), item).is_some() {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "duplicate download work job id",
+                    false,
+                ));
+            }
+        }
         let mut claimed = Vec::new();
         for mut snapshot in self.library.load_download_snapshots()? {
             if claimed.len() >= self.max_concurrent {
@@ -618,6 +634,48 @@ mod tests {
         assert_eq!(*total_bytes, None);
         assert_eq!(metrics.bytes_per_second, Some(data.len() as u64));
         assert_eq!(metrics.eta_seconds, None);
+    }
+
+    #[test]
+    fn duplicate_work_ids_fail_before_any_durable_claim_or_transfer() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("duplicate-job", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let first = plan("duplicate-job", "http://127.0.0.1:1/first".into(), 5);
+        let second = plan("duplicate-job", "http://127.0.0.1:1/second".into(), 5);
+
+        let error = worker
+            .execute_ready_at(&[first, second], &AtomicBool::new(false), 10_000)
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Queued);
+        assert_eq!(durable.attempt, 0);
+        assert!(store.get("duplicate-job").unwrap().is_none());
+        assert!(store.staged_job_ids().unwrap().is_empty());
+    }
+
+    #[test]
+    fn blank_work_id_fails_before_claiming_other_valid_work() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("valid-job", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let valid = plan("valid-job", "http://127.0.0.1:1/valid".into(), 5);
+        let blank = plan("   ", "http://127.0.0.1:1/blank".into(), 5);
+
+        let error = worker
+            .execute_ready_at(&[valid, blank], &AtomicBool::new(false), 10_000)
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Queued);
+        assert_eq!(durable.attempt, 0);
     }
 
     #[test]
