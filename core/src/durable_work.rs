@@ -226,11 +226,13 @@ mod tests {
         let store = DurableDownloadWorkStore::open(temp.path().join("library.sqlite3")).unwrap();
         {
             let connection = store.connection().unwrap();
-            connection.execute_batch(
-                "CREATE TRIGGER reject_presentation
+            connection
+                .execute_batch(
+                    "CREATE TRIGGER reject_presentation
                  BEFORE INSERT ON download_presentations
                  BEGIN SELECT RAISE(ABORT, 'simulated presentation write failure'); END;",
-            ).unwrap();
+                )
+                .unwrap();
         }
 
         let error = store.save(&work()).unwrap_err();
