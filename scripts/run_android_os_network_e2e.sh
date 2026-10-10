@@ -3,6 +3,9 @@
 set -euo pipefail
 mkdir -p app/build/reports/androidNetworkE2E
 DIR=app/build/reports/androidNetworkE2E
+# Android netpolicy may apply the override but return adb exit 255.
+# Trust the observed SSID policy state, not the command exit status.
+source scripts/android_metered_network_policy.sh
 ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest > "$DIR/build.log" 2>&1 || {
     tail -n 160 "$DIR/build.log"
     exit 1
@@ -23,9 +26,10 @@ restore_network() {
 }
 INST_PID=""
 METERED_SSID=""
+METERED_INITIAL_STATE=""
 cleanup() {
-    if [[ -n "$METERED_SSID" ]]; then
-        adb shell cmd netpolicy set metered-network "$METERED_SSID" false >/dev/null 2>&1 || true
+    if [[ -n "$METERED_SSID" && -n "$METERED_INITIAL_STATE" ]]; then
+        android_wifi_metered_set "$METERED_SSID" "$METERED_INITIAL_STATE" "$DIR/wifi-metered-cleanup.log" "$DIR/wifi-metered-cleanup-state.txt" || true
     fi
     restore_network
     if [[ -n "$INST_PID" ]]; then
@@ -90,7 +94,7 @@ echo "WIFI_ONLY_METERED_SSID_FOUND: $METERED_SSID" | tee "$DIR/wifi-only-metered
 # Do not fail the host lane before attempting the supported metered transition.
 METERED_INITIAL_STATE=$(sed -n -E '/;(false|none)[[:space:]]*$/ { s/^.*;(false|none)[[:space:]]*$/\1/; p; q; }' "$DIR/wifi-networks-before.txt")
 if [[ "$METERED_INITIAL_STATE" == "false" ]]; then
-    if ! adb shell cmd netpolicy set metered-network "$METERED_SSID" false > "$DIR/wifi-unmetered-precondition.log" 2>&1; then
+    if ! android_wifi_metered_set "$METERED_SSID" false "$DIR/wifi-unmetered-precondition.log" "$DIR/wifi-unmetered-precondition-state.txt"; then
         echo "WIFI_ONLY_METERED_UNAVAILABLE: emulator rejected unmetered precondition" | tee -a "$DIR/wifi-only-metered-result.txt"
         cat "$DIR/wifi-unmetered-precondition.log"
         exit 0
@@ -102,7 +106,7 @@ fi
 # Some API-29 images list a saved SSID but reject metered overrides (adb
 # exit 255). In that case the already-qualified OS network-loss lane remains
 # successful, while metered acceptance is explicitly UNAVAILABLE, not qualified.
-if ! adb shell cmd netpolicy set metered-network "$METERED_SSID" true > "$DIR/wifi-metered-control-probe.log" 2>&1; then
+if ! android_wifi_metered_set "$METERED_SSID" true "$DIR/wifi-metered-control-probe.log" "$DIR/wifi-metered-control-probe-state.txt"; then
     # The isolated AOSP emulator may permit root adbd even though its shell
     # identity cannot modify network policy. Try once without weakening the
     # actual callback/worker qualification. Never do this on a user device.
@@ -113,7 +117,7 @@ if ! adb shell cmd netpolicy set metered-network "$METERED_SSID" true > "$DIR/wi
         exit 1
     fi
     ROOT_UID=$(adb shell id -u 2>/dev/null | tr -d '\r' || true)
-    if [[ "$ROOT_UID" != "0" ]] || ! adb shell cmd netpolicy set metered-network "$METERED_SSID" true > "$DIR/wifi-metered-root-probe.log" 2>&1; then
+    if [[ "$ROOT_UID" != "0" ]] || ! android_wifi_metered_set "$METERED_SSID" true "$DIR/wifi-metered-root-probe.log" "$DIR/wifi-metered-root-probe-state.txt"; then
         echo "WIFI_ONLY_METERED_UNAVAILABLE: metered override rejected after optional CI emulator root probe" | tee -a "$DIR/wifi-only-metered-result.txt"
         cat "$DIR/wifi-metered-control-probe.log" "$DIR/wifi-metered-adb-root.log"
         if [[ -f "$DIR/wifi-metered-root-probe.log" ]]; then cat "$DIR/wifi-metered-root-probe.log"; fi
@@ -127,7 +131,7 @@ if ! grep -Fq "$METERED_SSID;true" "$DIR/wifi-metered-control-state.txt"; then
     echo "WIFI_ONLY_METERED_UNAVAILABLE: emulator did not apply a metered SSID policy" | tee -a "$DIR/wifi-only-metered-result.txt"
     exit 0
 fi
-if ! adb shell cmd netpolicy set metered-network "$METERED_SSID" false > "$DIR/wifi-metered-control-reset.log" 2>&1; then
+if ! android_wifi_metered_set "$METERED_SSID" false "$DIR/wifi-metered-control-reset.log" "$DIR/wifi-metered-control-reset-state.txt"; then
     echo "WIFI_ONLY_METERED_UNAVAILABLE: emulator could not reset metered probe" | tee -a "$DIR/wifi-only-metered-result.txt"
     cat "$DIR/wifi-metered-control-reset.log"
     exit 0
@@ -138,10 +142,15 @@ adb shell am instrument -w -e rmdHostWifiMetered true \
     "$INSTRUMENTATION" > "$DIR/rmd1506-wifi-metered.log" 2>&1 &
 INST_PID=$!
 wait_signal wifi-ready
-adb shell cmd netpolicy set metered-network "$METERED_SSID" true
-adb shell cmd netpolicy list wifi-networks > "$DIR/wifi-networks-metered.txt"
+android_wifi_metered_set "$METERED_SSID" true "$DIR/wifi-metered-active.log" "$DIR/wifi-networks-metered.txt" || {
+    echo "WIFI_ONLY_METERED_FAILED: host could not establish metered policy during active transfer"
+    exit 1
+}
 wait_signal wifi-paused
-adb shell cmd netpolicy set metered-network "$METERED_SSID" false
+android_wifi_metered_set "$METERED_SSID" false "$DIR/wifi-unmetered-active.log" "$DIR/wifi-networks-unmetered.txt" || {
+    echo "WIFI_ONLY_METERED_FAILED: host could not restore unmetered policy during active transfer"
+    exit 1
+}
 wait_signal wifi-complete
 wait "$INST_PID"
 INST_PID=""
