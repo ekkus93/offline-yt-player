@@ -574,7 +574,11 @@ mod tests {
 
         let report = worker
             .execute_ready_at(
-                &[plan("retry-progress", format!("{}/retry.mp4", server.address), data.len())],
+                &[plan(
+                    "retry-progress",
+                    format!("{}/retry.mp4", server.address),
+                    data.len(),
+                )],
                 &AtomicBool::new(false),
                 10_000,
             )
@@ -584,8 +588,11 @@ mod tests {
         assert_eq!(completed.state, DownloadState::Completed);
         assert_eq!(completed.attempt, 2);
         assert_eq!(completed.bytes_downloaded, data.len() as u64);
-        let CoreEvent::DownloadProgress { bytes_downloaded, total_bytes, .. } =
-            report.progress_events.last().unwrap()
+        let CoreEvent::DownloadProgress {
+            bytes_downloaded,
+            total_bytes,
+            ..
+        } = report.progress_events.last().unwrap()
         else {
             panic!("expected progress event");
         };
