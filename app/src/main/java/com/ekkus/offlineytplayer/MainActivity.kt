@@ -88,7 +88,12 @@ class MainActivity : ComponentActivity() {
         val settings = SharedPreferencesAppSettingsStore.open(this)
         settingsStore = settings
         settingsSnapshot = settings.snapshot()
-        settingsSubscription = settings.observe { snapshot -> settingsSnapshot = snapshot }
+        settingsSubscription = settings.observe { snapshot ->
+            // update() notifies observers on its caller's thread; Compose state belongs on main.
+            runOnUiThread {
+                if (!isDestroyed) settingsSnapshot = snapshot
+            }
+        }
         requestNotificationPermissionIfNeeded()
         val sharedUrl = ShareInput.parse(intent?.action, intent?.type, intent?.getStringExtra(Intent.EXTRA_TEXT))
         setContent {
