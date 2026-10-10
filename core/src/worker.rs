@@ -168,6 +168,8 @@ impl DownloadWorker {
     ) -> Result<Vec<CoreEvent>, CoreError> {
         transition_snapshot(snapshot, DownloadState::Downloading)?;
         snapshot.total_bytes = total_expected_bytes(&item.plan);
+        // Retry replays assets; transfer results report full sizes, not byte deltas.
+        snapshot.bytes_downloaded = 0;
         self.library.save_download_snapshot(snapshot)?;
 
         let mut assets = Vec::new();
