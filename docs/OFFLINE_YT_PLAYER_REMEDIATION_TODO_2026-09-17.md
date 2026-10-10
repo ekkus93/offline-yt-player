@@ -1057,6 +1057,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 library-mutation binding-drift finding (2026-10-09, pending exact-head qualification):** independent review found that the production Android library mutation gateway converted a missing or wrong-typed generated UniFFI boolean property into `false`. A binding-shape regression could therefore make Rename/Remove appear to have made no change instead of surfacing an integration failure. The mapper now requires an actual generated Boolean and fails closed for missing/wrong-typed properties; `AppLibraryMutationGatewayMappingTest` covers true/false, missing-property, and wrong-type cases. Do not mark the review closed until exact-head CI qualifies this fix.
 
+**RMD-1802 Android smoke failure (2026-10-10; open):** exact `master` `f07033c291ae284437b26834441e3cacd6baf745` failed Android smoke run `38019697278` in `Rmd1504ShareE2EInstrumentedTest` with a Compose `SnapshotStateObserver` multithreaded-access exception, while seven other exact-head workflows passed. See `docs/RMD_1802_ANDROID_SMOKE_SNAPSHOT_FAILURE_2026-10-10.md` for evidence and required investigation. This blocks RMD-1802/RMD-1803 closeout; do not check them or infer a root cause from the exception alone.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.
