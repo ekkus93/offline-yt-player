@@ -16,7 +16,7 @@ class GeneratedUniffiLibraryMutationGateway private constructor(
         checkNotMainThread()
         val result = call(renameService, "renameDisplayTitle", itemId, displayTitle)
         val errorMessage = readNullableMutation(result, "errorMessage", "error_message") as String?
-        val renamed = readBooleanMutation(result, "renamed")
+        val renamed = readRequiredBooleanMutation(result, "renamed")
         val title = readNullableMutation(result, "displayTitle", "display_title") as String?
         return CoreGatewayResult(
             value = title.takeIf { renamed },
@@ -32,7 +32,7 @@ class GeneratedUniffiLibraryMutationGateway private constructor(
         checkNotMainThread()
         val result = call(removeService, "removeLibraryItem", libraryRoot, itemId, confirmed)
         val errorMessage = readNullableMutation(result, "errorMessage", "error_message") as String?
-        val removed = readBooleanMutation(result, "removed")
+        val removed = readRequiredBooleanMutation(result, "removed")
         return CoreGatewayResult(
             value = removed,
             error = errorMessage?.let { CoreGatewayError("library_remove", it, false) },
@@ -92,5 +92,9 @@ private fun readNullableMutation(target: Any, vararg names: String): Any? {
     return null
 }
 
-private fun readBooleanMutation(target: Any, vararg names: String): Boolean =
-    readNullableMutation(target, *names) as? Boolean ?: false
+internal fun readRequiredBooleanMutation(target: Any, vararg names: String): Boolean {
+    val value = readNullableMutation(target, *names)
+        ?: error("Missing generated property ${names.joinToString("/")}")
+    return value as? Boolean
+        ?: error("Generated property ${names.joinToString("/")} is not Boolean")
+}
