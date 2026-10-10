@@ -27,8 +27,6 @@ internal object NoHiddenControlsPolicy {
         PrimaryControlBudget(PrimaryControlSurface.Settings, primaryActionCount = 5, false, false, false),
     )
 
-    const val TargetProfilesIncludeCompactPortrait = true
-    const val TargetProfilesIncludeLargePortrait = true
 
     fun primaryActionsVisibleWithoutScrolling(surface: PrimaryControlSurface): Boolean =
         budget(surface).primaryActionCount > 0 && !budget(surface).requiresVerticalScrollForPrimaryActions

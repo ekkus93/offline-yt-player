@@ -27,9 +27,4 @@ class NoHiddenControlsPolicyTest {
         }
     }
 
-    @Test
-    fun compactAndLargePortraitProfilesAreBothInScope() {
-        assertTrue(NoHiddenControlsPolicy.TargetProfilesIncludeCompactPortrait)
-        assertTrue(NoHiddenControlsPolicy.TargetProfilesIncludeLargePortrait)
-    }
 }

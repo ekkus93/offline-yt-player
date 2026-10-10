@@ -76,7 +76,6 @@ internal object DownloadServicePolicy {
 internal object DownloadForegroundServiceInventory {
     const val RetainedDataSyncService = "com.ekkus.offlineytplayer.downloads.DownloadForegroundService"
     const val RetainedMediaProcessingServices = 0
-    const val HandlesAndroid15Timeout = true
 }
 
 internal object DownloadForegroundTimeoutStore {

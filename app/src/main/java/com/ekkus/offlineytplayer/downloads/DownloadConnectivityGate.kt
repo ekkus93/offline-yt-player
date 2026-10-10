@@ -29,9 +29,6 @@ internal data class DownloadConnectivityGateResult(
 }
 
 internal object DownloadConnectivityGatePolicy {
-    const val PausesActiveWorkWhenPolicyDisallows = true
-    const val EnforcesWifiOnlyPreference = true
-    const val RequeuesWaitingWorkWhenConstraintsReturn = true
 
     fun shouldPause(
         preference: DownloadNetworkPreference,

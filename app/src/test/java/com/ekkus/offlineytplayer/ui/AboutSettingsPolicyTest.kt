@@ -19,14 +19,6 @@ class AboutSettingsPolicyTest {
     }
 
     @Test
-    fun diagnosticsExportIsExplicitAndSecretRedacted() {
-        val settings = AboutSettings(diagnosticsExportAvailable = true)
-
-        assertTrue(settings.diagnosticsExportAvailable)
-        assertTrue(AboutSettingsPolicy.RedactsSecretsFromDiagnostics)
-    }
-
-    @Test
     fun optionalSectionsCanBeSuppressedWithoutRemovingVersion() {
         val sections = AboutSettingsPolicy.sections(
             AboutSettings(

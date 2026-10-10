@@ -9,7 +9,6 @@ class ShareToDownloadPolicyTest {
     fun sharedUrlOpensDownloadSetupDirectly() {
         val route = ShareToDownloadPolicy.initialRoute("https://youtu.be/dQw4w9WgXcQ")
 
-        assertTrue(ShareToDownloadPolicy.OpensDownloadSetupDirectly)
         assertTrue(route is ShareToDownloadRoute.DownloadSetup)
         route as ShareToDownloadRoute.DownloadSetup
         assertEquals("https://youtu.be/dQw4w9WgXcQ", route.url)
@@ -24,8 +23,6 @@ class ShareToDownloadPolicyTest {
         assertEquals("https://example.invalid/video", route.url)
         assertEquals(ShareBackStackDestination.Library, route.backStackDestination)
         assertTrue(route.preservesFixedControlLayout)
-        assertTrue(ShareToDownloadPolicy.PreservesFixedControlLayout)
-        assertTrue(ShareToDownloadPolicy.ClearsAmbiguousBackStack)
     }
 
     @Test

@@ -113,10 +113,4 @@ class DownloadConnectivityGateTest {
         assertEquals(setOf("waiting-any"), gate.waitingQueueItemIds())
     }
 
-    @Test
-    fun policyDocumentsTransitionContracts() {
-        assertTrue(DownloadConnectivityGatePolicy.PausesActiveWorkWhenPolicyDisallows)
-        assertTrue(DownloadConnectivityGatePolicy.EnforcesWifiOnlyPreference)
-        assertTrue(DownloadConnectivityGatePolicy.RequeuesWaitingWorkWhenConstraintsReturn)
-    }
 }

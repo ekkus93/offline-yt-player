@@ -87,10 +87,7 @@ class DownloadResumeCoordinatorTest {
     }
 
     @Test
-    fun resumePolicyDocumentsTheRequiredSharedContracts() {
-        assertTrue(DownloadResumePolicy.ResumeTransitionsToEligibleQueueState)
-        assertTrue(DownloadResumePolicy.ResumeDoesNotBypassScheduler)
-        assertTrue(DownloadResumePolicy.ResumeHonorsNetworkPreference)
+    fun resumeDecisionRespectsCurrentConnectivity() {
         assertEquals(
             DownloadResumeDecision.WaitForConnectivity,
             DownloadResumePolicy.decision(DownloadNetworkPreference.AnyNetwork, DownloadConnectivity.None),

@@ -9,8 +9,6 @@ internal enum class DownloadNotificationPermissionBehavior {
 
 internal object DownloadNotificationPermissionPolicy {
     const val RuntimePermissionMinSdk = 33
-    const val DenialDoesNotMutateDurableQueue = true
-    const val DenialRequiresInAppQueueState = true
 
     fun requiresRuntimePermission(sdkInt: Int): Boolean = sdkInt >= RuntimePermissionMinSdk
 

@@ -31,9 +31,6 @@ internal data class DownloadResumeResult(
 }
 
 internal object DownloadResumePolicy {
-    const val ResumeTransitionsToEligibleQueueState = true
-    const val ResumeDoesNotBypassScheduler = true
-    const val ResumeHonorsNetworkPreference = true
 
     fun decision(
         preference: DownloadNetworkPreference,

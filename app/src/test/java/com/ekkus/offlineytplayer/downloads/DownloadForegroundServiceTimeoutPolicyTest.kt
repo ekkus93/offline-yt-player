@@ -13,7 +13,6 @@ class DownloadForegroundServiceTimeoutPolicyTest {
             DownloadForegroundServiceInventory.RetainedDataSyncService,
         )
         assertEquals(0, DownloadForegroundServiceInventory.RetainedMediaProcessingServices)
-        assertTrue(DownloadForegroundServiceInventory.HandlesAndroid15Timeout)
     }
 
     @Test

@@ -41,8 +41,6 @@ internal interface DownloadExecutionScheduler {
 
 internal object DownloadExecutionSchedulerPolicy {
     const val UserInitiatedDataTransferMinSdk = 34
-    const val UsesSharedDurableQueue = true
-    const val UidtUpdatesNotification = true
 
     fun schedulerKindForSdk(sdkInt: Int): DownloadSchedulerKind =
         if (sdkInt >= UserInitiatedDataTransferMinSdk) {
@@ -69,7 +67,7 @@ internal object DownloadExecutionSchedulerPolicy {
         }
 
     fun stableJobId(queueItemId: String): Int =
-        DownloadUserInitiatedJobService.JobIdBase + (queueItemId.hashCode().absoluteValue % DownloadUserInitiatedJobService.JobIdRange)
+        DownloadUserInitiatedJobService.JobIdBase + ((queueItemId.hashCode().toLong().absoluteValue % DownloadUserInitiatedJobService.JobIdRange).toInt())
 }
 
 internal class AndroidDownloadExecutionScheduler(

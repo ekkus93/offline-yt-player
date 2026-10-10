@@ -15,9 +15,6 @@ internal sealed class ShareToDownloadRoute {
 }
 
 internal object ShareToDownloadPolicy {
-    const val OpensDownloadSetupDirectly = true
-    const val PreservesFixedControlLayout = true
-    const val ClearsAmbiguousBackStack = true
 
     fun initialRoute(sharedUrl: String?): ShareToDownloadRoute {
         val url = sharedUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return ShareToDownloadRoute.Library

@@ -40,7 +40,6 @@ class DownloadExecutionSchedulerPolicyTest {
         assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(26))
         assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(33))
         assertFalse(DownloadExecutionSchedulerPolicy.usesForegroundFallback(34))
-        assertTrue(DownloadExecutionSchedulerPolicy.UsesSharedDurableQueue)
         assertEquals(DownloadForegroundService.ACTION_SCHEDULE_WORK, "com.ekkus.offlineytplayer.download.SCHEDULE_WORK")
         assertEquals(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, DownloadUserInitiatedJobService.ExtraQueueItemId)
     }
@@ -67,6 +66,15 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
+    fun minimumIntHashStillProducesJobIdInsideReservedRange() {
+        // Java String.hashCode() for this input is Int.MIN_VALUE; Int.absoluteValue overflows.
+        assertEquals(Int.MIN_VALUE, "polygenelubricants".hashCode())
+        val jobId = DownloadExecutionSchedulerPolicy.stableJobId("polygenelubricants")
+        assertTrue(jobId >= DownloadUserInitiatedJobService.JobIdBase)
+        assertTrue(jobId < DownloadUserInitiatedJobService.JobIdBase + DownloadUserInitiatedJobService.JobIdRange)
+    }
+
+    @Test
     fun networkPreferenceMapsToJobConstraints() {
         assertEquals(
             JobInfo.NETWORK_TYPE_ANY,
@@ -86,9 +94,4 @@ class DownloadExecutionSchedulerPolicyTest {
         assertTrue(manifest.contains("android.permission.BIND_JOB_SERVICE"))
     }
 
-    @Test
-    fun schedulingModelUsesOneDurableQueueContract() {
-        assertTrue(DownloadExecutionSchedulerPolicy.UsesSharedDurableQueue)
-        assertTrue(DownloadExecutionSchedulerPolicy.UidtUpdatesNotification)
-    }
 }

@@ -15,7 +15,6 @@ internal object AboutSettingsPolicy {
     const val PrivacyLabel = "Privacy"
     const val DiagnosticsExportLabel = "Export diagnostics"
     const val LegalSourceNoticeLabel = "Legal and source-service notice"
-    const val RedactsSecretsFromDiagnostics = true
 
     fun sections(settings: AboutSettings = AboutSettings()): List<String> = buildList {
         add("Version ${settings.versionBuild}")
