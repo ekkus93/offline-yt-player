@@ -136,8 +136,7 @@ fn redact_url_token(token: &str) -> String {
         (None, None) => return token.to_string(),
     };
     let (prefix, url_and_suffix) = token.split_at(start);
-    let url_text = url_and_suffix
-        .trim_end_matches(|c: char| matches!(c, ')' | ']' | '}' | ',' | ';' | '\'' | '"' | '>'));
+    let url_text = url_and_suffix.trim_end_matches([')', ']', '}', ',', ';', '\'', '"', '>']);
     let suffix = &url_and_suffix[url_text.len()..];
 
     Url::parse(url_text).map_or_else(
