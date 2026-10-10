@@ -1,10 +1,5 @@
 package com.ekkus.offlineytplayer.ui
 
-internal enum class LibraryLayoutMode {
-    List,
-    Grid,
-}
-
 internal data class LibraryItemSummary(
     val itemId: String,
     val title: String,
@@ -12,13 +7,6 @@ internal data class LibraryItemSummary(
 )
 
 internal object LibraryScreenPolicy {
-    const val HasFixedTopControls = true
-    const val UsesFixedBottomNavigation = true
-    const val OnlyItemRegionScrolls = true
-    const val SupportsListAndGrid = true
-    const val SupportsSearchAndFilter = true
-    const val EmptyStateHasAddAction = true
-
     fun visibleItems(
         items: List<LibraryItemSummary>,
         query: String,

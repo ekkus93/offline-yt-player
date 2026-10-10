@@ -6,31 +6,13 @@ import org.junit.Test
 
 class LibraryCompactScreenPolicyTest {
     @Test
-    fun primaryControlsFitCompactPortraitAtNormalAndLargeText() {
+    fun compactPortraitHeightPolicyHasRealThresholds() {
         assertTrue(PortraitLayoutPolicy.primaryControlsFit(PortraitLayoutPolicy.CompactPortraitHeightDp, 1.0f))
-        assertTrue(
-            PortraitLayoutPolicy.primaryControlsFit(
-                PortraitLayoutPolicy.CompactPortraitHeightDp,
-                PortraitLayoutPolicy.LargeFontScale,
-            ),
-        )
+        assertTrue(PortraitLayoutPolicy.primaryControlsFit(
+            PortraitLayoutPolicy.CompactPortraitHeightDp,
+            PortraitLayoutPolicy.LargeFontScale,
+        ))
+        assertFalse(PortraitLayoutPolicy.primaryControlsFit(200, 1.0f))
+        assertFalse(PortraitLayoutPolicy.primaryControlsFit(200, PortraitLayoutPolicy.LargeFontScale))
     }
-
-    @Test
-    fun libraryPolicyForbidsHorizontalScrolling() {
-        assertFalse(LibraryCompactScreenPolicy.AllowsHorizontalScrolling)
-        assertTrue(LibraryScreenPolicy.OnlyItemRegionScrolls)
-    }
-
-    @Test
-    fun largeFontKeepsPrimaryActionsInFixedChrome() {
-        assertTrue(LibraryCompactScreenPolicy.PrimaryActionsRemainVisibleAtLargeFont)
-        assertTrue(LibraryScreenPolicy.HasFixedTopControls)
-        assertTrue(LibraryScreenPolicy.UsesFixedBottomNavigation)
-    }
-}
-
-internal object LibraryCompactScreenPolicy {
-    const val AllowsHorizontalScrolling = false
-    const val PrimaryActionsRemainVisibleAtLargeFont = true
 }
