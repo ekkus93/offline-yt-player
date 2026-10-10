@@ -24,9 +24,6 @@ class DownloadRebootRecoveryPolicyTest {
         assertTrue(receiver.contains("DownloadBootRecovery.onReceive(intent?.action)"))
         assertFalse(receiver.contains("AndroidDownloadExecutionScheduler"))
         assertFalse(receiver.contains("startService("))
-        assertFalse(DownloadBootRecovery.StartsForegroundServiceFromBoot)
-        assertFalse(DownloadBootRecovery.UsesLockedBootCompleted)
-        assertFalse(DownloadBootRecovery.OpensCredentialProtectedStorageOnBoot)
     }
 
 }

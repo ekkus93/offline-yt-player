@@ -157,6 +157,8 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
                 libraryRootPath = context.filesDir.absolutePath,
                 settingsSnapshot = AppSettingsSnapshot(),
                 onUpdateSettings = {},
+            
+                onLibraryQueryChanged = {},
             )
         }
 

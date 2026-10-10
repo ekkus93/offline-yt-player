@@ -21,7 +21,10 @@ class AddPasteComposeTest {
         clipboard.setPrimaryClip(ClipData.newPlainText("video", sharedText))
 
         compose.setContent {
-            OfflineYTPlayerApp(initialSharedUrl = "")
+            OfflineYTPlayerApp(initialSharedUrl = "",
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
         }
 
         compose.onNodeWithText("Paste").performClick()
@@ -34,7 +37,10 @@ class AddPasteComposeTest {
         clipboard().setPrimaryClip(ClipData.newPlainText("blank", "   "))
 
         compose.setContent {
-            OfflineYTPlayerApp(initialSharedUrl = "")
+            OfflineYTPlayerApp(initialSharedUrl = "",
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
         }
 
         compose.onNodeWithText("Paste").performClick()

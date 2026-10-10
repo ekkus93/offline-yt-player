@@ -35,14 +35,6 @@ internal data class DownloadBootRecoveryDecision(
 )
 
 internal object DownloadBootRecovery {
-    /**
-     * True documents the platform invariant enforced by this receiver.
-     * Scheduling is wired to durable queue state by RMD-103/RMD-500 rather than
-     * starting DownloadForegroundService from a boot broadcast.
-     */
-    const val StartsForegroundServiceFromBoot = false
-    const val UsesLockedBootCompleted = false
-    const val OpensCredentialProtectedStorageOnBoot = false
     const val ReconciliationPath = "MainActivity.bootstrapProductionUi -> GeneratedUniffiCoreGateway.reconcileStartup"
 
     fun onReceive(action: String?): DownloadBootRecoveryDecision =
@@ -51,8 +43,8 @@ internal object DownloadBootRecovery {
     fun onBootCompleted(): DownloadBootRecoveryDecision = DownloadBootRecoveryDecision(
         disposition = DownloadBootRecoveryDisposition.DeferUntilAppStartup,
         receiverHandled = true,
-        startsForegroundService = StartsForegroundServiceFromBoot,
-        opensCredentialProtectedStorage = OpensCredentialProtectedStorageOnBoot,
+        startsForegroundService = false,
+        opensCredentialProtectedStorage = false,
         workRemainsRecoverable = true,
         scheduledOnlyWhenLegal = true,
         reconciliationPath = ReconciliationPath,

@@ -43,7 +43,10 @@ class ProductionComposeGoldenTest {
     @Test
     fun golden_library_empty() {
         setGoldenContent {
-            LibraryScreen(onAdd = {}, onPlay = {}, state = LibraryScreenState.Ready(emptyList()), settings = lightSettings)
+            LibraryScreen(onAdd = {}, onPlay = {}, state = LibraryScreenState.Ready(emptyList()), settings = lightSettings,
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
         }
         compose.onNodeWithText("No offline videos yet").assertIsDisplayed()
         assertGolden("library_empty")
@@ -58,6 +61,9 @@ class ProductionComposeGoldenTest {
                     LibraryRowModel("one", "Fixture one", "720p · 0:42", completed = false),
                     LibraryRowModel("two", "Fixture two", "1080p · 1:23", completed = false),
                 )), settings = lightSettings,
+            
+                onUpdateSettings = {},
+                onQueryChanged = {},
             )
         }
         compose.onNodeWithText("Fixture one").assertIsDisplayed()
@@ -68,7 +74,10 @@ class ProductionComposeGoldenTest {
     @Test
     fun golden_add_invalid() {
         setGoldenContent {
-            OfflineYTPlayerApp(initialSharedUrl = "not-a-video-url", sourceAnalysisGateway = RejectingSourceAnalysisGateway(), settingsSnapshot = lightSettings)
+            OfflineYTPlayerApp(initialSharedUrl = "not-a-video-url", sourceAnalysisGateway = RejectingSourceAnalysisGateway(), settingsSnapshot = lightSettings,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
         }
         compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(5_000) {
@@ -139,7 +148,10 @@ class ProductionComposeGoldenTest {
 
     @Test
     fun golden_settings_hub() {
-        setGoldenContent { OfflineYTPlayerApp(settingsSnapshot = lightSettings) }
+        setGoldenContent { OfflineYTPlayerApp(settingsSnapshot = lightSettings,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            ) }
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Choose a settings category. Primary settings stay on dedicated fixed-layout pages.").assertIsDisplayed()
         assertGolden("settings_hub")
@@ -148,7 +160,10 @@ class ProductionComposeGoldenTest {
     @Test
     fun golden_smallest_supported_portrait() {
         setGoldenContent {
-            LibraryScreen(onAdd = {}, onPlay = {}, state = LibraryScreenState.Ready(listOf(LibraryRowModel("compact", "Compact fixture", "720p · 0:42", completed = false))), settings = lightSettings)
+            LibraryScreen(onAdd = {}, onPlay = {}, state = LibraryScreenState.Ready(listOf(LibraryRowModel("compact", "Compact fixture", "720p · 0:42", completed = false))), settings = lightSettings,
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
         }
         compose.onNodeWithText("Compact fixture").assertIsDisplayed()
         assertGolden("smallest_portrait")
@@ -157,7 +172,10 @@ class ProductionComposeGoldenTest {
     @Test
     fun golden_large_font_library() {
         setGoldenContent(fontScale = 1.30f) {
-            LibraryScreen(onAdd = {}, onPlay = {}, state = LibraryScreenState.Ready(listOf(LibraryRowModel("large-font", "Large-font fixture", "720p · 0:42", completed = false))), settings = lightSettings)
+            LibraryScreen(onAdd = {}, onPlay = {}, state = LibraryScreenState.Ready(listOf(LibraryRowModel("large-font", "Large-font fixture", "720p · 0:42", completed = false))), settings = lightSettings,
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
         }
         compose.onNodeWithText("Large-font fixture").assertIsDisplayed()
         assertGolden("large_font_library")
@@ -165,7 +183,10 @@ class ProductionComposeGoldenTest {
 
     @Test
     fun golden_large_font_settings() {
-        setGoldenContent(fontScale = 1.30f) { OfflineYTPlayerApp(settingsSnapshot = lightSettings) }
+        setGoldenContent(fontScale = 1.30f) { OfflineYTPlayerApp(settingsSnapshot = lightSettings,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            ) }
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("About").assertIsDisplayed()
         assertGolden("large_font_settings")
@@ -173,7 +194,10 @@ class ProductionComposeGoldenTest {
 
     private fun setResolvedAddContent() {
         setGoldenContent {
-            OfflineYTPlayerApp(initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ", sourceAnalysisGateway = GoldenSourceAnalysisGateway(), settingsSnapshot = lightSettings)
+            OfflineYTPlayerApp(initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ", sourceAnalysisGateway = GoldenSourceAnalysisGateway(), settingsSnapshot = lightSettings,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
         }
         compose.onNodeWithText("Analyze").performClick()
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Fixture source").assertIsDisplayed() }.isSuccess }

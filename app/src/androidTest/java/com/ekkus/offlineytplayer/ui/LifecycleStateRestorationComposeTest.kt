@@ -25,6 +25,9 @@ class LifecycleStateRestorationComposeTest {
                     ),
                 ),
                 downloadsState = DownloadsScreenState.Ready(emptyList()),
+            
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
             )
         }
 

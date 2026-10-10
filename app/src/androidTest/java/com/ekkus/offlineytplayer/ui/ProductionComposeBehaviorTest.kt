@@ -43,6 +43,9 @@ class ProductionComposeBehaviorTest {
                 onAdd = {},
                 onPlay = {},
                 state = LibraryScreenState.Ready(emptyList()),
+            
+                onUpdateSettings = {},
+                onQueryChanged = {},
             )
         }
         compose.onNodeWithText("No offline videos yet").assertIsDisplayed()
@@ -55,6 +58,9 @@ class ProductionComposeBehaviorTest {
                 state = LibraryScreenState.Ready(
                     listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
                 ),
+            
+                onUpdateSettings = {},
+                onQueryChanged = {},
             )
         }
         compose.onNodeWithText("Fixture video").assertIsDisplayed()
@@ -74,6 +80,9 @@ class ProductionComposeBehaviorTest {
                     listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
                 ),
                 detailsGatewayProvider = { details },
+            
+                onUpdateSettings = {},
+                onQueryChanged = {},
             )
         }
 
@@ -100,6 +109,9 @@ class ProductionComposeBehaviorTest {
                 ),
                 mutationGatewayProvider = { mutations },
                 libraryRootPath = "/data/user/0/com.ekkus.offlineytplayer/files",
+            
+                onUpdateSettings = {},
+                onQueryChanged = {},
             )
         }
 
@@ -149,7 +161,10 @@ class ProductionComposeBehaviorTest {
     @Test
     fun shared_input_opens_add_flow_and_back_stack_remains_navigable() {
         compose.setContent {
-            OfflineYTPlayerApp(initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ")
+            OfflineYTPlayerApp(initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ",
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
         }
 
         compose.onNodeWithText("Video URL").assertIsDisplayed()
@@ -166,7 +181,10 @@ class ProductionComposeBehaviorTest {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         clipboard.setPrimaryClip(ClipData.newPlainText("video-url", "https://youtu.be/dQw4w9WgXcQ"))
 
-        compose.setContent { OfflineYTPlayerApp() }
+        compose.setContent { OfflineYTPlayerApp(
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            ) }
 
         compose.onNodeWithText("Add").performClick()
         compose.onNodeWithText("Paste").performClick()
@@ -181,7 +199,10 @@ class ProductionComposeBehaviorTest {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         clipboard.setPrimaryClip(ClipData.newPlainText("empty", ""))
 
-        compose.setContent { OfflineYTPlayerApp() }
+        compose.setContent { OfflineYTPlayerApp(
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            ) }
 
         compose.onNodeWithText("Add").performClick()
         compose.onNodeWithText("Paste").performClick()
@@ -198,6 +219,9 @@ class ProductionComposeBehaviorTest {
                 initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ",
                 sourceAnalysisGateway = source,
                 downloadControlGateway = controls,
+            
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
             )
         }
 
@@ -248,6 +272,9 @@ class ProductionComposeBehaviorTest {
                         ),
                     ),
                 ),
+            
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
             )
         }
 
@@ -304,6 +331,8 @@ class ProductionComposeBehaviorTest {
             OfflineYTPlayerApp(
                 settingsSnapshot = settings,
                 onUpdateSettings = { mutation -> settings = settings.updated(mutation) },
+            
+                onLibraryQueryChanged = {},
             )
         }
 
@@ -327,7 +356,10 @@ class ProductionComposeBehaviorTest {
 
     @Test
     fun settings_hub_navigation_exposes_operational_pages() {
-        compose.setContent { OfflineYTPlayerApp() }
+        compose.setContent { OfflineYTPlayerApp(
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            ) }
 
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Downloads").performClick()

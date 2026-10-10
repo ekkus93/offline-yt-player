@@ -87,9 +87,9 @@ internal fun OfflineYTPlayerApp(
     libraryDetailsGatewayProvider: () -> AppLibraryDetailsGateway? = { null },
     libraryMutationGatewayProvider: () -> AppLibraryMutationGateway? = { null },
     libraryRootPath: String? = null,
-    onLibraryQueryChanged: (String) -> Unit = {},
+    onLibraryQueryChanged: (String) -> Unit,
     settingsSnapshot: AppSettingsSnapshot = AppSettingsSnapshot(),
-    onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit = {},
+    onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit,
 ) {
     OfflineYTPlayerTheme(settingsSnapshot.appearance) {
         var destination by rememberSaveable(initialSharedUrl) {

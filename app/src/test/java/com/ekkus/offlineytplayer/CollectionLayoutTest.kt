@@ -4,7 +4,6 @@ import com.ekkus.offlineytplayer.ui.CollectionLayoutPolicy
 import com.ekkus.offlineytplayer.ui.DownloadUiState
 import com.ekkus.offlineytplayer.ui.LibraryLayout
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -13,7 +12,6 @@ class CollectionLayoutTest {
     fun collectionScreensKeepControlsOutsideScrollableLists() {
         assertEquals(2, CollectionLayoutPolicy.LibraryFixedControlRows)
         assertEquals(1, CollectionLayoutPolicy.DownloadFixedControlRows)
-        assertFalse(CollectionLayoutPolicy.HasHorizontalControlScrolling)
     }
 
     @Test

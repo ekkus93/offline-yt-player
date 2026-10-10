@@ -9,16 +9,6 @@ import org.junit.Test
 
 class DownloadBootRecoveryPolicyTest {
     @Test
-    fun bootRecoveryNeverStartsDataSyncForegroundService() {
-        assertFalse(DownloadBootRecovery.StartsForegroundServiceFromBoot)
-    }
-
-    @Test
-    fun lockedBootIsNotPartOfV1RecoveryContract() {
-        assertFalse(DownloadBootRecovery.UsesLockedBootCompleted)
-    }
-
-    @Test
     fun bootCompletedDefersToStartupReconciliationWithoutOpeningProtectedState() {
         val decision = DownloadBootRecovery.onReceive(Intent.ACTION_BOOT_COMPLETED)
 

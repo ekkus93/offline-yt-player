@@ -88,7 +88,6 @@ internal object CollectionLayoutPolicy {
     const val LibraryFixedControlRows = 2
     const val DownloadFixedControlRows = 1
     const val MinimumActionHeightDp = 48
-    const val HasHorizontalControlScrolling = false
 }
 internal object LibraryPlaybackRoute {
     fun assetFor(row: LibraryRowModel): LocalPlaybackAsset? = playbackAssetCandidate(row)?.let { candidate ->
@@ -142,11 +141,11 @@ internal fun LibraryScreen(
     onPlay: (LocalPlaybackAsset) -> Unit,
     state: LibraryScreenState = LibraryScreenState.Unavailable("Library repository is not connected yet; no empty-library claim is being made."),
     settings: AppSettingsSnapshot = AppSettingsSnapshot(),
-    onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit = {},
+    onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit,
     detailsGatewayProvider: () -> AppLibraryDetailsGateway? = { null },
     mutationGatewayProvider: () -> AppLibraryMutationGateway? = { null },
     libraryRootPath: String? = null,
-    onQueryChanged: (String) -> Unit = {},
+    onQueryChanged: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }

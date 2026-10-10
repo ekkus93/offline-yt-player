@@ -39,6 +39,9 @@ class ProductionComposeLayoutAccessibilityTest {
             OfflineYTPlayerApp(
                 libraryState = LibraryScreenState.Ready(emptyList()),
                 settingsSnapshot = lightSettings,
+            
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
             )
         }
 
@@ -60,6 +63,9 @@ class ProductionComposeLayoutAccessibilityTest {
                 onPlay = {},
                 state = LibraryScreenState.Ready(emptyList()),
                 settings = lightSettings,
+            
+                onUpdateSettings = {},
+                onQueryChanged = {},
             )
         }
 
@@ -75,6 +81,9 @@ class ProductionComposeLayoutAccessibilityTest {
                 initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ",
                 sourceAnalysisGateway = LayoutSourceAnalysisGateway(),
                 settingsSnapshot = lightSettings,
+            
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
             )
         }
 
@@ -117,7 +126,10 @@ class ProductionComposeLayoutAccessibilityTest {
     @Test
     fun compact_settings_hub_keeps_categories_reachable_in_logical_order() {
         setQualificationContent {
-            OfflineYTPlayerApp(settingsSnapshot = lightSettings)
+            OfflineYTPlayerApp(settingsSnapshot = lightSettings,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
         }
         compose.onNodeWithText("Settings").performClick()
 
@@ -160,6 +172,9 @@ class ProductionComposeLayoutAccessibilityTest {
                 onPlay = {},
                 state = LibraryScreenState.Ready(emptyList()),
                 settings = lightSettings,
+            
+                onUpdateSettings = {},
+                onQueryChanged = {},
             )
         }
         assertInsideRoot(compose.onNodeWithText("Grid"))
@@ -169,7 +184,10 @@ class ProductionComposeLayoutAccessibilityTest {
     @Test
     fun large_text_keeps_settings_primary_actions_visible() {
         setQualificationContent(fontScale = 1.30f) {
-            OfflineYTPlayerApp(settingsSnapshot = lightSettings)
+            OfflineYTPlayerApp(settingsSnapshot = lightSettings,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
         }
         compose.onNodeWithText("Settings").performClick()
         listOf("Playback", "Storage", "Appearance", "About").forEach { label ->
@@ -183,6 +201,9 @@ class ProductionComposeLayoutAccessibilityTest {
             OfflineYTPlayerApp(
                 libraryState = LibraryScreenState.Ready(emptyList()),
                 settingsSnapshot = lightSettings,
+            
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
             )
         }
 
@@ -242,6 +263,9 @@ class ProductionComposeLayoutAccessibilityTest {
                     },
                 ),
                 settings = lightSettings,
+            
+                onUpdateSettings = {},
+                onQueryChanged = {},
             )
         }
 

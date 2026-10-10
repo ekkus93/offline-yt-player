@@ -79,6 +79,8 @@ class Rmd1500AppPipelineFixtureTest {
                 sourceAnalysisGateway = sourceGateway,
                 settingsSnapshot = AppSettingsSnapshot(),
                 onUpdateSettings = {},
+            
+                onLibraryQueryChanged = {},
             )
         }
 
