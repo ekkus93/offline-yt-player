@@ -1,6 +1,7 @@
 package com.ekkus.offlineytplayer.coregateway
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class DownloadPresentationGatewayMappingTest {
@@ -8,7 +9,19 @@ class DownloadPresentationGatewayMappingTest {
     private data class WrongTypeRecord(val items: String)
     private data class PresentationItem(val jobId: String, val displayTitle: String)
     private data class BadTitleItem(val jobId: String, val displayTitle: Int)
+    private data class ErrorRecord(val error: String?)
     private class MissingRecord
+
+    @Test
+    fun nullablePresentationErrorPropertyAcceptsExplicitNull() {
+        assertNull(readRequiredNullablePresentationError(ErrorRecord(null)))
+        assertEquals("failed", readRequiredNullablePresentationError(ErrorRecord("failed")))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun nullablePresentationErrorPropertyRejectsMissingBinding() {
+        readRequiredNullablePresentationError(MissingRecord())
+    }
 
     @Test
     fun requiredPresentationItemsPreserveGeneratedList() {

@@ -7,7 +7,7 @@ class DownloadPresentationGateway private constructor(private val service: Any) 
             it.name == "downloadPresentations" && it.parameterTypes.isEmpty()
         } ?: error("Generated worker service does not expose downloadPresentations()")
         val result = method.invoke(service) ?: error("Generated worker service returned null")
-        val error = readProperty(result, "error")
+        val error = readRequiredNullablePresentationError(result)
         check(error == null) { "Unable to read durable download presentation metadata" }
         val items = readRequiredPresentationItems(result)
         return mapRequiredPresentationItems(items)
@@ -63,4 +63,15 @@ private fun readProperty(target: Any, vararg names: String): Any? {
         }
     }
     return null
+}
+
+internal fun readRequiredNullablePresentationError(target: Any): Any? {
+    val method = target.javaClass.methods.firstOrNull {
+        it.parameterTypes.isEmpty() && (it.name == "error" || it.name == "getError")
+    }
+    if (method != null) return method.invoke(target)
+    val field = target.javaClass.declaredFields.firstOrNull { it.name == "error" }
+        ?: error("Missing generated presentation error property")
+    field.isAccessible = true
+    return field.get(target)
 }

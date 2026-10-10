@@ -15,7 +15,7 @@ class GeneratedUniffiLibraryMutationGateway private constructor(
     override fun renameDisplayTitle(itemId: String, displayTitle: String): CoreGatewayResult<String?> {
         checkNotMainThread()
         val result = call(renameService, "renameDisplayTitle", itemId, displayTitle)
-        val errorMessage = readNullableMutation(result, "errorMessage", "error_message") as String?
+        val errorMessage = readRequiredNullableMutationError(result)
         val renamed = readRequiredBooleanMutation(result, "renamed")
         val title = readNullableMutation(result, "displayTitle", "display_title") as String?
         return CoreGatewayResult(
@@ -31,7 +31,7 @@ class GeneratedUniffiLibraryMutationGateway private constructor(
     ): CoreGatewayResult<Boolean> {
         checkNotMainThread()
         val result = call(removeService, "removeLibraryItem", libraryRoot, itemId, confirmed)
-        val errorMessage = readNullableMutation(result, "errorMessage", "error_message") as String?
+        val errorMessage = readRequiredNullableMutationError(result)
         val removed = readRequiredBooleanMutation(result, "removed")
         return CoreGatewayResult(
             value = removed,
@@ -97,4 +97,29 @@ internal fun readRequiredBooleanMutation(target: Any, vararg names: String): Boo
         ?: error("Missing generated property ${names.joinToString("/")}")
     return value as? Boolean
         ?: error("Generated property ${names.joinToString("/")} is not Boolean")
+}
+
+internal fun readRequiredNullableMutationError(target: Any): String? {
+    for (name in arrayOf("errorMessage", "error_message")) {
+        target.javaClass.methods.firstOrNull {
+            it.parameterTypes.isEmpty() && (it.name == name || it.name == "get${name.replaceFirstChar(Char::uppercase)}")
+        }?.let { method ->
+            val value = method.invoke(target)
+            return when (value) {
+                null -> null
+                is String -> value
+                else -> error("Generated mutation error property is not String")
+            }
+        }
+        target.javaClass.declaredFields.firstOrNull { it.name == name }?.let { field ->
+            field.isAccessible = true
+            val value = field.get(target)
+            return when (value) {
+                null -> null
+                is String -> value
+                else -> error("Generated mutation error property is not String")
+            }
+        }
+    }
+    error("Missing generated mutation error property")
 }
