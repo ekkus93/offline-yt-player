@@ -112,7 +112,8 @@ internal class AndroidDownloadConnectivityObserver(
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            emitCurrentConnectivity()
+            val capabilities = connectivityManager.getNetworkCapabilities(network)
+            onConnectivityChanged(DownloadConnectivityMapper.fromCapabilities(capabilities))
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -120,7 +121,11 @@ internal class AndroidDownloadConnectivityObserver(
         }
 
         override fun onLost(network: Network) {
-            emitCurrentConnectivity()
+            // This is a default-network callback: onLost means the network this callback was
+            // tracking is no longer the default. Re-reading activeNetwork here is racy because
+            // ConnectivityManager can still expose the just-lost network briefly. Emit the
+            // fail-closed state now; a replacement default network will deliver onAvailable.
+            onConnectivityChanged(DownloadConnectivity.None)
         }
 
         override fun onUnavailable() {
@@ -130,9 +135,11 @@ internal class AndroidDownloadConnectivityObserver(
 
     fun start() {
         if (registered) return
-        emitCurrentConnectivity()
+        // Register before sampling so a default-network transition cannot fall into the gap
+        // between the initial snapshot and callback registration.
         connectivityManager.registerDefaultNetworkCallback(callback)
         registered = true
+        emitCurrentConnectivity()
     }
 
     override fun close() {
