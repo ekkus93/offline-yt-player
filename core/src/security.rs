@@ -128,8 +128,20 @@ fn redact_urls(line: &str) -> String {
 }
 
 fn redact_url_token(token: &str) -> String {
-    let trimmed = token.trim_matches(|c: char| matches!(c, '(' | ')' | '[' | ']' | ','));
-    Url::parse(trimmed).map_or_else(
+    let lower = token.to_ascii_lowercase();
+    let start = match (lower.find("http://"), lower.find("https://")) {
+        (Some(http), Some(https)) => http.min(https),
+        (Some(http), None) => http,
+        (None, Some(https)) => https,
+        (None, None) => return token.to_string(),
+    };
+    let (prefix, url_and_suffix) = token.split_at(start);
+    let url_text = url_and_suffix.trim_end_matches(|c: char| {
+        matches!(c, ')' | ']' | '}' | ',' | ';' | '\'' | '"' | '>')
+    });
+    let suffix = &url_and_suffix[url_text.len()..];
+
+    Url::parse(url_text).map_or_else(
         |_| token.to_string(),
         |mut url| {
             if !url.username().is_empty() || url.password().is_some() {
@@ -142,7 +154,7 @@ fn redact_url_token(token: &str) -> String {
             if url.fragment().is_some() {
                 url.set_fragment(Some("REDACTED"));
             }
-            token.replace(trimmed, url.as_str())
+            format!("{prefix}{}{suffix}", url.as_str())
         },
     )
 }
@@ -195,6 +207,28 @@ mod tests {
         assert!(!output.contains("sig="));
         assert!(!output.contains("frag-"));
         assert!(output.contains("REDACTED"));
+    }
+
+    #[test]
+    fn wrapped_and_prefixed_signed_urls_are_redacted() {
+        let marker = "RMD1802_WRAPPED_URL_SECRET";
+        let inputs = [
+            format!(
+                "url=\"https://cdn.example/video?sig={marker}#fragment-{marker}\","
+            ),
+            format!(
+                "request=(HTTPS://user:{marker}@cdn.example/video?token={marker}#fragment-{marker})"
+            ),
+            format!(
+                "target=<https://cdn.example/video?signature={marker}#fragment-{marker}>"
+            ),
+        ];
+
+        for input in inputs {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("REDACTED"), "{output}");
+        }
     }
 
     #[test]
