@@ -10,10 +10,7 @@ class DownloadPresentationGateway private constructor(private val service: Any) 
         val error = readProperty(result, "error")
         check(error == null) { "Unable to read durable download presentation metadata" }
         val items = readRequiredPresentationItems(result)
-        return items.filterNotNull().associate { item ->
-            (readProperty(item, "jobId", "job_id") as String) to
-                (readProperty(item, "displayTitle", "display_title") as String)
-        }
+        return mapRequiredPresentationItems(items)
     }
 
     companion object {
@@ -39,6 +36,20 @@ internal fun readRequiredPresentationItems(target: Any): List<*> {
         ?: error("Missing generated property items")
     return value as? List<*>
         ?: error("Generated property items is not a List")
+}
+
+internal fun mapRequiredPresentationItems(items: List<*>): Map<String, String> {
+    val entries = items.map { entry ->
+        val item = requireNotNull(entry) { "Null generated presentation item" }
+        val jobId = readProperty(item, "jobId", "job_id") as? String
+            ?: error("Missing generated presentation job ID")
+        val title = readProperty(item, "displayTitle", "display_title") as? String
+            ?: error("Missing generated presentation title")
+        check(jobId.isNotBlank() && title.isNotBlank()) { "Blank generated presentation identity or title" }
+        jobId to title
+    }
+    check(entries.map { it.first }.toSet().size == entries.size) { "Duplicate generated presentation job ID" }
+    return entries.toMap()
 }
 
 private fun readProperty(target: Any, vararg names: String): Any? {

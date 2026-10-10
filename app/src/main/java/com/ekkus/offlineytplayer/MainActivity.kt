@@ -268,10 +268,11 @@ internal fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
     error?.let { return LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
     // A missing, failed, or malformed playback-gateway result is not an empty library.
     // Treat it as an unavailable playback index instead of silently disabling Play for every item.
+    val libraryItems = value ?: return LibraryScreenState.Failed("Library repository data is unavailable.")
     val availablePlaybackAssets = playbackAssets?.takeIf { it.error == null }?.value
         ?: return LibraryScreenState.Failed("Library playback metadata is unavailable.")
     val playbackByItemId = availablePlaybackAssets.associateBy { it.itemId }
-    return LibraryScreenState.Ready(value.orEmpty().map { item ->
+    return LibraryScreenState.Ready(libraryItems.map { item ->
         val playback = playbackByItemId[item.itemId]
         LibraryRowModel(
             id = item.itemId,
@@ -303,7 +304,7 @@ internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenStat
     titlesByJobId: Map<String, String>,
 ): DownloadsScreenState {
     error?.let { return DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
-    val snapshots = value.orEmpty()
+    val snapshots = value ?: return DownloadsScreenState.Failed("Download queue data is unavailable.")
     if (snapshots.any { titlesByJobId[it.jobId].isNullOrBlank() }) {
         return DownloadsScreenState.Failed("Download presentation metadata is unavailable.")
     }

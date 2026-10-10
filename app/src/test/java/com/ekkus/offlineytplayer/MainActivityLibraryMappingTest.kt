@@ -47,6 +47,21 @@ class MainActivityLibraryMappingTest {
         assertTrue(library.toLibraryScreenState(libraryRoot, malformed) is LibraryScreenState.Failed)
     }
 
+    @Test fun missingSuccessfulLibraryPayloadIsNotAcceptedAsEmptyLibrary() {
+        val malformed = CoreGatewayResult<List<CoreLibraryItem>>(null, null)
+        val assets = CoreGatewayResult<List<CoreLibraryPlaybackAsset>>(emptyList(), null)
+        val mapped = malformed.toLibraryScreenState(libraryRoot, assets)
+        assertTrue(mapped is LibraryScreenState.Failed)
+        assertTrue((mapped as LibraryScreenState.Failed).message == "Library repository data is unavailable.")
+    }
+
+    @Test fun missingSuccessfulDownloadQueuePayloadIsNotAcceptedAsEmptyQueue() {
+        val malformed = CoreGatewayResult<List<com.ekkus.offlineytplayer.coregateway.CoreDownloadSnapshot>>(null, null)
+        val mapped = malformed.toDownloadsScreenState(emptyMap())
+        assertTrue(mapped is com.ekkus.offlineytplayer.ui.DownloadsScreenState.Failed)
+        assertTrue((mapped as com.ekkus.offlineytplayer.ui.DownloadsScreenState.Failed).message == "Download queue data is unavailable.")
+    }
+
     @Test fun validEmptyPlaybackIndexStillMapsLibraryNormally() {
         val empty = CoreGatewayResult<List<CoreLibraryPlaybackAsset>>(emptyList(), null)
         assertTrue(library.toLibraryScreenState(libraryRoot, empty) is LibraryScreenState.Ready)

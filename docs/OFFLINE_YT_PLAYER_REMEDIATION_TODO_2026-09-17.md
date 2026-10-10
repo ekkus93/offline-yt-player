@@ -349,6 +349,7 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-601 — Library repository wiring
 
 
+
 - [x] Replace `emptyList<LibraryRowModel>()` production data with repository-backed state.
 
 - [x] Implement list/search/detail observation.
@@ -697,6 +698,7 @@ This checklist repairs the implementation and qualification gaps found during th
 ---
 
 ## RMD-1300 — Security, privacy, and resource bounds
+
 
 ### RMD-1301 — Unify Android/core URL validation
 
@@ -1048,6 +1050,7 @@ This checklist repairs the implementation and qualification gaps found during th
 **RMD-1802 no-op/circular-policy cleanup (2026-10-09, pending exact-head qualification):** independent review found that production `OfflineYTPlayerApp` and `LibraryScreen` still supplied silent default no-op callbacks for settings mutations and repository-query synchronization. Those defaults are removed so production callers must provide explicit handlers; instrumentation callers now opt into explicit no-ops only when the callback is outside that test's scope. The same sweep removed three reboot-recovery capability constants and `CollectionLayoutPolicy.HasHorizontalControlScrolling`, whose JVM assertions duplicated stronger boot decision/manifest checks and packaged Compose layout qualification. This cleanup is not itself behavioral proof; RMD-1802 remains open until the exact-head matrix passes and the Rust/Android review is completed.
 
 
+
 **RMD-1802 policy-claim cleanup and UIDT job-ID overflow (2026-10-09, pending exact-head qualification):** removed unused unconditional capability booleans from Android connectivity, resume, notification permission, UIDT scheduling, foreground-timeout, Share routing, About diagnostics, and portrait-coverage policy objects, along with circular assertions that only checked those booleans. Existing real gateway/coordinator JVM tests and packaged Android instrumentation remain the behavioral qualification evidence; this removal alone does not prove runtime capability. Independent review also found that `stableJobId` used `Int.absoluteValue` on a Java string hash; `Int.MIN_VALUE` overflows and yields an ID outside the reserved job range. The scheduler now widens to Long before taking the absolute value, with `minimumIntHashStillProducesJobIdInsideReservedRange` covering the known minimum-hash input. RMD-1802 and engineering closeout remain unchecked pending exact-head qualification and continued Rust/Android review.
 
 
@@ -1063,6 +1066,8 @@ This checklist repairs the implementation and qualification gaps found during th
 **RMD-1802 Android smoke failure (2026-10-10; open):** exact `master` `f07033c291ae284437b26834441e3cacd6baf745` failed Android smoke run `38019697278` in `Rmd1504ShareE2EInstrumentedTest` with a Compose `SnapshotStateObserver` multithreaded-access exception, while seven other exact-head workflows passed. See `docs/RMD_1802_ANDROID_SMOKE_SNAPSHOT_FAILURE_2026-10-10.md` for evidence and required investigation. This blocks RMD-1802/RMD-1803 closeout; do not check them or infer a root cause from the exception alone.
 
 **RMD-1802 Android smoke recovery and production-path review (2026-10-10, exact candidate `0488fa5eff0d4fea3c4651eab995a0cddbe02271`):** the new settings-observer regression was moved to the individually executed required instrumentation runner in `scripts/run_required_android_smoke.sh`; Android smoke `38071487987` (API-29 job `114269626991`) passed. Same exact-head passes: CI `38071487927`, Android FGS timeout `38071487896`, Android cold start `38071488055`, Android real-network E2E `38071488022`, deterministic fixture E2E `38071487926`, Supply chain `38071487969`, and CI evidence `38071488124`. This supersedes the earlier missing-test execution failure at `00f37d1c49e87990fc4d52fe62c0d98900ca828d`, but does not by itself establish the root cause of the earlier Compose snapshot exception or close the independent review. A subsequent production review found `MainActivity.toLibraryScreenState` silently mapped a missing/failed playback index to empty assets, causing completed media to appear unplayable instead of surfacing an integration failure; the next code change must fail closed and qualify this mapping with JVM tests. Keep RMD-1802/RMD-1803 and global closeout boxes open until the new exact head passes and review is complete.
+
+**RMD-1802 additional fail-closed mapping audit (2026-10-10; pending new exact-head qualification):** a successful-but-null Rust/UniFFI library or download-queue payload previously rendered as an empty production list in `MainActivity.toLibraryScreenState` / `toDownloadsScreenState`. These now report bounded unavailable errors instead of fabricating empty state. `DownloadPresentationGateway.titlesByJobId` previously filtered null generated presentation items and silently overwrote duplicate job IDs; strict item/identity/title validation now rejects malformed, blank, and duplicate entries. JVM mapping tests exercise malformed and valid cases. Keep review/qualification/closeout checkboxes open until the new exact head passes all required gates.
 
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
