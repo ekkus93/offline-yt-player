@@ -59,6 +59,13 @@ impl DurableDownloadWorkStore {
                 false,
             ));
         }
+        if work.plan.assets.is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::NoCompatibleFormat,
+                "download plan contains no media assets",
+                false,
+            ));
+        }
         let plan_json = serde_json::to_string(&work.plan).map_err(json_error)?;
         // Work execution and its user-facing display metadata must never drift apart.
         // If either write fails (for example, storage exhaustion), roll back both.
@@ -193,6 +200,20 @@ mod tests {
             },
             created_at_epoch_ms: 1234,
         }
+    }
+
+    #[test]
+    fn empty_asset_plan_is_rejected_before_work_or_presentation_is_persisted() {
+        let temp = tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let store = DurableDownloadWorkStore::open(&database).unwrap();
+        let mut item = work();
+        item.plan.assets.clear();
+
+        let error = store.save(&item).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::NoCompatibleFormat);
+        assert!(store.load_all().unwrap().is_empty());
+        assert!(store.load_presentations().unwrap().is_empty());
     }
 
     #[test]

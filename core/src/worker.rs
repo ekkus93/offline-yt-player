@@ -166,6 +166,13 @@ impl DownloadWorker {
         cancel: &AtomicBool,
         now_epoch_ms: u64,
     ) -> Result<Vec<CoreEvent>, CoreError> {
+        if item.plan.assets.is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::NoCompatibleFormat,
+                "download plan contains no media assets",
+                false,
+            ));
+        }
         transition_snapshot(snapshot, DownloadState::Downloading)?;
         snapshot.total_bytes = total_expected_bytes(&item.plan);
         // Retry replays assets; transfer results report full sizes, not byte deltas.
@@ -443,6 +450,29 @@ mod tests {
         item.plan.quality.estimated_bytes = None;
         item.plan.assets[0].expected_bytes = None;
         item
+    }
+
+    #[test]
+    fn empty_plan_fails_without_promoting_an_unplayable_library_item() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("empty-plan", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let mut work = plan("empty-plan", "http://127.0.0.1/unused".into(), 0);
+        work.plan.assets.clear();
+
+        let report = worker
+            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
+            .unwrap();
+        assert_eq!(report.failed, vec!["empty-plan"]);
+        assert!(report.completed.is_empty());
+        assert!(store.get("empty-plan").unwrap().is_none());
+        let snapshot = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(snapshot.state, DownloadState::Failed);
+        assert_eq!(snapshot.bytes_downloaded, 0);
+        assert_eq!(snapshot.last_error.unwrap().kind, ErrorKind::NoCompatibleFormat);
     }
 
     #[test]
