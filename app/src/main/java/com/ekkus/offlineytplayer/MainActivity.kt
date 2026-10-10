@@ -271,6 +271,15 @@ internal fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
     val libraryItems = value ?: return LibraryScreenState.Failed("Library repository data is unavailable.")
     val availablePlaybackAssets = playbackAssets?.takeIf { it.error == null }?.value
         ?: return LibraryScreenState.Failed("Library playback metadata is unavailable.")
+    // Duplicate or blank durable identities would make associateBy silently overwrite records.
+    // Fail closed rather than attach the wrong playback asset to a Library row.
+    if (libraryItems.any { it.itemId.isBlank() } ||
+        libraryItems.map { it.itemId }.toSet().size != libraryItems.size ||
+        availablePlaybackAssets.any { it.itemId.isBlank() } ||
+        availablePlaybackAssets.map { it.itemId }.toSet().size != availablePlaybackAssets.size
+    ) {
+        return LibraryScreenState.Failed("Library identity metadata is invalid.")
+    }
     val playbackByItemId = availablePlaybackAssets.associateBy { it.itemId }
     return LibraryScreenState.Ready(libraryItems.map { item ->
         val playback = playbackByItemId[item.itemId]
