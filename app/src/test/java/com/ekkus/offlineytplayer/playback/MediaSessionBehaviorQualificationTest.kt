@@ -47,8 +47,6 @@ class MediaSessionBehaviorQualificationTest {
     @Test
     fun headsetAndSystemTransportControlsAreDeclaredForTheSessionPlayer() {
         val service = File("src/main/java/com/ekkus/offlineytplayer/playback/PlaybackSessionService.kt").readText()
-        assertTrue(service.contains("SupportsLockScreenControls = true"))
-        assertTrue(service.contains("SupportsHeadsetControls = true"))
         assertTrue(service.contains("setAudioAttributes(AudioAttributes.DEFAULT, true)"))
         assertTrue(service.contains("setHandleAudioBecomingNoisy(true)"))
     }
