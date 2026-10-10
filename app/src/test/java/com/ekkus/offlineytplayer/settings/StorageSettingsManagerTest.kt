@@ -83,4 +83,19 @@ class StorageSettingsManagerTest {
         }
     }
 
+    @Test
+    fun cacheCleanupRejectsAnUnenumerableRootInsteadOfReportingSuccess() {
+        val root = Files.createTempDirectory("storage-cache-enumeration").toFile()
+        try {
+            val files = root.resolve("files").apply { mkdirs() }
+            val invalidCacheRoot = root.resolve("cache").apply { writeText("not a directory") }
+            val manager = StorageSettingsManager.forTest(files, invalidCacheRoot)
+            val error = runCatching { manager.cleanup(ManagedCleanup.Cache) }.exceptionOrNull()
+            assertTrue(error is java.io.IOException)
+            assertTrue(invalidCacheRoot.isFile)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }

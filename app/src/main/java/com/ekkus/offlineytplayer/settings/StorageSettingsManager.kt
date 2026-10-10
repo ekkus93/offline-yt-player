@@ -35,7 +35,8 @@ internal class StorageSettingsManager private constructor(
     fun cleanup(action: ManagedCleanup): Long {
         val root = if (action == ManagedCleanup.Cache) cacheRoot else filesRoot
         val targets = when (action) {
-            ManagedCleanup.Cache -> cacheRoot.listFiles().orEmpty().toList()
+            ManagedCleanup.Cache -> (cacheRoot.listFiles()
+                ?: if (cacheRoot.exists()) throw IOException("Cannot enumerate managed cache") else emptyArray()).toList()
             // Unlink incomplete-asset symlinks rather than following their targets.
             ManagedCleanup.Incomplete -> filesRoot.managedEntries().filter {
                 isIncompleteFile(it) && (it.isManagedRegularFile() || Files.isSymbolicLink(it.toPath()))
