@@ -129,8 +129,7 @@ impl DownloadWorker {
     ) -> Result<Vec<(DurableDownloadSnapshot, &'a DownloadWorkItem)>, CoreError> {
         // Reject ambiguous work identities before claiming or mutating any durable queue rows.
         // Collecting directly into a HashMap silently picks the last conflicting plan.
-        let mut by_id: HashMap<&str, &DownloadWorkItem> =
-            HashMap::with_capacity(work_items.len());
+        let mut by_id: HashMap<&str, &DownloadWorkItem> = HashMap::with_capacity(work_items.len());
         for item in work_items {
             if item.job_id.trim().is_empty() {
                 return Err(CoreError::new(
