@@ -1037,6 +1037,9 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1802 — Code review after remediation
 
+**RMD-1802 download-presentation binding-drift finding (2026-10-09, pending exact-head qualification):** independent review found that `DownloadPresentationGateway.titlesByJobId` converted a missing or wrong-typed generated `items` property into an empty list. That could hide UniFFI binding drift and fabricate fallback presentation state. The mapper now requires a generated list; production bootstrap and periodic refresh catch mapper failures and surface a bounded Downloads-unavailable state instead of crashing or treating the metadata as empty. `DownloadPresentationGatewayMappingTest` covers present, missing, and wrong-typed `items`. The same exact-head repair also applies the Rust formatting required by `cargo fmt --check` after the preceding YouTube parser-test hardening commit.
+
+
 **RMD-1802 no-op/circular-policy cleanup (2026-10-09, pending exact-head qualification):** independent review found that production `OfflineYTPlayerApp` and `LibraryScreen` still supplied silent default no-op callbacks for settings mutations and repository-query synchronization. Those defaults are removed so production callers must provide explicit handlers; instrumentation callers now opt into explicit no-ops only when the callback is outside that test's scope. The same sweep removed three reboot-recovery capability constants and `CollectionLayoutPolicy.HasHorizontalControlScrolling`, whose JVM assertions duplicated stronger boot decision/manifest checks and packaged Compose layout qualification. This cleanup is not itself behavioral proof; RMD-1802 remains open until the exact-head matrix passes and the Rust/Android review is completed.
 
 

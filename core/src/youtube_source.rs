@@ -765,7 +765,10 @@ mod tests {
                 "videoDetails": details,
                 "streamingData": {"formats": []}
             });
-            assert_eq!(parse_player(&player).unwrap_err().kind, ErrorKind::SourceChanged);
+            assert_eq!(
+                parse_player(&player).unwrap_err().kind,
+                ErrorKind::SourceChanged
+            );
         }
     }
 
@@ -777,7 +780,10 @@ mod tests {
             "width": 1280,
             "height": 720
         });
-        assert_eq!(parse_stream(&stream).unwrap_err().kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            parse_stream(&stream).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
     }
 
     #[test]
@@ -790,7 +796,10 @@ mod tests {
                 }
             ]}}
         });
-        assert_eq!(parse_subtitles(&player).unwrap_err().kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            parse_subtitles(&player).unwrap_err().kind,
+            ErrorKind::SourceChanged
+        );
     }
 
     #[test]

@@ -163,7 +163,11 @@ class MainActivity : ComponentActivity() {
             val startupReconciliation = openedCore?.reconcileStartup()
             val startupFailure = startupReconciliation?.error
             val initialPlaybackAssets = if (startupFailure == null) playback.getOrNull()?.listPlaybackAssets() else null
-            val initialTitles = if (startupFailure == null) presentations.getOrNull()?.titlesByJobId().orEmpty() else emptyMap()
+            val initialTitles = if (startupFailure == null) {
+                runCatching { presentations.getOrNull()?.titlesByJobId().orEmpty() }
+            } else {
+                Result.success(emptyMap())
+            }
             val initialLibrary = when {
                 core.isFailure -> LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> LibraryScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
@@ -172,7 +176,8 @@ class MainActivity : ComponentActivity() {
             val initialDownloads = when {
                 core.isFailure -> DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> DownloadsScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
-                else -> openedCore!!.listDownloadQueue().toDownloadsScreenState(initialTitles)
+                initialTitles.isFailure -> DownloadsScreenState.Failed("Download presentation metadata is unavailable.")
+                else -> openedCore!!.listDownloadQueue().toDownloadsScreenState(initialTitles.getOrThrow())
             }
             if (isFinishing || isDestroyed) {
                 core.getOrNull()?.close(); controls.getOrNull()?.close(); playback.getOrNull()?.close(); details.getOrNull()?.close(); mutations.getOrNull()?.close(); sources.getOrNull()?.close()
@@ -216,10 +221,13 @@ class MainActivity : ComponentActivity() {
                         onDownloads = { result ->
                             val token = statePublicationGate.capture()
                             if (token != null) {
-                                val titles = downloadPresentationGateway?.titlesByJobId().orEmpty()
+                                val titles = runCatching { downloadPresentationGateway?.titlesByJobId().orEmpty() }
                                 runOnUiThread {
                                     if (!isDestroyed && statePublicationGate.permits(token)) {
-                                        uiState.downloadsState = result.toDownloadsScreenState(titles)
+                                        uiState.downloadsState = titles.fold(
+                                            onSuccess = { result.toDownloadsScreenState(it) },
+                                            onFailure = { DownloadsScreenState.Failed("Download presentation metadata is unavailable.") },
+                                        )
                                     }
                                 }
                             }

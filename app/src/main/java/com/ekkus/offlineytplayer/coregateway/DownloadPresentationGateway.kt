@@ -9,7 +9,7 @@ class DownloadPresentationGateway private constructor(private val service: Any) 
         val result = method.invoke(service) ?: error("Generated worker service returned null")
         val error = readProperty(result, "error")
         check(error == null) { "Unable to read durable download presentation metadata" }
-        val items = readProperty(result, "items") as? List<*> ?: emptyList<Any>()
+        val items = readRequiredPresentationItems(result)
         return items.filterNotNull().associate { item ->
             (readProperty(item, "jobId", "job_id") as String) to
                 (readProperty(item, "displayTitle", "display_title") as String)
@@ -31,6 +31,14 @@ class DownloadPresentationGateway private constructor(private val service: Any) 
             return DownloadPresentationGateway(service)
         }
     }
+}
+
+
+internal fun readRequiredPresentationItems(target: Any): List<*> {
+    val value = readProperty(target, "items")
+        ?: error("Missing generated property items")
+    return value as? List<*>
+        ?: error("Generated property items is not a List")
 }
 
 private fun readProperty(target: Any, vararg names: String): Any? {
