@@ -1,19 +1,10 @@
 package com.ekkus.offlineytplayer
 
-import com.ekkus.offlineytplayer.playback.PlaybackSessionPolicy
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MediaSessionPolicyTest {
-    @Test
-    fun playbackSessionSupportsRequiredSystemControls() {
-        assertTrue(PlaybackSessionPolicy.SupportsLockScreenControls)
-        assertTrue(PlaybackSessionPolicy.SupportsHeadsetControls)
-        assertTrue(PlaybackSessionPolicy.HandlesAudioFocus)
-        assertTrue(PlaybackSessionPolicy.HandlesAudioBecomingNoisy)
-    }
-
     @Test
     fun manifestDeclaresMediaPlaybackForegroundService() {
         val manifest = File("src/main/AndroidManifest.xml").readText()

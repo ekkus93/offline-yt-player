@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -93,8 +94,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             OfflineYTPlayerApp(
                 initialSharedUrl = sharedUrl,
-                libraryState = uiState.libraryState,
-                downloadsState = uiState.downloadsState,
+                libraryState = uiState.libraryStateFlow.collectAsState().value,
+                downloadsState = uiState.downloadsStateFlow.collectAsState().value,
                 downloadControlGateway = downloadControlGateway,
                 sourceAnalysisGateway = sourceAnalysisGateway,
                 libraryDetailsGatewayProvider = { libraryDetailsGateway },
