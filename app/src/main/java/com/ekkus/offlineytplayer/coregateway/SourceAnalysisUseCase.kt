@@ -37,9 +37,9 @@ class SourceAnalysisUseCase(
         } catch (_: Exception) {
             // Provider, binding, or transport failures may throw before returning an FFI
             // result. Preserve the UI state machine without exposing URLs/credentials.
-            CoreGatewayResult(
-                null,
-                CoreGatewayError(
+            CoreGatewayResult<CoreSourceAnalysis>(
+                value = null,
+                error = CoreGatewayError(
                     kind = "SOURCE_ANALYSIS_UNAVAILABLE",
                     message = "Source analysis is unavailable.",
                     retryable = true,
