@@ -384,7 +384,7 @@ fn parse_subtitles(v: &Value) -> Result<Vec<ExtractedSubtitle>, CoreError> {
         .flatten()
         .take(MAX_PROVIDER_SUBTITLES);
     let mut subtitles = Vec::new();
-    for (index, track) in tracks.enumerate() {
+    for track in tracks {
         let base_url = track
             .get("baseUrl")
             .and_then(Value::as_str)
