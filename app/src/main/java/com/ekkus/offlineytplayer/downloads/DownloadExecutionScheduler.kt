@@ -12,6 +12,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.PersistableBundle
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -53,9 +55,21 @@ internal object DownloadExecutionSchedulerPolicy {
 
     fun supportsUserInitiatedJobFlag(sdkInt: Int): Boolean = sdkInt >= UserInitiatedDataTransferMinSdk
 
-    fun requiredNetworkType(preference: DownloadNetworkPreference): Int = when (preference) {
-        DownloadNetworkPreference.AnyNetwork -> JobInfo.NETWORK_TYPE_ANY
-        DownloadNetworkPreference.WifiOnly -> JobInfo.NETWORK_TYPE_UNMETERED
+    /** An unmetered Ethernet/cellular network is not a Wi-Fi connection. */
+    fun applyNetworkConstraint(
+        builder: JobInfo.Builder,
+        preference: DownloadNetworkPreference,
+    ): JobInfo.Builder = when (preference) {
+        DownloadNetworkPreference.AnyNetwork ->
+            builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+        DownloadNetworkPreference.WifiOnly ->
+            builder.setRequiredNetwork(
+                NetworkRequest.Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                    .build(),
+            )
     }
 
     fun usesForegroundFallback(sdkInt: Int): Boolean =
@@ -120,9 +134,11 @@ internal class AndroidDownloadExecutionScheduler(
                     kind = DownloadSchedulerKind.UserInitiatedDataTransferJob,
                     accepted = false,
                 )
-            val builder = JobInfo.Builder(jobId, component)
-                .setExtras(DownloadExecutionSchedulerPolicy.durableQueueItemExtras(request.queueItemId))
-                .setRequiredNetworkType(DownloadExecutionSchedulerPolicy.requiredNetworkType(request.networkPreference))
+            val builder = DownloadExecutionSchedulerPolicy.applyNetworkConstraint(
+                JobInfo.Builder(jobId, component)
+                    .setExtras(DownloadExecutionSchedulerPolicy.durableQueueItemExtras(request.queueItemId)),
+                request.networkPreference,
+            )
 
             if (
                 DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(sdkInt) &&

@@ -1,6 +1,5 @@
 package com.ekkus.offlineytplayer.downloads
 
-import android.app.job.JobInfo
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -100,18 +99,6 @@ class DownloadExecutionSchedulerPolicyTest {
             DownloadUserInitiatedJobService.JobIdBase + DownloadUserInitiatedJobService.JobIdRange)
             .associateWith { "another-queue-item" }
         assertNull(DownloadExecutionSchedulerPolicy.availableJobId("new-queue-item", occupied))
-    }
-
-    @Test
-    fun networkPreferenceMapsToJobConstraints() {
-        assertEquals(
-            JobInfo.NETWORK_TYPE_ANY,
-            DownloadExecutionSchedulerPolicy.requiredNetworkType(DownloadNetworkPreference.AnyNetwork),
-        )
-        assertEquals(
-            JobInfo.NETWORK_TYPE_UNMETERED,
-            DownloadExecutionSchedulerPolicy.requiredNetworkType(DownloadNetworkPreference.WifiOnly),
-        )
     }
 
     @Test
