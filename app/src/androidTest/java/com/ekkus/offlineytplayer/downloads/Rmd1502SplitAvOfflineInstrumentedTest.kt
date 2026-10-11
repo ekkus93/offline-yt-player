@@ -296,7 +296,7 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
                         // The persisted descriptor above checks the audio path; the
                         // selected AUDIO track below proves it is actually decoded.
                         correctItemAttached =
-                            current?.localConfiguration?.uri?.path == videoFile.absolutePath
+                            isSameLocalFile(current?.localConfiguration?.uri, videoFile)
                     }
                     if (correctItemAttached) break
                     SystemClock.sleep(50)
