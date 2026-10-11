@@ -55,8 +55,17 @@ internal class SchedulingDownloadControlGateway(
 
     override fun pause(jobId: String): CoreGatewayResult<Boolean> = delegate.pause(jobId)
 
-    override fun resume(jobId: String): CoreGatewayResult<Boolean> =
-        scheduleAfterMutation(jobId, delegate.resume(jobId))
+    override fun resume(jobId: String): CoreGatewayResult<Boolean> {
+        val result = delegate.resume(jobId)
+        // A previous scheduler rejection may have left executable work Queued.
+        // The Rust enqueue operation is idempotent for that durable state.
+        val schedulable = if (result.error == null && result.value == false) {
+            delegate.enqueue(jobId)
+        } else {
+            result
+        }
+        return scheduleAfterMutation(jobId, schedulable)
+    }
 
     override fun cancel(jobId: String): CoreGatewayResult<Boolean> = delegate.cancel(jobId)
 
