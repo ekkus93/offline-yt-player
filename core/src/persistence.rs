@@ -163,20 +163,89 @@ impl LibraryStore {
         }
         let mut connection = self.connection()?;
         let transaction = connection.transaction().map_err(db_error)?;
-        upsert_item(&transaction, item)?;
-        transaction
+        promote_item_transaction(&transaction, job_id, item)?;
+        transaction.commit().map_err(db_error)
+    }
+
+    /// Verify the exact durable worker state and promote Library metadata in
+    /// the same SQLite write transaction. Concurrent pause/cancel cannot be
+    /// undone by a stale completion, nor can it yield a promoted canceled item.
+    pub(crate) fn promote_completed_if_unchanged(
+        &self,
+        job_id: &str,
+        item: &LibraryItem,
+        previous: &DurableDownloadSnapshot,
+        completed: &DurableDownloadSnapshot,
+    ) -> Result<bool, CoreError> {
+        if previous.job_id != job_id
+            || completed.job_id != job_id
+            || item.item_id != job_id
+            || previous.state != DownloadState::Verifying
+            || completed.state != DownloadState::Completed
+        {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "durable completion identity/state mismatch",
+                false,
+            ));
+        }
+        if !item.completed {
+            return Err(CoreError::new(
+                ErrorKind::IntegrityFailure,
+                "cannot promote an incomplete library item",
+                false,
+            ));
+        }
+        for asset in &item.assets {
+            validate_relative_asset_path(&asset.relative_path)?;
+        }
+        let previous_state = serde_json::to_string(&previous.state).map_err(json_error)?;
+        let completed_state = serde_json::to_string(&completed.state).map_err(json_error)?;
+        let previous_error = previous
+            .last_error
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(json_error)?;
+        let completed_error = completed
+            .last_error
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(json_error)?;
+
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction().map_err(db_error)?;
+        let changed = transaction
             .execute(
-                "DELETE FROM assets WHERE item_id=?1",
-                [item.item_id.as_str()],
+                "UPDATE download_jobs SET state_json=?1, bytes_downloaded=?2,
+                total_bytes=?3, attempt=?4, retry_at_epoch_ms=?5, error_json=?6
+             WHERE job_id=?7 AND state_json=?8 AND bytes_downloaded=?9
+                AND total_bytes IS ?10 AND attempt=?11
+                AND retry_at_epoch_ms IS ?12 AND error_json IS ?13",
+                params![
+                    completed_state,
+                    to_i64(completed.bytes_downloaded)?,
+                    completed.total_bytes.map(to_i64).transpose()?,
+                    i64::from(completed.attempt),
+                    completed.retry_at_epoch_ms.map(to_i64).transpose()?,
+                    completed_error,
+                    job_id,
+                    previous_state,
+                    to_i64(previous.bytes_downloaded)?,
+                    previous.total_bytes.map(to_i64).transpose()?,
+                    i64::from(previous.attempt),
+                    previous.retry_at_epoch_ms.map(to_i64).transpose()?,
+                    previous_error,
+                ],
             )
             .map_err(db_error)?;
-        for asset in &item.assets {
-            insert_asset(&transaction, &item.item_id, asset)?;
+        if changed == 0 {
+            return Ok(false);
         }
-        transaction
-            .execute("DELETE FROM staged_assets WHERE job_id=?1", [job_id])
-            .map_err(db_error)?;
-        transaction.commit().map_err(db_error)
+        promote_item_transaction(&transaction, job_id, item)?;
+        transaction.commit().map_err(db_error)?;
+        Ok(true)
     }
 
     pub fn list(&self, query: Option<&str>) -> Result<Vec<LibraryItem>, CoreError> {
@@ -587,6 +656,27 @@ fn map_item_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryItem> {
     })
 }
 
+fn promote_item_transaction(
+    transaction: &Transaction<'_>,
+    job_id: &str,
+    item: &LibraryItem,
+) -> Result<(), CoreError> {
+    upsert_item(transaction, item)?;
+    transaction
+        .execute(
+            "DELETE FROM assets WHERE item_id=?1",
+            [item.item_id.as_str()],
+        )
+        .map_err(db_error)?;
+    for asset in &item.assets {
+        insert_asset(transaction, &item.item_id, asset)?;
+    }
+    transaction
+        .execute("DELETE FROM staged_assets WHERE job_id=?1", [job_id])
+        .map_err(db_error)?;
+    Ok(())
+}
+
 fn load_assets(connection: &Connection, item_id: &str) -> Result<Vec<LocalAsset>, CoreError> {
     let mut statement = connection
         .prepare(
@@ -699,6 +789,57 @@ mod tests {
         assert!(store.staged_job_ids().unwrap().is_empty());
         let found = store.list(Some("Video")).unwrap();
         assert_eq!(found, vec![complete]);
+    }
+
+    #[test]
+    fn concurrent_cancel_cannot_promote_or_complete_a_stale_job() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let complete = item(true);
+        let verifying = DurableDownloadSnapshot {
+            job_id: complete.item_id.clone(),
+            state: DownloadState::Verifying,
+            bytes_downloaded: 100,
+            total_bytes: Some(100),
+            attempt: 1,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        };
+        store.save_download_snapshot(&verifying).unwrap();
+        store.stage_asset(&complete.item_id, &complete.assets[0]).unwrap();
+        let mut canceled = verifying.clone();
+        canceled.state = DownloadState::Canceled;
+        store.save_download_snapshot(&canceled).unwrap();
+        let mut completed = verifying.clone();
+        completed.state = DownloadState::Completed;
+
+        assert!(
+            !store
+                .promote_completed_if_unchanged(
+                    &complete.item_id,
+                    &complete,
+                    &verifying,
+                    &completed,
+                )
+                .unwrap()
+        );
+        assert_eq!(store.load_download_snapshots().unwrap(), vec![canceled]);
+        assert!(store.list(None).unwrap().is_empty());
+        assert_eq!(store.staged_job_ids().unwrap(), vec![complete.item_id.clone()]);
+
+        store.save_download_snapshot(&verifying).unwrap();
+        assert!(
+            store
+                .promote_completed_if_unchanged(
+                    &complete.item_id,
+                    &complete,
+                    &verifying,
+                    &completed,
+                )
+                .unwrap()
+        );
+        assert_eq!(store.load_download_snapshots().unwrap(), vec![completed]);
+        assert_eq!(store.list(None).unwrap(), vec![complete]);
+        assert!(store.staged_job_ids().unwrap().is_empty());
     }
 
     #[test]

@@ -405,8 +405,18 @@ impl DownloadWorker {
             assets.push(local);
         }
 
+        let previous_downloading = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Verifying)?;
-        self.library.save_download_snapshot(snapshot)?;
+        if !self
+            .library
+            .replace_download_snapshot_if_unchanged(&previous_downloading, snapshot)?
+        {
+            return Err(CoreError::new(
+                ErrorKind::Canceled,
+                "download was superseded before verification",
+                false,
+            ));
+        }
         let library_item = LibraryItem {
             item_id: item.job_id.clone(),
             source: item.plan.source.clone(),
@@ -418,13 +428,23 @@ impl DownloadWorker {
             playback_position_ms: 0,
             completed: true,
         };
-        self.library
-            .promote_completed(&item.job_id, &library_item)?;
+        let previous_verifying = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Completed)?;
         snapshot.bytes_downloaded = snapshot.total_bytes.unwrap_or(snapshot.bytes_downloaded);
         snapshot.retry_at_epoch_ms = None;
         snapshot.last_error = None;
-        self.library.save_download_snapshot(snapshot)?;
+        if !self.library.promote_completed_if_unchanged(
+            &item.job_id,
+            &library_item,
+            &previous_verifying,
+            snapshot,
+        )? {
+            return Err(CoreError::new(
+                ErrorKind::Canceled,
+                "download was superseded before Library completion",
+                false,
+            ));
+        }
         Ok(progress_events)
     }
 
