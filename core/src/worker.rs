@@ -1158,8 +1158,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
         let mut work = plan(job_id, "http://127.0.0.1:1/unreachable".into(), 10);
-        work.plan.assets[0].relative_path =
-            format!("items/by-job-{other_digest:x}/video.mp4");
+        work.plan.assets[0].relative_path = format!("items/by-job-{other_digest:x}/video.mp4");
 
         let report = worker
             .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
@@ -1168,10 +1167,12 @@ mod tests {
         assert!(report.completed.is_empty());
         assert!(store.get(job_id).unwrap().is_none());
         assert!(store.staged_job_ids().unwrap().is_empty());
-        assert!(!root
-            .path()
-            .join(format!("items/by-job-{other_digest:x}/video.mp4"))
-            .exists());
+        assert!(
+            !root
+                .path()
+                .join(format!("items/by-job-{other_digest:x}/video.mp4"))
+                .exists()
+        );
         let durable = store.load_download_snapshots().unwrap().remove(0);
         assert_eq!(durable.state, DownloadState::Failed);
         assert_eq!(durable.last_error.unwrap().kind, ErrorKind::InvalidInput);
@@ -1189,21 +1190,18 @@ mod tests {
             .unwrap();
         let root = tempfile::tempdir().unwrap();
         let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
-        let mut work = plan(
-            job_id,
-            format!("{}/owned.mp4", server.address),
-            data.len(),
-        );
+        let mut work = plan(job_id, format!("{}/owned.mp4", server.address), data.len());
         work.plan.assets[0].relative_path = format!("items/by-job-{digest:x}/video.mp4");
 
         let report = worker
             .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
             .unwrap();
         assert_eq!(report.completed, vec![job_id]);
-        assert!(root
-            .path()
-            .join(format!("items/by-job-{digest:x}/video.mp4"))
-            .is_file());
+        assert!(
+            root.path()
+                .join(format!("items/by-job-{digest:x}/video.mp4"))
+                .is_file()
+        );
     }
 
     #[test]
@@ -1398,21 +1396,3 @@ mod tests {
                 if current.state == DownloadState::Downloading {
                     let mut machine = DownloadStateMachine::new(current.state);
                     machine.transition(DownloadState::Paused).unwrap();
-                    current.state = machine.state();
-                    control_store.save_download_snapshot(&current).unwrap();
-                    return;
-                }
-                thread::sleep(std::time::Duration::from_millis(5));
-            }
-            panic!("worker never entered downloading state");
-        });
-        let report = worker
-            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
-            .unwrap();
-        controller.join().unwrap();
-        assert_eq!(report.paused, vec!["pause-job"]);
-        let durable = store.load_download_snapshots().unwrap().remove(0);
-        assert_eq!(durable.state, DownloadState::Paused);
-        assert!(report.canceled.is_empty());
-    }
-}
