@@ -1359,9 +1359,12 @@ mod tests {
     #[test]
     fn stale_partial_requires_full_storage_capacity() {
         let root = tempfile::tempdir().unwrap();
+        // A sparse partial consumes almost no storage. Concurrent CI work can
+        // reclaim gigabytes between this observation and the real preflight.
+        // Keep the shortage unambiguous across routine workspace churn.
         let expected = available_space_bytes(root.path())
             .unwrap()
-            .saturating_add(8192);
+            .saturating_add(8 * 1024 * 1024 * 1024);
         let relative_path = "items/storage/video.mp4";
         let final_path = root.path().join(relative_path);
         fs::create_dir_all(final_path.parent().unwrap()).unwrap();
