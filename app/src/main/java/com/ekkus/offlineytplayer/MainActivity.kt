@@ -353,7 +353,7 @@ internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenStat
     }
     return DownloadsScreenState.Ready(snapshots.map { snapshot ->
         val total = snapshot.totalBytes
-        val percent = if (total != null && total > 0) ((snapshot.bytesDownloaded.coerceAtMost(total) * 100L) / total).toInt() else 0
+        val percent = boundedDownloadPercent(snapshot.bytesDownloaded, total)
         DownloadRowModel(
             id = snapshot.jobId,
             title = SourceMetadataPolicy.title(checkNotNull(titlesByJobId[snapshot.jobId])),
@@ -363,6 +363,13 @@ internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenStat
             error = snapshot.lastError?.message?.let(SourceMetadataPolicy::diagnostic),
         )
     })
+}
+
+/** Never multiply untrusted byte counters in Long arithmetic before dividing. */
+internal fun boundedDownloadPercent(bytesDownloaded: Long, totalBytes: Long?): Int {
+    if (totalBytes == null || totalBytes <= 0L) return 0
+    val bounded = bytesDownloaded.coerceIn(0L, totalBytes)
+    return ((bounded.toDouble() / totalBytes.toDouble()) * 100.0).toInt().coerceIn(0, 100)
 }
 
 private fun CoreDownloadState.toUiState(): DownloadUiState = when (this) {
