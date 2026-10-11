@@ -1,7 +1,9 @@
 #!/bin/sh
-# Execute the mandatory RMD-1401a Android tests individually: a long comma-separated
-# runner class filter has produced a green Gradle invocation running only its first
-# class. Each fresh XML report must prove a non-skipped test from that exact class.
+# Execute mandatory RMD-1401a tests in separate fresh instrumentation invocations.
+# The Compose ACTION_SEND/settings tests have also intermittently hit
+# SnapshotStateObserver cross-thread state in the bulk suite; isolate their
+# ActivityScenario lifecycle and require executable-method evidence.
+# Each fresh XML report must prove a non-skipped test from that exact class.
 set -eu
 
 for required_class in \
@@ -29,6 +31,19 @@ do
 
     mkdir -p "$report_dir"
     cp -R app/build/outputs/androidTest-results/connected/. "$report_dir"/
-    python3 scripts/assert_android_smoke_execution.py \
-        --results-dir "$report_dir" --required-class "$required_class"
+    case "$required_class" in
+        com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest)
+            required_method="actionSendFlowsThroughAnalyzeSetupRealSchedulerWorkerLibraryAndBackStack" ;;
+        com.ekkus.offlineytplayer.Rmd1802SettingsObserverInstrumentedTest)
+            required_method="backgroundStoreUpdatePublishesAppearanceToComposeOnMainThread" ;;
+        *) required_method="" ;;
+    esac
+    if [ -n "$required_method" ]; then
+        python3 scripts/assert_android_smoke_execution.py \
+            --results-dir "$report_dir" --required-class "$required_class" \
+            --required-test "$required_class#$required_method"
+    else
+        python3 scripts/assert_android_smoke_execution.py \
+            --results-dir "$report_dir" --required-class "$required_class"
+    fi
 done
