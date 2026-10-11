@@ -141,8 +141,18 @@ fn redact_url_token(token: &str) -> String {
     let url_text = url_and_suffix.trim_end_matches([')', ']', '}', ',', ';', '\'', '"', '>']);
     let suffix = &url_and_suffix[url_text.len()..];
 
+    // A second URL inside the same token can carry credentials in what the
+    // first parser considers an ordinary path. Fail closed on the whole token.
+    let after_scheme = url_text
+        .find("://")
+        .map_or("", |index| &url_text[index + 3..]);
+    let nested = after_scheme.to_ascii_lowercase();
+    if nested.contains("http://") || nested.contains("https://") {
+        return format!("{prefix}[REDACTED_URL]{suffix}");
+    }
+
     Url::parse(url_text).map_or_else(
-        |_| token.to_string(),
+        |_| format!("{prefix}[REDACTED_URL]{suffix}"),
         |mut url| {
             if !url.username().is_empty() || url.password().is_some() {
                 let _ = url.set_username("REDACTED");
@@ -237,6 +247,29 @@ mod tests {
             let output = redact_sensitive(&input);
             assert!(!output.contains(marker), "{output}");
             assert!(output.contains("REDACTED"), "{output}");
+        }
+    }
+
+    #[test]
+    fn malformed_url_diagnostics_fail_closed() {
+        let marker = "RMD1802_MALFORMED_URL_SECRET";
+        let input = format!("fetch https://user:{marker}@[?sig={marker}");
+        let output = redact_sensitive(&input);
+        assert!(!output.contains(marker), "{output}");
+        assert!(output.contains("[REDACTED_URL]"), "{output}");
+    }
+
+    #[test]
+    fn nested_urls_in_a_single_token_fail_closed() {
+        let marker = "RMD1802_NESTED_URL_SECRET";
+        let inputs = [
+            format!("GET https://cdn.example/video/https://user:{marker}@other.example/file"),
+            format!("GET https://cdn.example/video,HTTPS://other.example/file?sig={marker}"),
+        ];
+        for input in inputs {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("[REDACTED_URL]"), "{output}");
         }
     }
 
