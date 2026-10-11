@@ -803,6 +803,8 @@ mod tests {
                         CoreError::new(ErrorKind::NetworkTimeout, "fixture", true),
                         outcome == DownloadState::RetryWait,
                         20_000,
+                    )
+                    .unwrap()
             };
             assert!(success);
             let durable = store.load_download_snapshots().unwrap().remove(0);
@@ -1293,3 +1295,46 @@ mod tests {
                 .state,
             DownloadState::Queued
         );
+    }
+
+    #[test]
+    fn durable_pause_is_not_reclassified_as_terminal_cancel() {
+        let data = vec![7_u8; 4 * 1024 * 1024];
+        let server =
+            FixtureServer::start_with_delay(data.clone(), std::time::Duration::from_millis(100));
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("pause-job", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let work = plan(
+            "pause-job",
+            format!("{}/pause.mp4", server.address),
+            data.len(),
+        );
+        let control_store = store.clone();
+        let controller = thread::spawn(move || {
+            for _ in 0..100 {
+                let mut current = control_store.load_download_snapshots().unwrap().remove(0);
+                if current.state == DownloadState::Downloading {
+                    let mut machine = DownloadStateMachine::new(current.state);
+                    machine.transition(DownloadState::Paused).unwrap();
+                    current.state = machine.state();
+                    control_store.save_download_snapshot(&current).unwrap();
+                    return;
+                }
+                thread::sleep(std::time::Duration::from_millis(5));
+            }
+            panic!("worker never entered downloading state");
+        });
+        let report = worker
+            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
+            .unwrap();
+        controller.join().unwrap();
+        assert_eq!(report.paused, vec!["pause-job"]);
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Paused);
+        assert!(report.canceled.is_empty());
+    }
+}
