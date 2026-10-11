@@ -2,7 +2,8 @@ use crate::{
     DownloadPolicy, DownloadWorkItem, DownloadWorker, DurableDownloadWorkStore,
     FfiCoreServiceOpenError, FfiError, LibraryStore,
 };
-use std::path::PathBuf;
+use sha2::{Digest, Sha256};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
@@ -122,6 +123,8 @@ impl FfiDownloadWorkerService {
             ));
         };
 
+        validate_url_job_asset_ownership(job_id, &work.plan.assets)?;
+
         let worker = DownloadWorker::new(
             LibraryStore::open(&self.database_path)?,
             &self.library_root,
@@ -155,6 +158,36 @@ impl FfiDownloadWorkerService {
     }
 }
 
+// Reject malformed persisted URL plans before they can write another job's assets.
+fn validate_url_job_asset_ownership(
+    job_id: &str,
+    assets: &[crate::DownloadPlanAsset],
+) -> Result<(), crate::CoreError> {
+    if crate::security::validate_http_url(job_id).is_err() {
+        return Ok(());
+    }
+    let digest = Sha256::digest(job_id.as_bytes());
+    let root = PathBuf::from("items").join(format!("by-job-{digest:x}"));
+    for asset in assets {
+        crate::security::validate_relative_library_path(&asset.relative_path)?;
+        let normalized: PathBuf = Path::new(&asset.relative_path)
+            .components()
+            .filter_map(|part| match part {
+                Component::Normal(name) => Some(name),
+                _ => None,
+            })
+            .collect();
+        if !normalized.starts_with(&root) || normalized == root {
+            return Err(crate::CoreError::new(
+                crate::ErrorKind::InvalidInput,
+                "download asset path is outside the claimed job directory",
+                false,
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod asset_identity_tests {
     use super::*;
@@ -162,6 +195,29 @@ mod asset_identity_tests {
         Compatibility, DownloadPlan, DownloadPlanAsset, DownloadState, DurableDownloadSnapshot,
         DurableDownloadWorkItem, ErrorKind, MediaKind, QualityChoice, SourceIdentity,
     };
+
+    #[test]
+    fn url_job_rejects_foreign_asset_directory() {
+        let job_id = "https://fixture.invalid/watch/one";
+        let digest = Sha256::digest(job_id.as_bytes());
+        let mut asset = DownloadPlanAsset {
+            asset_id: "video".into(),
+            kind: MediaKind::Video,
+            url: "http://127.0.0.1:1/fixture".into(),
+            relative_path: format!("items/by-job-{digest:x}/video.mp4"),
+            expected_bytes: None,
+            expected_sha256: None,
+            mime_type: None,
+        };
+        assert!(validate_url_job_asset_ownership(job_id, &[asset.clone()]).is_ok());
+        asset.relative_path = "items/by-job-someone-else/video.mp4".into();
+        assert_eq!(
+            validate_url_job_asset_ownership(job_id, &[asset])
+                .unwrap_err()
+                .kind,
+            ErrorKind::InvalidInput
+        );
+    }
 
     #[test]
     fn malformed_persisted_assets_settle_as_nonretryable_failure_through_ffi() {
