@@ -360,28 +360,31 @@ impl LibraryStore {
             .transpose()
             .map_err(json_error)?;
 
-        let changed = self.connection()?.execute(
-            "UPDATE download_jobs SET state_json=?1, bytes_downloaded=?2,
+        let changed = self
+            .connection()?
+            .execute(
+                "UPDATE download_jobs SET state_json=?1, bytes_downloaded=?2,
                 total_bytes=?3, attempt=?4, retry_at_epoch_ms=?5, error_json=?6
              WHERE job_id=?7 AND state_json=?8 AND bytes_downloaded=?9
                 AND total_bytes IS ?10 AND attempt=?11
                 AND retry_at_epoch_ms IS ?12 AND error_json IS ?13",
-            params![
-                next_state,
-                to_i64(next.bytes_downloaded)?,
-                next.total_bytes.map(to_i64).transpose()?,
-                i64::from(next.attempt),
-                next.retry_at_epoch_ms.map(to_i64).transpose()?,
-                next_error,
-                next.job_id,
-                previous_state,
-                to_i64(previous.bytes_downloaded)?,
-                previous.total_bytes.map(to_i64).transpose()?,
-                i64::from(previous.attempt),
-                previous.retry_at_epoch_ms.map(to_i64).transpose()?,
-                previous_error,
-            ],
-        ).map_err(db_error)?;
+                params![
+                    next_state,
+                    to_i64(next.bytes_downloaded)?,
+                    next.total_bytes.map(to_i64).transpose()?,
+                    i64::from(next.attempt),
+                    next.retry_at_epoch_ms.map(to_i64).transpose()?,
+                    next_error,
+                    next.job_id,
+                    previous_state,
+                    to_i64(previous.bytes_downloaded)?,
+                    previous.total_bytes.map(to_i64).transpose()?,
+                    i64::from(previous.attempt),
+                    previous.retry_at_epoch_ms.map(to_i64).transpose()?,
+                    previous_error,
+                ],
+            )
+            .map_err(db_error)?;
         Ok(changed == 1)
     }
 
@@ -707,21 +710,30 @@ mod tests {
         let mut first_claim = queued.clone();
         first_claim.state = DownloadState::Resolving;
         first_claim.attempt = 1;
-        assert!(worker_a
-            .replace_download_snapshot_if_unchanged(&queued, &first_claim)
-            .unwrap());
-        assert!(!worker_b
-            .replace_download_snapshot_if_unchanged(&stale, &first_claim)
-            .unwrap());
-        assert_eq!(worker_b.load_download_snapshots().unwrap(), vec![first_claim]);
+        assert!(
+            worker_a
+                .replace_download_snapshot_if_unchanged(&queued, &first_claim)
+                .unwrap()
+        );
+        assert!(
+            !worker_b
+                .replace_download_snapshot_if_unchanged(&stale, &first_claim)
+                .unwrap()
+        );
+        assert_eq!(
+            worker_b.load_download_snapshots().unwrap(),
+            vec![first_claim.clone()]
+        );
 
         // A pause racing a second claim must not be reverted to Resolving.
         let mut paused = first_claim.clone();
         paused.state = DownloadState::Paused;
         worker_b.save_download_snapshot(&paused).unwrap();
-        assert!(!worker_a
-            .replace_download_snapshot_if_unchanged(&first_claim, &queued)
-            .unwrap());
+        assert!(
+            !worker_a
+                .replace_download_snapshot_if_unchanged(&first_claim, &queued)
+                .unwrap()
+        );
         assert_eq!(worker_a.load_download_snapshots().unwrap(), vec![paused]);
     }
 
