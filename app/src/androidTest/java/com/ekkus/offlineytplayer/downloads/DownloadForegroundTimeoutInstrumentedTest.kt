@@ -55,6 +55,24 @@ class DownloadForegroundTimeoutInstrumentedTest {
         assertEquals(2, preferences.getInt(TIMEOUT_COUNT_KEY, 0))
     }
 
+    @Test
+    fun timeoutStateIsOnDiskBeforePersistReturns() {
+        preferences.edit().clear().commit()
+        DownloadForegroundTimeoutStore.persistTimeout(
+            context = context,
+            startId = 73,
+            foregroundServiceType = 1,
+        )
+
+        // Read the actual backing XML rather than SharedPreferences' in-memory
+        // cache. A service timeout may stop the process immediately afterward.
+        val diskFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/$PREFERENCES_NAME.xml")
+        val xml = diskFile.readText()
+        org.junit.Assert.assertTrue(xml.contains("name=\"$LAST_START_ID_KEY\" value=\"73\""))
+        org.junit.Assert.assertTrue(xml.contains("name=\"$LAST_FOREGROUND_SERVICE_TYPE_KEY\" value=\"1\""))
+        org.junit.Assert.assertTrue(xml.contains("name=\"$TIMEOUT_COUNT_KEY\" value=\"1\""))
+    }
+
     private companion object {
         const val PREFERENCES_NAME = "download_foreground_timeout"
         const val LAST_START_ID_KEY = "last_start_id"

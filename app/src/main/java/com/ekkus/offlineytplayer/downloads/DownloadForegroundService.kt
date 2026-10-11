@@ -98,7 +98,9 @@ internal object DownloadForegroundTimeoutStore {
             .putInt(LastStartIdKey, startId)
             .putInt(LastForegroundServiceTypeKey, foregroundServiceType)
             .putInt(TimeoutCountKey, preferences.getInt(TimeoutCountKey, 0) + 1)
-            .apply()
+            // onTimeout immediately stops the service; disk durability must not depend
+            // on an asynchronous apply() that can outlive the process.
+            .commit()
     }
 }
 
