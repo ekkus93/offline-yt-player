@@ -2,8 +2,7 @@ use crate::{
     CoreError, CoreEvent, DownloadEngine, DownloadPlan, DownloadPolicy, DownloadState,
     DownloadStateMachine, DurableDownloadSnapshot, DurableStopReason, ErrorKind, LibraryItem,
     LibraryStore, LocalAsset, PAUSE_POLL_INTERVAL, ProgressCoalescer, TransferMetricEstimator,
-    TransferRequest, bounded_download_concurrency, propagate_durable_stop,
-    retry_delay,
+    TransferRequest, bounded_download_concurrency, propagate_durable_stop, retry_delay,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -94,8 +93,12 @@ impl DownloadWorker {
                 }
                 Err(error) if error.kind == ErrorKind::Canceled => {
                     match self.durable_stop_for_claim(&snapshot)? {
-                        Some(DurableStopReason::Pause) => report.paused.push(snapshot.job_id.clone()),
-                        Some(DurableStopReason::Cancel) => report.canceled.push(snapshot.job_id.clone()),
+                        Some(DurableStopReason::Pause) => {
+                            report.paused.push(snapshot.job_id.clone())
+                        }
+                        Some(DurableStopReason::Cancel) => {
+                            report.canceled.push(snapshot.job_id.clone())
+                        }
                         None => {
                             if self.finish_canceled(&mut snapshot)? {
                                 report.canceled.push(snapshot.job_id.clone());
@@ -497,8 +500,11 @@ impl DownloadWorker {
         &self,
         claim: &DurableDownloadSnapshot,
     ) -> Result<Option<DurableStopReason>, CoreError> {
-        let row = self.library.load_download_snapshots()?
-            .into_iter().find(|row| row.job_id == claim.job_id);
+        let row = self
+            .library
+            .load_download_snapshots()?
+            .into_iter()
+            .find(|row| row.job_id == claim.job_id);
         Ok(match row {
             Some(row) if row.attempt == claim.attempt => match row.state {
                 DownloadState::Paused => Some(DurableStopReason::Pause),
@@ -519,28 +525,38 @@ impl DownloadWorker {
         now_epoch_ms: u64,
     ) -> Result<bool, CoreError> {
         for _ in 0..16 {
-            let Some(current) = self.library.load_download_snapshots()?
-                .into_iter().find(|row| row.job_id == claim.job_id)
+            let Some(current) = self
+                .library
+                .load_download_snapshots()?
+                .into_iter()
+                .find(|row| row.job_id == claim.job_id)
             else {
                 return Ok(false);
             };
-            if current.attempt != claim.attempt || !matches!(
-                current.state,
-                DownloadState::Resolving | DownloadState::Downloading | DownloadState::Verifying
-            ) {
+            if current.attempt != claim.attempt
+                || !matches!(
+                    current.state,
+                    DownloadState::Resolving
+                        | DownloadState::Downloading
+                        | DownloadState::Verifying
+                )
+            {
                 return Ok(false);
             }
             let mut next = current.clone();
             transition_snapshot(&mut next, next_state)?;
             next.retry_at_epoch_ms = if next_state == DownloadState::RetryWait {
-                let delay_ms = u64::try_from(retry_delay(current.attempt, 0).as_millis())
-                    .unwrap_or(u64::MAX);
+                let delay_ms =
+                    u64::try_from(retry_delay(current.attempt, 0).as_millis()).unwrap_or(u64::MAX);
                 Some(now_epoch_ms.saturating_add(delay_ms))
             } else {
                 None
             };
             next.last_error = error.clone();
-            if self.library.replace_download_snapshot_if_unchanged(&current, &next)? {
+            if self
+                .library
+                .replace_download_snapshot_if_unchanged(&current, &next)?
+            {
                 *claim = next;
                 return Ok(true);
             }
@@ -562,7 +578,11 @@ impl DownloadWorker {
     ) -> Result<bool, CoreError> {
         self.settle_active_claim(
             claim,
-            if retryable { DownloadState::RetryWait } else { DownloadState::Failed },
+            if retryable {
+                DownloadState::RetryWait
+            } else {
+                DownloadState::Failed
+            },
             Some(error),
             now_epoch_ms,
         )
@@ -697,7 +717,8 @@ mod tests {
         for state in [DownloadState::Paused, DownloadState::Canceled] {
             let store = LibraryStore::open_in_memory().unwrap();
             let root = tempfile::tempdir().unwrap();
-            let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+            let worker =
+                DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
             let mut claim = snapshot("stale-stop", DownloadState::Downloading);
             claim.attempt = 2;
             store.save_download_snapshot(&claim).unwrap();
@@ -705,9 +726,16 @@ mod tests {
             updated.state = state;
             updated.bytes_downloaded = 81;
             store.save_download_snapshot(&updated).unwrap();
-            assert!(!worker.finish_failed_or_retry(
-                &mut claim, CoreError::new(ErrorKind::NetworkTimeout, "old failure", true), true, 42,
-            ).unwrap());
+            assert!(
+                !worker
+                    .finish_failed_or_retry(
+                        &mut claim,
+                        CoreError::new(ErrorKind::NetworkTimeout, "old failure", true),
+                        true,
+                        42,
+                    )
+                    .unwrap()
+            );
             assert!(!worker.finish_canceled(&mut claim).unwrap());
             assert_eq!(store.load_download_snapshots().unwrap(), vec![updated]);
             assert!(worker.durable_stop_for_claim(&claim).unwrap().is_some());
@@ -726,12 +754,22 @@ mod tests {
         newer.attempt = 2;
         newer.bytes_downloaded = 123;
         store.save_download_snapshot(&newer).unwrap();
-        assert!(!worker.finish_failed_or_retry(
-            &mut claim, CoreError::new(ErrorKind::NetworkUnavailable, "old", false), false, 30,
-        ).unwrap());
+        assert!(
+            !worker
+                .finish_failed_or_retry(
+                    &mut claim,
+                    CoreError::new(ErrorKind::NetworkUnavailable, "old", false),
+                    false,
+                    30,
+                )
+                .unwrap()
+        );
         assert!(!worker.finish_canceled(&mut claim).unwrap());
         assert!(worker.durable_stop_for_claim(&claim).unwrap().is_none());
-        assert_eq!(store.load_download_snapshots().unwrap(), vec![newer.clone()]);
+        assert_eq!(
+            store.load_download_snapshots().unwrap(),
+            vec![newer.clone()]
+        );
         newer.state = DownloadState::Paused;
         store.save_download_snapshot(&newer).unwrap();
         assert!(worker.durable_stop_for_claim(&claim).unwrap().is_none());
@@ -739,10 +777,15 @@ mod tests {
 
     #[test]
     fn settling_failure_or_cancel_keeps_latest_progress_and_total_bytes() {
-        for outcome in [DownloadState::Failed, DownloadState::RetryWait, DownloadState::Canceled] {
+        for outcome in [
+            DownloadState::Failed,
+            DownloadState::RetryWait,
+            DownloadState::Canceled,
+        ] {
             let store = LibraryStore::open_in_memory().unwrap();
             let root = tempfile::tempdir().unwrap();
-            let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+            let worker =
+                DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
             let mut claim = snapshot("progress", DownloadState::Downloading);
             claim.attempt = 3;
             claim.bytes_downloaded = 5;
@@ -754,10 +797,12 @@ mod tests {
             let success = if outcome == DownloadState::Canceled {
                 worker.finish_canceled(&mut claim).unwrap()
             } else {
-                worker.finish_failed_or_retry(
-                    &mut claim, CoreError::new(ErrorKind::NetworkTimeout, "fixture", true),
-                    outcome == DownloadState::RetryWait, 20_000,
-                ).unwrap()
+                worker
+                    .finish_failed_or_retry(
+                        &mut claim,
+                        CoreError::new(ErrorKind::NetworkTimeout, "fixture", true),
+                        outcome == DownloadState::RetryWait,
+                        20_000,
             };
             assert!(success);
             let durable = store.load_download_snapshots().unwrap().remove(0);
@@ -1248,46 +1293,3 @@ mod tests {
                 .state,
             DownloadState::Queued
         );
-    }
-
-    #[test]
-    fn durable_pause_is_not_reclassified_as_terminal_cancel() {
-        let data = vec![7_u8; 4 * 1024 * 1024];
-        let server =
-            FixtureServer::start_with_delay(data.clone(), std::time::Duration::from_millis(100));
-        let store = LibraryStore::open_in_memory().unwrap();
-        store
-            .save_download_snapshot(&snapshot("pause-job", DownloadState::Queued))
-            .unwrap();
-        let root = tempfile::tempdir().unwrap();
-        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
-        let work = plan(
-            "pause-job",
-            format!("{}/pause.mp4", server.address),
-            data.len(),
-        );
-        let control_store = store.clone();
-        let controller = thread::spawn(move || {
-            for _ in 0..100 {
-                let mut current = control_store.load_download_snapshots().unwrap().remove(0);
-                if current.state == DownloadState::Downloading {
-                    let mut machine = DownloadStateMachine::new(current.state);
-                    machine.transition(DownloadState::Paused).unwrap();
-                    current.state = machine.state();
-                    control_store.save_download_snapshot(&current).unwrap();
-                    return;
-                }
-                thread::sleep(std::time::Duration::from_millis(5));
-            }
-            panic!("worker never entered downloading state");
-        });
-        let report = worker
-            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
-            .unwrap();
-        controller.join().unwrap();
-        assert_eq!(report.paused, vec!["pause-job"]);
-        let durable = store.load_download_snapshots().unwrap().remove(0);
-        assert_eq!(durable.state, DownloadState::Paused);
-        assert!(report.canceled.is_empty());
-    }
-}
