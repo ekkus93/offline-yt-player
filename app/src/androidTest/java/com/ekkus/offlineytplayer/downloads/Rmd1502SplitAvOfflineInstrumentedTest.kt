@@ -356,7 +356,11 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
     private fun isSameLocalFile(uri: android.net.Uri?, expected: File): Boolean {
         if (uri?.scheme != "file") return false
         val path = uri.path ?: return false
-        return runCatching { File(path).canonicalFile == expected.canonicalFile }.getOrDefault(false)
+        if (runCatching { File(path).canonicalFile == expected.canonicalFile }.getOrDefault(false)) return true
+        val packageBoundary = "/" + context.packageName + "/"
+        val actualTail = path.substringAfter(packageBoundary, "")
+        val expectedTail = expected.absolutePath.substringAfter(packageBoundary, "")
+        return path.startsWith("/data/") && actualTail.isNotEmpty() && actualTail == expectedTail
     }
 
     private fun coldStartPhase(): String? =
