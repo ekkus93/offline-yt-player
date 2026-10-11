@@ -309,7 +309,10 @@ mod stale_control_tests {
             .unwrap();
 
         let scheduled = service.enqueue(job_id.into());
-        assert!(scheduled.updated && scheduled.error.is_none(), "{scheduled:?}");
+        assert!(
+            scheduled.updated && scheduled.error.is_none(),
+            "{scheduled:?}"
+        );
         let before = library.load_download_snapshots().unwrap();
         assert_eq!(before[0].state, DownloadState::Queued);
         assert_eq!(before[0].attempt, 0);
@@ -318,7 +321,10 @@ mod stale_control_tests {
             crate::FfiDownloadWorkerService::open(path.to_string_lossy().into_owned()).unwrap();
         let settled = worker.execute_job(job_id.into(), 10_000, 1);
         assert!(settled.executed && settled.failed, "{settled:?}");
-        assert_eq!(library.load_download_snapshots().unwrap()[0].state, DownloadState::Failed);
+        assert_eq!(
+            library.load_download_snapshots().unwrap()[0].state,
+            DownloadState::Failed
+        );
         assert!(!service.enqueue(job_id.into()).updated);
     }
 
