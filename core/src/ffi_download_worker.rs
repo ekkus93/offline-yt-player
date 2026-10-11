@@ -251,6 +251,12 @@ mod asset_identity_tests {
             let error = snapshot.last_error.as_ref().expect("durable error");
             assert_eq!(error.kind, ErrorKind::InvalidInput, "{defect}");
             assert!(!error.retryable, "{defect}");
+            // A subsequent scheduler invocation must not reclaim malformed work.
+            // The durable FAILED settlement is terminal until an explicit retry.
+            let second_run = service.execute_job(job_id.clone(), 20_000, 1);
+            assert!(!second_run.executed, "{defect}: {second_run:?}");
+            assert!(!second_run.completed && !second_run.retry_wait, "{defect}");
+            assert_eq!(library.load_download_snapshots().unwrap()[0].attempt, 1, "{defect}");
             assert!(library.list(None).unwrap().is_empty(), "{defect}");
             assert!(library.staged_job_ids().unwrap().is_empty(), "{defect}");
             assert!(
