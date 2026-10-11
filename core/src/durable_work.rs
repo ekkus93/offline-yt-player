@@ -97,6 +97,65 @@ impl DurableDownloadWorkStore {
         transaction.commit().map_err(db_error)
     }
 
+    /// Atomically create an executable plan, its presentation, and its queue
+    /// entry. Duplicate job IDs are no-ops, never plan/queue overwrites.
+    pub fn enqueue_if_absent(&self, work: &DurableDownloadWorkItem) -> Result<bool, CoreError> {
+        if work.job_id.trim().is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "download work job id must not be empty",
+                false,
+            ));
+        }
+        if !work.plan.assets.iter().any(|asset| {
+            matches!(asset.kind, crate::MediaKind::Video | crate::MediaKind::Audio)
+        }) {
+            return Err(CoreError::new(
+                ErrorKind::NoCompatibleFormat,
+                "download plan contains no playable media assets",
+                false,
+            ));
+        }
+        let plan_json = serde_json::to_string(&work.plan).map_err(json_error)?;
+        let queued_json =
+            serde_json::to_string(&crate::DownloadState::Queued).map_err(json_error)?;
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction().map_err(db_error)?;
+        let inserted = transaction
+            .execute(
+                "INSERT INTO download_jobs
+                 (job_id, state_json, bytes_downloaded, total_bytes, attempt,
+                  retry_at_epoch_ms, error_json)
+                 VALUES(?1, ?2, 0, ?3, 0, NULL, NULL)
+                 ON CONFLICT(job_id) DO NOTHING",
+                params![
+                    work.job_id,
+                    queued_json,
+                    work.plan.quality.estimated_bytes.map(to_i64).transpose()?
+                ],
+            )
+            .map_err(db_error)?;
+        if inserted == 0 {
+            return Ok(false);
+        }
+        transaction
+            .execute(
+                "INSERT INTO download_work_items(job_id, plan_json, created_at_epoch_ms)
+                 VALUES(?1, ?2, ?3)",
+                params![work.job_id, plan_json, to_i64(work.created_at_epoch_ms)?],
+            )
+            .map_err(db_error)?;
+        transaction
+            .execute(
+                "INSERT INTO download_presentations(job_id, display_title)
+                 VALUES(?1, ?2)",
+                params![work.job_id, work.plan.title],
+            )
+            .map_err(db_error)?;
+        transaction.commit().map_err(db_error)?;
+        Ok(true)
+    }
+
     pub fn load_all(&self) -> Result<Vec<DurableDownloadWorkItem>, CoreError> {
         let connection = self.connection()?;
         let mut statement = connection
@@ -233,6 +292,29 @@ mod tests {
         assert_eq!(error.kind, ErrorKind::NoCompatibleFormat);
         assert!(store.load_all().unwrap().is_empty());
         assert!(store.load_presentations().unwrap().is_empty());
+    }
+
+    #[test]
+    fn atomic_enqueue_rejects_duplicate_without_changing_plan_or_queue() {
+        let temp = tempdir().unwrap();
+        let database = temp.path().join("library.sqlite3");
+        let library = crate::LibraryStore::open(&database).unwrap();
+        let first = work();
+        let a = DurableDownloadWorkStore::open(&database).unwrap();
+        let b = DurableDownloadWorkStore::open(&database).unwrap();
+        assert!(a.enqueue_if_absent(&first).unwrap());
+        let mut competing = first.clone();
+        competing.plan.title = "Incorrect duplicate".into();
+        assert!(!b.enqueue_if_absent(&competing).unwrap());
+        assert_eq!(a.load_all().unwrap(), vec![first]);
+        assert_eq!(
+            b.load_presentations().unwrap(),
+            vec![("fixture-job".into(), "Fixture".into())]
+        );
+        let queue = library.load_download_snapshots().unwrap();
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].state, crate::DownloadState::Queued);
+        assert_eq!(queue[0].attempt, 0);
     }
 
     #[test]

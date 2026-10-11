@@ -330,6 +330,40 @@ impl LibraryStore {
         Ok(())
     }
 
+    /// Enqueue a new queue-only job without replacing a concurrently created
+    /// or already active job with the same identifier.
+    pub(crate) fn insert_download_snapshot_if_absent(
+        &self,
+        snapshot: &DurableDownloadSnapshot,
+    ) -> Result<bool, CoreError> {
+        let state = serde_json::to_string(&snapshot.state).map_err(json_error)?;
+        let error = snapshot
+            .last_error
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(json_error)?;
+        let changed = self
+            .connection()?
+            .execute(
+                "INSERT INTO download_jobs (job_id, state_json, bytes_downloaded,
+                 total_bytes, attempt, retry_at_epoch_ms, error_json)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(job_id) DO NOTHING",
+                params![
+                    snapshot.job_id,
+                    state,
+                    to_i64(snapshot.bytes_downloaded)?,
+                    snapshot.total_bytes.map(to_i64).transpose()?,
+                    i64::from(snapshot.attempt),
+                    snapshot.retry_at_epoch_ms.map(to_i64).transpose()?,
+                    error
+                ],
+            )
+            .map_err(db_error)?;
+        Ok(changed == 1)
+    }
+
     /// Atomically replace a previously observed durable row. Other SQLite connections
     /// (for example foreground and user-initiated Android workers) may have claimed or
     /// paused the job after it was read. A stale observation must never overwrite them.
@@ -735,6 +769,27 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(worker_a.load_download_snapshots().unwrap(), vec![paused]);
+    }
+
+    #[test]
+    fn queue_only_enqueue_preserves_an_existing_active_job() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let queued = DurableDownloadSnapshot {
+            job_id: "enqueue-race".into(),
+            state: DownloadState::Queued,
+            bytes_downloaded: 0,
+            total_bytes: None,
+            attempt: 0,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        };
+        assert!(store.insert_download_snapshot_if_absent(&queued).unwrap());
+        let mut active = queued.clone();
+        active.state = DownloadState::Downloading;
+        active.attempt = 1;
+        store.save_download_snapshot(&active).unwrap();
+        assert!(!store.insert_download_snapshot_if_absent(&queued).unwrap());
+        assert_eq!(store.load_download_snapshots().unwrap(), vec![active]);
     }
 
     #[test]

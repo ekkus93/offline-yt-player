@@ -146,33 +146,21 @@ impl FfiDownloadControlService {
             subtitle_track_id,
             audio_format_id,
         )?;
-        let work_store = match &executable_work {
-            Some(_) => Some(DurableDownloadWorkStore::open(&self.database_path)?),
-            None => None,
-        };
-        if let (Some(store), Some(work)) = (&work_store, &executable_work) {
-            store.save(work)?;
+        match executable_work {
+            Some(work) => DurableDownloadWorkStore::open(&self.database_path)?
+                .enqueue_if_absent(&work),
+            None => self
+                .library
+                .insert_download_snapshot_if_absent(&DurableDownloadSnapshot {
+                    job_id: job_id.into(),
+                    state: DownloadState::Queued,
+                    bytes_downloaded: 0,
+                    total_bytes: None,
+                    attempt: 0,
+                    retry_at_epoch_ms: None,
+                    last_error: None,
+                }),
         }
-        let save_result = self
-            .library
-            .save_download_snapshot(&DurableDownloadSnapshot {
-                job_id: job_id.into(),
-                state: DownloadState::Queued,
-                bytes_downloaded: 0,
-                total_bytes: executable_work
-                    .as_ref()
-                    .and_then(|work| work.plan.quality.estimated_bytes),
-                attempt: 0,
-                retry_at_epoch_ms: None,
-                last_error: None,
-            });
-        if let Err(error) = save_result {
-            if let Some(store) = work_store {
-                let _ = store.delete(job_id);
-            }
-            return Err(error);
-        }
-        Ok(true)
     }
 
     fn transition(&self, job_id: &str, next: DownloadState) -> FfiDownloadControlResult {
