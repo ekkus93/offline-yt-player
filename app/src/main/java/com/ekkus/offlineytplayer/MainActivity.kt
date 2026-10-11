@@ -317,11 +317,11 @@ internal fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
             title = SourceMetadataPolicy.title(item.displayTitle),
             detail = item.libraryDetail(playback),
             completed = item.completed && playback?.playable == true,
-            videoPath = playback?.takeIf { it.playable }?.videoRelativePath?.let { libraryRoot.resolve(it).absolutePath },
-            audioPath = playback?.takeIf { it.playable }?.audioRelativePath?.let { libraryRoot.resolve(it).absolutePath },
+            videoPath = playback?.takeIf { it.playable }?.videoRelativePath?.let { safeLocalPlaybackPath(libraryRoot, it) ?: return LibraryScreenState.Failed("Library playback asset path is invalid.") },
+            audioPath = playback?.takeIf { it.playable }?.audioRelativePath?.let { safeLocalPlaybackPath(libraryRoot, it) ?: return LibraryScreenState.Failed("Library playback asset path is invalid.") },
             subtitleTracks = playback?.takeIf { it.playable }?.subtitleTracks.orEmpty().map { track ->
                 LocalSubtitleTrack(
-                    path = libraryRoot.resolve(track.relativePath).absolutePath,
+                    path = safeLocalPlaybackPath(libraryRoot, track.relativePath) ?: return LibraryScreenState.Failed("Library subtitle asset path is invalid."),
                     language = track.language,
                     label = track.language,
                     mimeType = track.mimeType,
@@ -330,6 +330,16 @@ internal fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
             resumePositionMs = item.playbackPositionMs,
         )
     })
+}
+
+/** Resolve durable media paths only within the canonical app-private library root. */
+internal fun safeLocalPlaybackPath(libraryRoot: File, relativePath: String): String? {
+    if (relativePath.isBlank() || relativePath.contains(Char(0)) || File(relativePath).isAbsolute) return null
+    return runCatching {
+        val root = libraryRoot.canonicalFile
+        val candidate = File(root, relativePath).canonicalFile
+        candidate.takeIf { it != root && it.toPath().startsWith(root.toPath()) }?.absolutePath
+    }.getOrNull()
 }
 
 private fun CoreLibraryItem.libraryDetail(playback: CoreLibraryPlaybackAsset?): String = listOfNotNull(
