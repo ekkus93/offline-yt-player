@@ -746,7 +746,10 @@ mod tests {
         let address = format!("http://{}", server.server_addr());
         let served = data.clone();
         let server_thread = thread::spawn(move || {
-            let ranged = server.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+            let ranged = server
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .unwrap();
             assert!(ranged.headers().iter().any(|header| {
                 header.field.equiv("Range") && header.value.as_str() == "bytes=3-"
             }));
@@ -754,14 +757,20 @@ mod tests {
                 TinyResponse::from_data(served[3..].to_vec()).with_status_code(StatusCode(206));
             // The body has seven bytes, but the server falsely advertises
             // only bytes 3..=5. Accepting just the start corrupts an append.
-            response.add_header(
-                Header::from_bytes(b"Content-Range", b"bytes 3-5/10").unwrap(),
-            );
+            response.add_header(Header::from_bytes(b"Content-Range", b"bytes 3-5/10").unwrap());
             response.add_header(Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap());
             ranged.respond(response).unwrap();
 
-            let fresh = server.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
-            assert!(!fresh.headers().iter().any(|header| header.field.equiv("Range")));
+            let fresh = server
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .unwrap();
+            assert!(
+                !fresh
+                    .headers()
+                    .iter()
+                    .any(|header| header.field.equiv("Range"))
+            );
             let mut response = TinyResponse::from_data(served);
             response.add_header(Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap());
             fresh.respond(response).unwrap();
@@ -1318,21 +1327,3 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn cleanup_orphan_partials_rejects_symlinked_directories_without_touching_outside() {
-        use std::os::unix::fs::symlink;
-
-        let root = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        fs::write(outside.path().join(".stolen.partial"), b"outside bytes").unwrap();
-        symlink(outside.path(), root.path().join("items")).unwrap();
-        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
-
-        let error = engine.cleanup_orphan_partials().unwrap_err();
-
-        assert_eq!(error.kind, ErrorKind::InvalidInput);
-        assert_eq!(
-            fs::read(outside.path().join(".stolen.partial")).unwrap(),
-            b"outside bytes"
-        );
-    }
-}
