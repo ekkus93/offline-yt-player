@@ -8,6 +8,7 @@ use crate::{
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct DownloadWorkItem {
@@ -299,10 +300,12 @@ impl DownloadWorker {
         let mut assets = Vec::new();
         let mut coalescer = ProgressCoalescer::default();
         let mut metric_estimator = TransferMetricEstimator::default();
-        let mut progress_epoch_ms = now_epoch_ms;
+        // Record transfer time from a monotonic clock, not synthetic fixed
+        // one-second steps per asset. Speed/ETA must reflect real elapsed time.
+        let transfer_started = Instant::now();
         let mut progress_events = Vec::new();
         metric_estimator.observe(
-            progress_epoch_ms,
+            now_epoch_ms,
             snapshot.bytes_downloaded,
             snapshot.total_bytes,
         );
@@ -323,7 +326,9 @@ impl DownloadWorker {
             };
             let result = self.transfer_with_durable_stop(engine, &item.job_id, &request, cancel)?;
             snapshot.bytes_downloaded = snapshot.bytes_downloaded.saturating_add(result.bytes);
-            progress_epoch_ms = progress_epoch_ms.saturating_add(1_000);
+            let elapsed_ms = u64::try_from(transfer_started.elapsed().as_millis())
+                .unwrap_or(u64::MAX);
+            let progress_epoch_ms = now_epoch_ms.saturating_add(elapsed_ms);
             let metrics = metric_estimator.observe(
                 progress_epoch_ms,
                 snapshot.bytes_downloaded,
@@ -727,7 +732,10 @@ mod tests {
     #[test]
     fn worker_emits_real_progress_bytes_speed_and_eta_for_known_length_transfer() {
         let data = b"metric fixture".repeat(64);
-        let server = FixtureServer::start(data.clone());
+        let server = FixtureServer::start_with_delay(
+            data.clone(),
+            std::time::Duration::from_millis(100),
+        );
         let store = LibraryStore::open_in_memory().unwrap();
         store
             .save_download_snapshot(&snapshot("metric-job", DownloadState::Queued))
@@ -759,14 +767,19 @@ mod tests {
         assert_eq!(job_id, "metric-job");
         assert_eq!(*bytes_downloaded, data.len() as u64);
         assert_eq!(*total_bytes, Some(data.len() as u64));
-        assert_eq!(metrics.bytes_per_second, Some(data.len() as u64));
+        // With a real network delay, measured speed is positive but does not
+        // pretend that each transfer took precisely one synthetic second.
+        assert!(metrics.bytes_per_second.is_some_and(|speed| speed > 0));
         assert_eq!(metrics.eta_seconds, Some(0));
     }
 
     #[test]
     fn worker_does_not_fabricate_eta_for_unknown_length_transfer() {
         let data = b"unknown metric fixture".repeat(32);
-        let server = FixtureServer::start(data.clone());
+        let server = FixtureServer::start_with_delay(
+            data.clone(),
+            std::time::Duration::from_millis(100),
+        );
         let store = LibraryStore::open_in_memory().unwrap();
         store
             .save_download_snapshot(&snapshot("unknown-job", DownloadState::Queued))
@@ -796,7 +809,7 @@ mod tests {
         };
         assert_eq!(*bytes_downloaded, data.len() as u64);
         assert_eq!(*total_bytes, None);
-        assert_eq!(metrics.bytes_per_second, Some(data.len() as u64));
+        assert!(metrics.bytes_per_second.is_some_and(|speed| speed > 0));
         assert_eq!(metrics.eta_seconds, None);
     }
 
