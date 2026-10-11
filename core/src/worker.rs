@@ -125,6 +125,7 @@ impl DownloadWorker {
                 snapshot.state,
                 DownloadState::Resolving | DownloadState::Downloading | DownloadState::Verifying
             ) {
+                let previous = snapshot.clone();
                 transition_snapshot(&mut snapshot, DownloadState::RetryWait)?;
                 snapshot.retry_at_epoch_ms = Some(now_epoch_ms);
                 snapshot.last_error = Some(CoreError::new(
@@ -132,8 +133,14 @@ impl DownloadWorker {
                     "Download was interrupted before completion",
                     true,
                 ));
-                self.library.save_download_snapshot(&snapshot)?;
-                report.repaired.push(snapshot.job_id);
+                // A concurrent worker may have completed, paused, or canceled
+                // this row since the recovery scan. Never resurrect stale work.
+                if self
+                    .library
+                    .replace_download_snapshot_if_unchanged(&previous, &snapshot)?
+                {
+                    report.repaired.push(snapshot.job_id);
+                }
             }
         }
         Ok(report)

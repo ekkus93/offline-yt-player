@@ -738,6 +738,35 @@ mod tests {
     }
 
     #[test]
+    fn stale_recovery_compare_and_swap_preserves_completed_job() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let running = DurableDownloadSnapshot {
+            job_id: "recovery-race".into(),
+            state: DownloadState::Downloading,
+            bytes_downloaded: 42,
+            total_bytes: Some(100),
+            attempt: 1,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        };
+        store.save_download_snapshot(&running).unwrap();
+        let mut completed = running.clone();
+        completed.state = DownloadState::Completed;
+        completed.bytes_downloaded = 100;
+        store.save_download_snapshot(&completed).unwrap();
+
+        let mut stale_repair = running.clone();
+        stale_repair.state = DownloadState::RetryWait;
+        stale_repair.retry_at_epoch_ms = Some(10_000);
+        assert!(
+            !store
+                .replace_download_snapshot_if_unchanged(&running, &stale_repair)
+                .unwrap()
+        );
+        assert_eq!(store.load_download_snapshots().unwrap(), vec![completed]);
+    }
+
+    #[test]
     fn durable_download_snapshot_round_trips() {
         let store = LibraryStore::open_in_memory().unwrap();
         let snapshot = DurableDownloadSnapshot {
