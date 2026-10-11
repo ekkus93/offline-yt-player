@@ -304,6 +304,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             try {
                 var readyFromLocalFile = false
                 var observedPlayback = "not observed"
+                val expectedCanonicalFile = localFile.canonicalFile
                 val deadline = SystemClock.elapsedRealtime() + 20_000L
                 while (SystemClock.elapsedRealtime() < deadline) {
                     instrumentation.runOnMainSync {
@@ -312,10 +313,15 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
                         val playing = controller.playWhenReady
                         observedPlayback =
                             "state=$state, playWhenReady=$playing, positionMs=${controller.currentPosition}, uri=$uri"
+                        // /data/data and /data/user/0 can refer to the same
+                        // Android app-private file. Require actual file identity,
+                        // not an identical textual URI spelling.
+                        val expectedLocalUri = uri?.scheme == "file" &&
+                            uri.path?.let { File(it).canonicalFile == expectedCanonicalFile } == true
                         readyFromLocalFile =
                             state == Player.STATE_READY &&
                                 playing &&
-                                uri == Uri.fromFile(localFile)
+                                expectedLocalUri
                     }
                     if (readyFromLocalFile) break
                     SystemClock.sleep(50)
