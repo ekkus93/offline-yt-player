@@ -103,7 +103,7 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             CoreSourceAnalysis(
                 sourceUrl = SOURCE_URL,
                 title = TITLE,
-                durationMs = 5_000,
+                durationMs = 90_000,
                 thumbnailUrl = null,
                 qualityLabel = "Fixture WAV",
                 estimatedBytes = wave.size.toLong(),
@@ -303,19 +303,26 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
             val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
             try {
                 var readyFromLocalFile = false
+                var observedPlayback = "not observed"
                 val deadline = SystemClock.elapsedRealtime() + 20_000L
                 while (SystemClock.elapsedRealtime() < deadline) {
                     instrumentation.runOnMainSync {
+                        val state = controller.playbackState
+                        val uri = controller.currentMediaItem?.localConfiguration?.uri
+                        val playing = controller.playWhenReady
+                        observedPlayback =
+                            "state=$state, playWhenReady=$playing, positionMs=${controller.currentPosition}, uri=$uri"
                         readyFromLocalFile =
-                            controller.playbackState == Player.STATE_READY &&
-                                controller.playWhenReady &&
-                                controller.currentMediaItem?.localConfiguration?.uri == Uri.fromFile(localFile)
+                            state == Player.STATE_READY &&
+                                playing &&
+                                uri == Uri.fromFile(localFile)
                     }
                     if (readyFromLocalFile) break
                     SystemClock.sleep(50)
                 }
                 assertTrue(
-                    "cold-started production MediaSession must play the persisted local fixture with source network disabled",
+                    "cold-started production MediaSession must play the persisted local fixture with source network disabled; " +
+                        observedPlayback,
                     readyFromLocalFile,
                 )
             } finally {
@@ -351,7 +358,10 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
 
     private fun deterministicWaveBytes(): ByteArray {
         val sampleRate = 8_000
-        val seconds = 5
+        // The test reconnects to a production MediaSession after a host force-stop.
+        // Five-second media can already reach STATE_ENDED on a software emulator
+        // before the controller attaches, making healthy offline playback fail.
+        val seconds = 90
         val pcmBytes = sampleRate * 2 * seconds
         val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
         header.put("RIFF".toByteArray(StandardCharsets.US_ASCII))
