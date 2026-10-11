@@ -256,7 +256,11 @@ mod asset_identity_tests {
             let second_run = service.execute_job(job_id.clone(), 20_000, 1);
             assert!(!second_run.executed, "{defect}: {second_run:?}");
             assert!(!second_run.completed && !second_run.retry_wait, "{defect}");
-            assert_eq!(library.load_download_snapshots().unwrap()[0].attempt, 1, "{defect}");
+            assert_eq!(
+                library.load_download_snapshots().unwrap()[0].attempt,
+                1,
+                "{defect}"
+            );
             assert!(library.list(None).unwrap().is_empty(), "{defect}");
             assert!(library.staged_job_ids().unwrap().is_empty(), "{defect}");
             assert!(
