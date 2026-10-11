@@ -193,7 +193,7 @@ impl DownloadEngine {
             let representation_matches = prepare_partial_reuse(&partial_path, &observed)?;
             if representation_matches
                 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT
-                && content_range_starts_at(&response, existing)
+                && complete_resume_range(&response, existing).is_some()
             {
                 append = true;
                 start = existing;
@@ -206,13 +206,27 @@ impl DownloadEngine {
             prepare_partial_reuse(&partial_path, &observed)?;
         }
 
-        if append && !content_range_starts_at(&response, start) {
-            return Err(CoreError::new(
-                ErrorKind::IntegrityFailure,
-                "Server returned an unexpected resume range",
-                true,
-            ));
-        }
+        // A ranged response must cover precisely the remaining tail of the
+        // representation, never merely advertise the correct starting offset.
+        let expected_resume_total = if append {
+            Some(complete_resume_range(&response, start).ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::IntegrityFailure,
+                    "Server returned an inconsistent resume range",
+                    true,
+                )
+            })?)
+        } else {
+            // An unsolicited 206 is not evidence of a complete asset.
+            if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                return Err(CoreError::new(
+                    ErrorKind::IntegrityFailure,
+                    "Server returned a partial response to a full download",
+                    true,
+                ));
+            }
+            None
+        };
 
         let declared_body = response
             .headers()
@@ -312,6 +326,15 @@ impl DownloadEngine {
             return Err(CoreError::new(
                 ErrorKind::IntegrityFailure,
                 "Response body was shorter than its declared content length",
+                true,
+            ));
+        }
+        if let Some(expected_total) = expected_resume_total
+            && total != expected_total
+        {
+            return Err(CoreError::new(
+                ErrorKind::IntegrityFailure,
+                "Resumed body did not contain the advertised remaining range",
                 true,
             ));
         }
@@ -468,15 +491,24 @@ fn ensure_path_not_symlink(path: &Path) -> Result<(), CoreError> {
     }
 }
 
-fn content_range_starts_at(response: &Response, expected: u64) -> bool {
-    response
-        .headers()
-        .get(CONTENT_RANGE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("bytes "))
-        .and_then(|value| value.split_once('-'))
-        .and_then(|(start, _)| start.parse::<u64>().ok())
-        == Some(expected)
+fn complete_resume_range(response: &Response, expected_start: u64) -> Option<u64> {
+    let value = response.headers().get(CONTENT_RANGE)?.to_str().ok()?;
+    let (range, complete) = value.strip_prefix("bytes ")?.split_once('/')?;
+    let (first, last) = range.split_once('-')?;
+    let first = first.parse::<u64>().ok()?;
+    let last = last.parse::<u64>().ok()?;
+    let complete = complete.parse::<u64>().ok()?;
+    if first != expected_start || last < first || last.checked_add(1)? != complete {
+        return None;
+    }
+    // A 206 with a smaller range body cannot prove the promised tail.
+    if let Some(length) = response.headers().get(CONTENT_LENGTH) {
+        let declared = length.to_str().ok()?.parse::<u64>().ok()?;
+        if declared != complete.checked_sub(expected_start)? {
+            return None;
+        }
+    }
+    Some(complete)
 }
 
 fn sha256_file(path: &Path) -> Result<String, CoreError> {
@@ -705,6 +737,67 @@ mod tests {
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert_eq!(fs::read(&partial).unwrap(), &data[..3]);
         assert!(!final_path.exists());
+    }
+
+    #[test]
+    fn malformed_resume_range_restarts_without_appending_unproven_bytes() {
+        let data = b"0123456789".to_vec();
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", server.server_addr());
+        let served = data.clone();
+        let server_thread = thread::spawn(move || {
+            let ranged = server.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+            assert!(ranged.headers().iter().any(|header| {
+                header.field.equiv("Range") && header.value.as_str() == "bytes=3-"
+            }));
+            let mut response =
+                TinyResponse::from_data(served[3..].to_vec()).with_status_code(StatusCode(206));
+            // The body has seven bytes, but the server falsely advertises
+            // only bytes 3..=5. Accepting just the start corrupts an append.
+            response.add_header(
+                Header::from_bytes(b"Content-Range", b"bytes 3-5/10").unwrap(),
+            );
+            response.add_header(Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap());
+            ranged.respond(response).unwrap();
+
+            let fresh = server.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+            assert!(!fresh.headers().iter().any(|header| header.field.equiv("Range")));
+            let mut response = TinyResponse::from_data(served);
+            response.add_header(Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap());
+            fresh.respond(response).unwrap();
+        });
+
+        let root = tempfile::tempdir().unwrap();
+        let final_path = root.path().join("items/one/video.mp4");
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        let partial = partial_path(&final_path);
+        fs::write(&partial, &data[..3]).unwrap();
+        let url = format!("{address}/media");
+        save_resume_representation(
+            &partial,
+            &ResumeRepresentation {
+                url: url.clone(),
+                etag: Some("\"fixture-v1\"".into()),
+                last_modified: None,
+                total_bytes: Some(data.len() as u64),
+            },
+        )
+        .unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let result = engine
+            .transfer(
+                &TransferRequest {
+                    url,
+                    relative_path: "items/one/video.mp4".into(),
+                    expected_bytes: Some(data.len() as u64),
+                    expected_sha256: None,
+                },
+                &AtomicBool::new(false),
+            )
+            .unwrap();
+        server_thread.join().unwrap();
+        assert!(!result.resumed);
+        assert_eq!(fs::read(final_path).unwrap(), data);
     }
 
     struct FixtureServer {
