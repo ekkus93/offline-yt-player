@@ -843,7 +843,12 @@ mod tests {
                 .recv_timeout(Duration::from_secs(5))
                 .unwrap()
                 .unwrap();
-            assert!(!full.headers().iter().any(|header| header.field.equiv("Range")));
+            assert!(
+                !full
+                    .headers()
+                    .iter()
+                    .any(|header| header.field.equiv("Range"))
+            );
             let mut response = TinyResponse::from_data(served);
             response.add_header(Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap());
             full.respond(response).unwrap();
