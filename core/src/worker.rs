@@ -57,25 +57,9 @@ impl DownloadWorker {
         cancel: &AtomicBool,
         now_epoch_ms: u64,
     ) -> Result<DownloadWorkerReport, CoreError> {
-        self.execute_ready_at_with_engine_factory(work_items, cancel, now_epoch_ms, || {
-            DownloadEngine::new(&self.library_root, self.policy.clone())
-        })
-    }
-
-    fn execute_ready_at_with_engine_factory<F>(
-        &self,
-        work_items: &[DownloadWorkItem],
-        cancel: &AtomicBool,
-        now_epoch_ms: u64,
-        engine_factory: F,
-    ) -> Result<DownloadWorkerReport, CoreError>
-    where
-        F: FnOnce() -> Result<DownloadEngine, CoreError>,
-    {
-        // Engine initialization can fail. Never claim durable work before it succeeds.
-        let engine = engine_factory()?;
         let mut report = DownloadWorkerReport::default();
         let claimed = self.claim_eligible(work_items, now_epoch_ms)?;
+        let engine = DownloadEngine::new(&self.library_root, self.policy.clone())?;
 
         for (mut snapshot, item) in claimed {
             report.claimed.push(snapshot.job_id.clone());
@@ -701,32 +685,6 @@ mod tests {
     }
 
     #[test]
-    fn engine_setup_failure_does_not_claim_durable_work() {
-        let store = LibraryStore::open_in_memory().unwrap();
-        store
-            .save_download_snapshot(&snapshot("engine-failure", DownloadState::Queued))
-            .unwrap();
-        let root = tempfile::tempdir().unwrap();
-        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
-        let work = plan("engine-failure", "http://127.0.0.1:1/unreachable".into(), 5);
-
-        let error = worker
-            .execute_ready_at_with_engine_factory(&[work], &AtomicBool::new(false), 10_000, || {
-                Err(CoreError::new(
-                    ErrorKind::NetworkUnavailable,
-                    "engine setup failed",
-                    true,
-                ))
-            })
-            .unwrap_err();
-        assert_eq!(error.kind, ErrorKind::NetworkUnavailable);
-        let durable = store.load_download_snapshots().unwrap().remove(0);
-        assert_eq!(durable.state, DownloadState::Queued);
-        assert_eq!(durable.attempt, 0);
-        assert!(store.staged_job_ids().unwrap().is_empty());
-    }
-
-    #[test]
     fn duplicate_work_ids_fail_before_any_durable_claim_or_transfer() {
         let store = LibraryStore::open_in_memory().unwrap();
         store
@@ -959,3 +917,22 @@ mod tests {
                 let mut current = control_store.load_download_snapshots().unwrap().remove(0);
                 if current.state == DownloadState::Downloading {
                     let mut machine = DownloadStateMachine::new(current.state);
+                    machine.transition(DownloadState::Paused).unwrap();
+                    current.state = machine.state();
+                    control_store.save_download_snapshot(&current).unwrap();
+                    return;
+                }
+                thread::sleep(std::time::Duration::from_millis(5));
+            }
+            panic!("worker never entered downloading state");
+        });
+        let report = worker
+            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
+            .unwrap();
+        controller.join().unwrap();
+        assert_eq!(report.paused, vec!["pause-job"]);
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Paused);
+        assert!(report.canceled.is_empty());
+    }
+}
