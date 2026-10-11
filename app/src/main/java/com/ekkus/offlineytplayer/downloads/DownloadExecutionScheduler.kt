@@ -62,7 +62,12 @@ internal object DownloadExecutionSchedulerPolicy {
     ): JobInfo.Builder = when (preference) {
         DownloadNetworkPreference.AnyNetwork ->
             builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-        DownloadNetworkPreference.WifiOnly ->
+        DownloadNetworkPreference.WifiOnly -> {
+            // UIDT runs on API 34+, but this helper is compiled for minSdk 26.
+            // Guard the API-28 JobInfo overload explicitly for Android lint.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+                throw IllegalStateException("Wi-Fi-only UIDT requires API 28 or newer")
+            }
             builder.setRequiredNetwork(
                 NetworkRequest.Builder()
                     .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
@@ -70,6 +75,7 @@ internal object DownloadExecutionSchedulerPolicy {
                     .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
                     .build(),
             )
+        }
     }
 
     fun usesForegroundFallback(sdkInt: Int): Boolean =
