@@ -327,8 +327,8 @@ mod asset_identity_tests {
                 },
             })
             .unwrap();
-        let service = FfiDownloadWorkerService::open(database_path.to_string_lossy().into())
-            .unwrap();
+        let service =
+            FfiDownloadWorkerService::open(database_path.to_string_lossy().into()).unwrap();
         let result = service.execute_job(job_id.clone(), 10_000, 1);
         assert!(result.executed && result.failed, "{result:?}");
         assert!(!result.completed && !result.retry_wait, "{result:?}");
@@ -342,7 +342,12 @@ mod asset_identity_tests {
         assert!(!failure.retryable);
         assert!(library.list(None).unwrap().is_empty());
         assert!(library.staged_job_ids().unwrap().is_empty());
-        assert!(!workspace.path().join("items/foreign-job/video.mp4").exists());
+        assert!(
+            !workspace
+                .path()
+                .join("items/foreign-job/video.mp4")
+                .exists()
+        );
         let second = service.execute_job(job_id, 20_000, 1);
         assert!(!second.executed && !second.failed, "{second:?}");
         assert_eq!(library.load_download_snapshots().unwrap()[0].attempt, 1);
