@@ -1,5 +1,5 @@
 use crate::{CoreError, DownloadPlan, ErrorKind};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -157,6 +157,34 @@ impl DurableDownloadWorkStore {
             .map_err(db_error)?;
         transaction.commit().map_err(db_error)?;
         Ok(true)
+    }
+
+    /// Load only the requested executable plan. A malformed unrelated row
+    /// must not prevent another durable job from running or being rescheduled.
+    pub fn load_one(&self, job_id: &str) -> Result<Option<DurableDownloadWorkItem>, CoreError> {
+        let connection = self.connection()?;
+        let row = connection
+            .query_row(
+                "SELECT plan_json, created_at_epoch_ms FROM download_work_items WHERE job_id=?1",
+                [job_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .optional()
+            .map_err(db_error)?;
+        row.map(|(plan_json, created_at_epoch_ms)| {
+            Ok(DurableDownloadWorkItem {
+                job_id: job_id.to_owned(),
+                plan: serde_json::from_str(&plan_json).map_err(json_error)?,
+                created_at_epoch_ms: u64::try_from(created_at_epoch_ms).map_err(|_| {
+                    CoreError::new(
+                        ErrorKind::Persistence,
+                        "negative created_at_epoch_ms in durable download work",
+                        false,
+                    )
+                })?,
+            })
+        })
+        .transpose()
     }
 
     pub fn load_all(&self) -> Result<Vec<DurableDownloadWorkItem>, CoreError> {
@@ -318,6 +346,30 @@ mod tests {
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].state, crate::DownloadState::Queued);
         assert_eq!(queue[0].attempt, 0);
+    }
+
+    #[test]
+    fn targeted_load_isolates_an_unrelated_corrupt_plan() {
+        let temp = tempdir().unwrap();
+        let store = DurableDownloadWorkStore::open(temp.path().join("library.sqlite3")).unwrap();
+        let expected = work();
+        store.save(&expected).unwrap();
+        {
+            let connection = store.connection().unwrap();
+            connection
+                .execute(
+                    "INSERT INTO download_work_items(job_id, plan_json, created_at_epoch_ms) VALUES(?1, ?2, ?3)",
+                    params!["corrupt-job", "{not-json", 99_i64],
+                )
+                .unwrap();
+        }
+        assert!(store.load_all().is_err());
+        assert_eq!(store.load_one(&expected.job_id).unwrap(), Some(expected));
+        assert!(store.load_one("missing-job").unwrap().is_none());
+        assert_eq!(
+            store.load_one("corrupt-job").unwrap_err().kind,
+            ErrorKind::Persistence
+        );
     }
 
     #[test]

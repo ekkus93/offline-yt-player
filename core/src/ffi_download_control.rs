@@ -145,9 +145,8 @@ impl FfiDownloadControlService {
                 return Ok(false);
             }
             return Ok(DurableDownloadWorkStore::open(&self.database_path)?
-                .load_all()?
-                .iter()
-                .any(|work| work.job_id == job_id));
+                .load_one(job_id)?
+                .is_some());
         }
         let executable_work = build_download_work_if_supported_source_url_with_options(
             job_id,

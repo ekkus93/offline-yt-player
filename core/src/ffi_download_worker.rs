@@ -111,11 +111,7 @@ impl FfiDownloadWorkerService {
         max_concurrent_downloads: u64,
     ) -> Result<FfiDownloadWorkerResult, crate::CoreError> {
         let work_store = DurableDownloadWorkStore::open(&self.database_path)?;
-        let Some(work) = work_store
-            .load_all()?
-            .into_iter()
-            .find(|work| work.job_id == job_id)
-        else {
+        let Some(work) = work_store.load_one(job_id)? else {
             return Err(crate::CoreError::new(
                 crate::ErrorKind::InvalidInput,
                 "durable download work item does not exist",
