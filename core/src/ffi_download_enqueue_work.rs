@@ -187,15 +187,36 @@ mod tests {
             (second_url.to_owned(), media),
         ]);
         let first = build_download_work_with_source_and_options(
-            first_url, &source, Some("fixture-720p"), None, None,
-        ).unwrap();
+            first_url,
+            &source,
+            Some("fixture-720p"),
+            None,
+            None,
+        )
+        .unwrap();
         let second = build_download_work_with_source_and_options(
-            second_url, &source, Some("fixture-720p"), None, None,
-        ).unwrap();
+            second_url,
+            &source,
+            Some("fixture-720p"),
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(first.plan.source.media_id, second.plan.source.media_id);
-        assert_ne!(first.plan.assets[0].relative_path, second.plan.assets[0].relative_path);
-        assert!(first.plan.assets[0].relative_path.starts_with("items/by-job-"));
-        assert!(second.plan.assets[0].relative_path.starts_with("items/by-job-"));
+        assert_ne!(
+            first.plan.assets[0].relative_path,
+            second.plan.assets[0].relative_path
+        );
+        assert!(
+            first.plan.assets[0]
+                .relative_path
+                .starts_with("items/by-job-")
+        );
+        assert!(
+            second.plan.assets[0]
+                .relative_path
+                .starts_with("items/by-job-")
+        );
     }
 
 }
