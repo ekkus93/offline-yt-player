@@ -186,6 +186,11 @@ impl DownloadEngine {
             self.preflight_transfer_space(request, 0)?;
         }
         let mut response = self.request(&request.url, existing)?;
+        // A complete partial may survive a crash before final promotion.
+        // Retry an unsatisfiable open-ended range as a full transfer.
+        if existing > 0 && response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+            response = self.request(&request.url, 0)?;
+        }
         ensure_success(&response)?;
         let mut observed = representation_from_headers(&request.url, response.headers());
 
@@ -199,7 +204,8 @@ impl DownloadEngine {
             {
                 append = true;
                 start = existing;
-            } else {
+            } else if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                // Re-request only a rejected 206, not a full 200 response.
                 response = self.request(&request.url, 0)?;
                 ensure_success(&response)?;
                 observed = representation_from_headers(&request.url, response.headers());
@@ -812,6 +818,66 @@ mod tests {
         server_thread.join().unwrap();
         assert!(!result.resumed);
         assert_eq!(fs::read(final_path).unwrap(), data);
+    }
+
+    #[test]
+    fn range_416_for_completed_partial_restarts_from_zero() {
+        let body = b"0123456789".to_vec();
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/media", server.server_addr());
+        let served = body.clone();
+        let server_thread = thread::spawn(move || {
+            let ranged = server
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .unwrap();
+            assert!(ranged.headers().iter().any(|header| {
+                header.field.equiv("Range") && header.value.as_str() == "bytes=10-"
+            }));
+            let mut response =
+                TinyResponse::from_data(Vec::<u8>::new()).with_status_code(StatusCode(416));
+            response.add_header(Header::from_bytes(b"Content-Range", b"bytes */10").unwrap());
+            ranged.respond(response).unwrap();
+
+            let full = server
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .unwrap();
+            assert!(!full.headers().iter().any(|header| header.field.equiv("Range")));
+            let mut response = TinyResponse::from_data(served);
+            response.add_header(Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap());
+            full.respond(response).unwrap();
+        });
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("items/one/video.mp4");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let partial = partial_path(&path);
+        fs::write(&partial, &body).unwrap();
+        save_resume_representation(
+            &partial,
+            &ResumeRepresentation {
+                url: url.clone(),
+                etag: Some("\"fixture-v1\"".into()),
+                last_modified: None,
+                total_bytes: Some(body.len() as u64),
+            },
+        )
+        .unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let result = engine
+            .transfer(
+                &TransferRequest {
+                    url,
+                    relative_path: "items/one/video.mp4".into(),
+                    expected_bytes: Some(body.len() as u64),
+                    expected_sha256: None,
+                },
+                &AtomicBool::new(false),
+            )
+            .unwrap();
+        server_thread.join().unwrap();
+        assert!(!result.resumed);
+        assert_eq!(fs::read(path).unwrap(), body);
     }
 
     struct FixtureServer {
