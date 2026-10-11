@@ -805,7 +805,9 @@ mod tests {
             last_error: None,
         };
         store.save_download_snapshot(&verifying).unwrap();
-        store.stage_asset(&complete.item_id, &complete.assets[0]).unwrap();
+        store
+            .stage_asset(&complete.item_id, &complete.assets[0])
+            .unwrap();
         let mut canceled = verifying.clone();
         canceled.state = DownloadState::Canceled;
         store.save_download_snapshot(&canceled).unwrap();
@@ -824,7 +826,10 @@ mod tests {
         );
         assert_eq!(store.load_download_snapshots().unwrap(), vec![canceled]);
         assert!(store.list(None).unwrap().is_empty());
-        assert_eq!(store.staged_job_ids().unwrap(), vec![complete.item_id.clone()]);
+        assert_eq!(
+            store.staged_job_ids().unwrap(),
+            vec![complete.item_id.clone()]
+        );
 
         store.save_download_snapshot(&verifying).unwrap();
         assert!(
