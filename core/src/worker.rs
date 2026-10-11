@@ -5,7 +5,7 @@ use crate::{
     TransferRequest, bounded_download_concurrency, durable_stop_reason, propagate_durable_stop,
     retry_delay,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -192,6 +192,55 @@ impl DownloadWorker {
                 "download plan contains no playable media assets",
                 false,
             ));
+        }
+        // Fail closed before any transfer or staging when asset identities collide.
+        // Path components normalize aliases such as repeated separators and "./".
+        let mut asset_ids = HashSet::new();
+        let mut output_paths = HashSet::new();
+        for asset in &item.plan.assets {
+            if asset.asset_id.trim().is_empty() {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "download plan asset id must not be empty",
+                    false,
+                ));
+            }
+            if !asset_ids.insert(asset.asset_id.as_str()) {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "duplicate download plan asset id",
+                    false,
+                ));
+            }
+            if asset.relative_path.trim().is_empty() {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "download plan asset path must not be empty",
+                    false,
+                ));
+            }
+            crate::security::validate_relative_library_path(&asset.relative_path)?;
+            let normalized_path: PathBuf = std::path::Path::new(&asset.relative_path)
+                .components()
+                .filter_map(|component| match component {
+                    std::path::Component::Normal(name) => Some(name),
+                    _ => None,
+                })
+                .collect();
+            if normalized_path.as_os_str().is_empty() {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "download plan asset path must contain a filename",
+                    false,
+                ));
+            }
+            if !output_paths.insert(normalized_path) {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "duplicate download plan asset path",
+                    false,
+                ));
+            }
         }
         transition_snapshot(snapshot, DownloadState::Downloading)?;
         snapshot.total_bytes = total_expected_bytes(&item.plan);
@@ -675,6 +724,56 @@ mod tests {
         let durable = store.load_download_snapshots().unwrap().remove(0);
         assert_eq!(durable.state, DownloadState::Queued);
         assert_eq!(durable.attempt, 0);
+    }
+
+    #[test]
+    fn invalid_asset_identities_fail_before_network_transfer_or_staging() {
+        for case in [
+            "duplicate-id",
+            "duplicate-path",
+            "normalized-path",
+            "blank-id",
+            "blank-path",
+        ] {
+            let job_id = format!("guard-{case}");
+            let store = LibraryStore::open_in_memory().unwrap();
+            store
+                .save_download_snapshot(&snapshot(&job_id, DownloadState::Queued))
+                .unwrap();
+            let root = tempfile::tempdir().unwrap();
+            let worker =
+                DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+            let mut work = plan(&job_id, "http://127.0.0.1:1/unreachable".into(), 10);
+            let mut second = work.plan.assets[0].clone();
+            second.asset_id = "secondary".into();
+            second.relative_path = format!("items/{job_id}/second.mp4");
+            match case {
+                "duplicate-id" => second.asset_id = "combined".into(),
+                "duplicate-path" => second.relative_path = work.plan.assets[0].relative_path.clone(),
+                "normalized-path" => {
+                    second.relative_path = format!("items/{job_id}/./video.mp4");
+                }
+                "blank-id" => second.asset_id = "   ".into(),
+                "blank-path" => second.relative_path = "  ".into(),
+                _ => unreachable!(),
+            }
+            work.plan.assets.push(second);
+
+            let report = worker
+                .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
+                .unwrap();
+            assert_eq!(report.failed, vec![job_id.clone()], "{case}");
+            assert!(report.completed.is_empty(), "{case}");
+            assert!(report.retry_wait.is_empty(), "{case}");
+            assert!(store.get(&job_id).unwrap().is_none(), "{case}");
+            assert!(store.staged_job_ids().unwrap().is_empty(), "{case}");
+            assert!(!root.path().join(format!("items/{job_id}/video.mp4")).exists());
+            let durable = store.load_download_snapshots().unwrap().remove(0);
+            assert_eq!(durable.state, DownloadState::Failed, "{case}");
+            assert_eq!(durable.attempt, 1, "{case}");
+            assert_eq!(durable.bytes_downloaded, 0, "{case}");
+            assert_eq!(durable.last_error.unwrap().kind, ErrorKind::InvalidInput, "{case}");
+        }
     }
 
     #[test]
