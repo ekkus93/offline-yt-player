@@ -144,9 +144,14 @@ impl FfiDownloadControlService {
             if existing.state != DownloadState::Queued {
                 return Ok(false);
             }
-            return Ok(DurableDownloadWorkStore::open(&self.database_path)?
-                .load_one(job_id)?
-                .is_some());
+            return match DurableDownloadWorkStore::open(&self.database_path)?.load_one(job_id) {
+                Ok(Some(_)) => Ok(true),
+                Ok(None) => Ok(false),
+                // The targeted worker now claims and settles malformed plans as
+                // durable failures. Do not prevent it from running at all.
+                Err(error) if error.kind == ErrorKind::InvalidInput => Ok(true),
+                Err(error) => Err(error),
+            };
         }
         let executable_work = build_download_work_if_supported_source_url_with_options(
             job_id,
@@ -273,6 +278,48 @@ mod stale_control_tests {
             retry_at_epoch_ms: None,
             last_error: None,
         }
+    }
+
+    #[test]
+    fn queued_corrupt_plan_can_be_rescheduled_for_terminal_worker_settlement() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("corrupt-schedule.sqlite3");
+        let service = FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let library = LibraryStore::open(&path).unwrap();
+        let job_id = "https://www.youtube.com/watch?v=corrupt-schedule";
+        library
+            .save_download_snapshot(&DurableDownloadSnapshot {
+                job_id: job_id.into(),
+                state: DownloadState::Queued,
+                bytes_downloaded: 0,
+                total_bytes: None,
+                attempt: 0,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            })
+            .unwrap();
+        DurableDownloadWorkStore::open(&path).unwrap();
+        rusqlite::Connection::open(&path)
+            .unwrap()
+            .execute(
+                "INSERT INTO download_work_items(job_id, plan_json, created_at_epoch_ms)
+                 VALUES(?1, ?2, ?3)",
+                rusqlite::params![job_id, "{corrupt", 1_i64],
+            )
+            .unwrap();
+
+        let scheduled = service.enqueue(job_id.into());
+        assert!(scheduled.updated && scheduled.error.is_none(), "{scheduled:?}");
+        let before = library.load_download_snapshots().unwrap();
+        assert_eq!(before[0].state, DownloadState::Queued);
+        assert_eq!(before[0].attempt, 0);
+
+        let worker =
+            crate::FfiDownloadWorkerService::open(path.to_string_lossy().into_owned()).unwrap();
+        let settled = worker.execute_job(job_id.into(), 10_000, 1);
+        assert!(settled.executed && settled.failed, "{settled:?}");
+        assert_eq!(library.load_download_snapshots().unwrap()[0].state, DownloadState::Failed);
+        assert!(!service.enqueue(job_id.into()).updated);
     }
 
     #[test]
