@@ -312,7 +312,10 @@ mod stale_control_tests {
         assert!(work_store.enqueue_if_absent(&work).unwrap());
         let queued = queue.load_download_snapshots().unwrap().remove(0);
         assert!(service.enqueue("retry-scheduler".into()).updated);
-        assert_eq!(queue.load_download_snapshots().unwrap(), vec![queued.clone()]);
+        assert_eq!(
+            queue.load_download_snapshots().unwrap(),
+            vec![queued.clone()]
+        );
         assert_eq!(work_store.load_all().unwrap(), vec![work]);
 
         let mut active = queued.clone();
