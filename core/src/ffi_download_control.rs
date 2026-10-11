@@ -203,11 +203,29 @@ impl FfiDownloadControlService {
         if snapshot.state == next {
             return Ok(false);
         }
+        let previous = snapshot.clone();
         let mut machine = DownloadStateMachine::new(snapshot.state);
         machine.transition(next)?;
         snapshot.state = machine.state();
-        self.library.save_download_snapshot(snapshot)?;
-        Ok(true)
+        self.save_if_unchanged(&previous, snapshot)
+    }
+
+    /// Control requests race with worker progress, completion, and recovery.
+    /// A stale read must never overwrite a newer durable job state.
+    fn save_if_unchanged(
+        &self,
+        previous: &DurableDownloadSnapshot,
+        next: &DurableDownloadSnapshot,
+    ) -> Result<bool, CoreError> {
+        if self.library.replace_download_snapshot_if_unchanged(previous, next)? {
+            Ok(true)
+        } else {
+            Err(CoreError::new(
+                ErrorKind::Internal,
+                "download state changed during control action; refresh and retry",
+                true,
+            ))
+        }
     }
 
     fn retry_inner(&self, job_id: &str) -> Result<bool, CoreError> {
@@ -229,6 +247,7 @@ impl FfiDownloadControlService {
                 false,
             ));
         }
+        let previous = snapshot.clone();
         let mut machine = DownloadStateMachine::new(snapshot.state);
         machine.transition(DownloadState::Queued)?;
         snapshot.state = machine.state();
@@ -236,7 +255,99 @@ impl FfiDownloadControlService {
 
         snapshot.retry_at_epoch_ms = None;
         snapshot.last_error = None;
-        self.library.save_download_snapshot(snapshot)?;
-        Ok(true)
+        self.save_if_unchanged(&previous, snapshot)
+    }
+}
+
+#[cfg(test)]
+mod stale_control_tests {
+    use super::*;
+
+    fn fixture(state: DownloadState) -> DurableDownloadSnapshot {
+        DurableDownloadSnapshot {
+            job_id: "competing-control".into(),
+            state,
+            bytes_downloaded: 42,
+            total_bytes: Some(100),
+            attempt: 2,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        }
+    }
+
+    #[test]
+    fn stale_control_cannot_overwrite_a_concurrent_pause_or_completion() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("control.sqlite3");
+        let service =
+            FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let other = LibraryStore::open(&path).unwrap();
+
+        let original = fixture(DownloadState::Downloading);
+        other.save_download_snapshot(&original).unwrap();
+        let mut stale_cancel = original.clone();
+        stale_cancel.state = DownloadState::Canceled;
+
+        let mut paused = original.clone();
+        paused.state = DownloadState::Paused;
+        other.save_download_snapshot(&paused).unwrap();
+        let conflict = service.save_if_unchanged(&original, &stale_cancel).unwrap_err();
+        assert!(conflict.retryable);
+        assert_eq!(other.load_download_snapshots().unwrap(), vec![paused]);
+
+        let verifying = fixture(DownloadState::Verifying);
+        other.save_download_snapshot(&verifying).unwrap();
+        let mut stale_pause = verifying.clone();
+        stale_pause.state = DownloadState::Paused;
+        let mut completed = verifying.clone();
+        completed.state = DownloadState::Completed;
+        other.save_download_snapshot(&completed).unwrap();
+        assert!(service.save_if_unchanged(&verifying, &stale_pause).is_err());
+        assert_eq!(other.load_download_snapshots().unwrap(), vec![completed]);
+    }
+
+    #[test]
+    fn stale_retry_cannot_reset_an_already_reclaimed_job() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("retry.sqlite3");
+        let service =
+            FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let other = LibraryStore::open(&path).unwrap();
+        let failed = fixture(DownloadState::Failed);
+        other.save_download_snapshot(&failed).unwrap();
+        let mut stale_retry = failed.clone();
+        stale_retry.state = DownloadState::Queued;
+        stale_retry.attempt = 0;
+
+        let mut reclaimed = failed.clone();
+        reclaimed.state = DownloadState::Resolving;
+        reclaimed.attempt = 3;
+        other.save_download_snapshot(&reclaimed).unwrap();
+
+        assert!(service.save_if_unchanged(&failed, &stale_retry).is_err());
+        assert_eq!(other.load_download_snapshots().unwrap(), vec![reclaimed]);
+    }
+
+    #[test]
+    fn valid_controls_still_persist_through_atomic_update() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("valid.sqlite3");
+        let service =
+            FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let other = LibraryStore::open(&path).unwrap();
+        other
+            .save_download_snapshot(&fixture(DownloadState::Queued))
+            .unwrap();
+        assert!(service.pause("competing-control".into()).updated);
+        assert_eq!(
+            other.load_download_snapshots().unwrap()[0].state,
+            DownloadState::Paused
+        );
+        assert!(service.resume("competing-control".into()).updated);
+        assert!(service.cancel("competing-control".into()).updated);
+        assert_eq!(
+            other.load_download_snapshots().unwrap()[0].state,
+            DownloadState::Canceled
+        );
     }
 }
