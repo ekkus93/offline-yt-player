@@ -348,19 +348,24 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
             } finally {
                 instrumentation.runOnMainSync { observer.release() }
             }
+
         }
     }
 
     // Android app-private storage may be projected as /data/data or /data/user/0.
-    // Compare canonical identities, not URI spelling, while rejecting non-file URIs.
+    // Require a real local file and prove filesystem identity; a matching path
+    // suffix alone must never pass the offline MediaSession assertion.
     private fun isSameLocalFile(uri: android.net.Uri?, expected: File): Boolean {
         if (uri?.scheme != "file") return false
         val path = uri.path ?: return false
-        if (runCatching { File(path).canonicalFile == expected.canonicalFile }.getOrDefault(false)) return true
-        val packageBoundary = "/" + context.packageName + "/"
-        val actualTail = path.substringAfter(packageBoundary, "")
-        val expectedTail = expected.absolutePath.substringAfter(packageBoundary, "")
-        return path.startsWith("/data/") && actualTail.isNotEmpty() && actualTail == expectedTail
+        return runCatching {
+            val actual = File(path)
+            if (!actual.isFile || !expected.isFile) return@runCatching false
+            if (actual.canonicalFile == expected.canonicalFile) return@runCatching true
+            val actualStat = android.system.Os.stat(actual.absolutePath)
+            val expectedStat = android.system.Os.stat(expected.absolutePath)
+            actualStat.st_dev == expectedStat.st_dev && actualStat.st_ino == expectedStat.st_ino
+        }.getOrDefault(false)
     }
 
     private fun coldStartPhase(): String? =
