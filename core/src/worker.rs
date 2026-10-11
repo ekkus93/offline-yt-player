@@ -749,7 +749,9 @@ mod tests {
             second.relative_path = format!("items/{job_id}/second.mp4");
             match case {
                 "duplicate-id" => second.asset_id = "combined".into(),
-                "duplicate-path" => second.relative_path = work.plan.assets[0].relative_path.clone(),
+                "duplicate-path" => {
+                    second.relative_path = work.plan.assets[0].relative_path.clone()
+                }
                 "normalized-path" => {
                     second.relative_path = format!("items/{job_id}/./video.mp4");
                 }
@@ -767,12 +769,21 @@ mod tests {
             assert!(report.retry_wait.is_empty(), "{case}");
             assert!(store.get(&job_id).unwrap().is_none(), "{case}");
             assert!(store.staged_job_ids().unwrap().is_empty(), "{case}");
-            assert!(!root.path().join(format!("items/{job_id}/video.mp4")).exists());
+            assert!(
+                !root
+                    .path()
+                    .join(format!("items/{job_id}/video.mp4"))
+                    .exists()
+            );
             let durable = store.load_download_snapshots().unwrap().remove(0);
             assert_eq!(durable.state, DownloadState::Failed, "{case}");
             assert_eq!(durable.attempt, 1, "{case}");
             assert_eq!(durable.bytes_downloaded, 0, "{case}");
-            assert_eq!(durable.last_error.unwrap().kind, ErrorKind::InvalidInput, "{case}");
+            assert_eq!(
+                durable.last_error.unwrap().kind,
+                ErrorKind::InvalidInput,
+                "{case}"
+            );
         }
     }
 
