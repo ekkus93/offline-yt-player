@@ -323,6 +323,15 @@ mod asset_identity_tests {
                 },
             })
             .unwrap();
+        // Corruption in a different job must not block this worker from
+        // reaching its own durable, nonretryable ownership failure.
+        rusqlite::Connection::open(&database_path)
+            .unwrap()
+            .execute(
+                "INSERT INTO download_work_items(job_id, plan_json, created_at_epoch_ms) VALUES(?1, ?2, ?3)",
+                rusqlite::params!["unrelated-corrupt-job", "{not-json", 1_i64],
+            )
+            .unwrap();
         let service =
             FfiDownloadWorkerService::open(database_path.to_string_lossy().into()).unwrap();
         let result = service.execute_job(job_id.clone(), 10_000, 1);
