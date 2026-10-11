@@ -111,7 +111,7 @@ pub fn redact_sensitive(input: &str) -> String {
         let lower = line.to_ascii_lowercase();
         let header = sensitive_names
             .iter()
-            .filter_map(|name| lower.find(name).map(|offset| (offset, name.len())))
+            .filter_map(|name| lower.find(name.as_str()).map(|offset| (offset, name.len())))
             .min_by_key(|(offset, _)| *offset);
         let redacted = if let Some((offset, length)) = header {
             // The prefix may itself contain a signed URL. Sanitize it before
