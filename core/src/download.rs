@@ -182,7 +182,9 @@ impl DownloadEngine {
                 false,
             ));
         }
-        self.preflight_transfer_space(request, existing)?;
+        if existing == 0 {
+            self.preflight_transfer_space(request, 0)?;
+        }
         let mut response = self.request(&request.url, existing)?;
         ensure_success(&response)?;
         let mut observed = representation_from_headers(&request.url, response.headers());
@@ -228,6 +230,9 @@ impl DownloadEngine {
             None
         };
 
+        if existing > 0 {
+            self.preflight_transfer_space(request, start)?;
+        }
         let declared_body = response
             .headers()
             .get(CONTENT_LENGTH)
@@ -1277,6 +1282,42 @@ mod tests {
                 .join("items/storage-preflight/video.mp4")
                 .exists()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_partial_requires_full_storage_capacity() {
+        let root = tempfile::tempdir().unwrap();
+        let expected = available_space_bytes(root.path()).unwrap().saturating_add(8192);
+        let relative_path = "items/storage/video.mp4";
+        let final_path = root.path().join(relative_path);
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        File::create(partial_path(&final_path))
+            .unwrap()
+            .set_len(expected.saturating_sub(1))
+            .unwrap();
+        let server = FixtureServer::start(b"fresh".to_vec());
+        let engine = DownloadEngine::new(
+            root.path(),
+            DownloadPolicy {
+                max_asset_bytes: u64::MAX,
+                ..DownloadPolicy::default()
+            },
+        )
+        .unwrap();
+        let error = engine
+            .transfer(
+                &TransferRequest {
+                    url: format!("{}/media", server.address),
+                    relative_path: relative_path.into(),
+                    expected_bytes: Some(expected),
+                    expected_sha256: None,
+                },
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InsufficientStorage);
+        assert!(!final_path.exists());
     }
 
     #[test]
