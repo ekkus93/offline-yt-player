@@ -123,7 +123,9 @@ impl FfiDownloadWorkerService {
             ));
         };
 
-        validate_url_job_asset_ownership(job_id, &work.plan.assets)?;
+        if let Err(error) = validate_url_job_asset_ownership(job_id, &work.plan.assets) {
+            return self.settle_invalid_url_plan(job_id, error, now_epoch_ms);
+        }
 
         let worker = DownloadWorker::new(
             LibraryStore::open(&self.database_path)?,
@@ -155,6 +157,66 @@ impl FfiDownloadWorkerService {
             canceled,
             error: None,
         })
+    }
+
+    // Preflight ownership violations must not strand an otherwise eligible
+    // persisted URL job in QUEUED. Claim and settle with exact-state CAS so a
+    // concurrent pause, cancel or newer claim is never overwritten.
+    fn settle_invalid_url_plan(
+        &self,
+        job_id: &str,
+        error: crate::CoreError,
+        now_epoch_ms: u64,
+    ) -> Result<FfiDownloadWorkerResult, crate::CoreError> {
+        let library = LibraryStore::open(&self.database_path)?;
+        let mut result = FfiDownloadWorkerResult {
+            executed: false,
+            completed: false,
+            paused: false,
+            failed: false,
+            retry_wait: false,
+            canceled: false,
+            error: None,
+        };
+        for _ in 0..16 {
+            let Some(current) = library
+                .load_download_snapshots()?
+                .into_iter()
+                .find(|row| row.job_id == job_id)
+            else {
+                return Ok(result);
+            };
+            let eligible = match current.state {
+                crate::DownloadState::Queued => true,
+                crate::DownloadState::RetryWait => current
+                    .retry_at_epoch_ms
+                    .is_none_or(|retry_at| retry_at <= now_epoch_ms),
+                _ => false,
+            };
+            if !eligible {
+                return Ok(result);
+            }
+            let mut claim = current.clone();
+            let mut machine = crate::DownloadStateMachine::new(claim.state);
+            machine.transition(crate::DownloadState::Resolving)?;
+            claim.state = machine.state();
+            claim.attempt = claim.attempt.saturating_add(1);
+            claim.last_error = None;
+            if !library.replace_download_snapshot_if_unchanged(&current, &claim)? {
+                continue;
+            }
+            result.executed = true;
+            let mut failed = claim.clone();
+            let mut machine = crate::DownloadStateMachine::new(claim.state);
+            machine.transition(crate::DownloadState::Failed)?;
+            failed.state = machine.state();
+            failed.retry_at_epoch_ms = None;
+            failed.last_error = Some(error);
+            result.failed = library.replace_download_snapshot_if_unchanged(&claim, &failed)?;
+            return Ok(result);
+        }
+        // CAS contention is not evidence of a successful claim or failure.
+        Ok(result)
     }
 }
 
@@ -217,6 +279,73 @@ mod asset_identity_tests {
                 .kind,
             ErrorKind::InvalidInput
         );
+    }
+
+    #[test]
+    fn foreign_url_asset_path_is_a_durable_nonretryable_failure() {
+        let workspace = tempfile::tempdir().unwrap();
+        let database_path = workspace.path().join("downloads.sqlite3");
+        let job_id = "https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_owned();
+        let library = LibraryStore::open(&database_path).unwrap();
+        library
+            .save_download_snapshot(&DurableDownloadSnapshot {
+                job_id: job_id.clone(),
+                state: DownloadState::Queued,
+                bytes_downloaded: 0,
+                total_bytes: None,
+                attempt: 0,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            })
+            .unwrap();
+        DurableDownloadWorkStore::open(&database_path)
+            .unwrap()
+            .save(&DurableDownloadWorkItem {
+                job_id: job_id.clone(),
+                created_at_epoch_ms: 1000,
+                plan: DownloadPlan {
+                    source: SourceIdentity::new("fixture", &job_id),
+                    title: "Foreign asset path".into(),
+                    duration_ms: Some(1000),
+                    quality: QualityChoice {
+                        choice_id: "fixture".into(),
+                        label: "720p".into(),
+                        estimated_bytes: Some(10),
+                        video_height: Some(720),
+                        audio_only: false,
+                        compatibility: Compatibility::Preferred,
+                    },
+                    assets: vec![DownloadPlanAsset {
+                        asset_id: "video".into(),
+                        kind: MediaKind::Video,
+                        url: "http://127.0.0.1:1/unreachable".into(),
+                        relative_path: "items/foreign-job/video.mp4".into(),
+                        expected_bytes: Some(10),
+                        expected_sha256: None,
+                        mime_type: Some("video/mp4".into()),
+                    }],
+                },
+            })
+            .unwrap();
+        let service = FfiDownloadWorkerService::open(database_path.to_string_lossy().into())
+            .unwrap();
+        let result = service.execute_job(job_id.clone(), 10_000, 1);
+        assert!(result.executed && result.failed, "{result:?}");
+        assert!(!result.completed && !result.retry_wait, "{result:?}");
+        assert!(result.error.is_none(), "{result:?}");
+        let snapshot = library.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(snapshot.state, DownloadState::Failed);
+        assert_eq!(snapshot.attempt, 1);
+        assert_eq!(snapshot.bytes_downloaded, 0);
+        let failure = snapshot.last_error.unwrap();
+        assert_eq!(failure.kind, ErrorKind::InvalidInput);
+        assert!(!failure.retryable);
+        assert!(library.list(None).unwrap().is_empty());
+        assert!(library.staged_job_ids().unwrap().is_empty());
+        assert!(!workspace.path().join("items/foreign-job/video.mp4").exists());
+        let second = service.execute_job(job_id, 20_000, 1);
+        assert!(!second.executed && !second.failed, "{second:?}");
+        assert_eq!(library.load_download_snapshots().unwrap()[0].attempt, 1);
     }
 
     #[test]
