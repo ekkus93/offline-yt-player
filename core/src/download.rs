@@ -780,7 +780,11 @@ mod tests {
                 Ok(())
             })
             .unwrap();
-        assert!(observed.iter().any(|bytes| *bytes > 0 && *bytes < result.bytes));
+        assert!(
+            observed
+                .iter()
+                .any(|bytes| *bytes > 0 && *bytes < result.bytes)
+        );
         assert_eq!(observed.last(), Some(&result.bytes));
         assert!(observed.windows(2).all(|window| window[0] <= window[1]));
     }
