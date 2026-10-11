@@ -1327,3 +1327,21 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn cleanup_orphan_partials_rejects_symlinked_directories_without_touching_outside() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join(".stolen.partial"), b"outside bytes").unwrap();
+        symlink(outside.path(), root.path().join("items")).unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+
+        let error = engine.cleanup_orphan_partials().unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(
+            fs::read(outside.path().join(".stolen.partial")).unwrap(),
+            b"outside bytes"
+        );
+    }
+}
