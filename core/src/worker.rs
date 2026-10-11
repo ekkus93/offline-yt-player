@@ -324,24 +324,74 @@ impl DownloadWorker {
                 expected_bytes: plan_asset.expected_bytes,
                 expected_sha256: plan_asset.expected_sha256.clone(),
             };
-            let result = self.transfer_with_durable_stop(engine, &item.job_id, &request, cancel)?;
-            snapshot.bytes_downloaded = snapshot.bytes_downloaded.saturating_add(result.bytes);
-            let elapsed_ms =
-                u64::try_from(transfer_started.elapsed().as_millis()).unwrap_or(u64::MAX);
-            let progress_epoch_ms = now_epoch_ms.saturating_add(elapsed_ms);
-            let metrics = metric_estimator.observe(
-                progress_epoch_ms,
-                snapshot.bytes_downloaded,
-                snapshot.total_bytes,
-            );
-            if coalescer.should_emit(progress_epoch_ms, snapshot.bytes_downloaded, false) {
+            let bytes_before_asset = snapshot.bytes_downloaded;
+            let mut last_persisted = snapshot.clone();
+            let result = self.transfer_with_durable_stop(
+                engine,
+                &item.job_id,
+                &request,
+                cancel,
+                |written| {
+                    snapshot.bytes_downloaded = bytes_before_asset.saturating_add(written);
+                    let elapsed_ms =
+                        u64::try_from(transfer_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+                    let tick_ms = now_epoch_ms.saturating_add(elapsed_ms);
+                    let metrics = metric_estimator.observe(
+                        tick_ms,
+                        snapshot.bytes_downloaded,
+                        snapshot.total_bytes,
+                    );
+                    if coalescer.should_emit(tick_ms, snapshot.bytes_downloaded, false) {
+                        if !self
+                            .library
+                            .replace_download_snapshot_if_unchanged(&last_persisted, snapshot)?
+                        {
+                            return Err(CoreError::new(
+                                ErrorKind::Canceled,
+                                "download was superseded during transfer progress",
+                                false,
+                            ));
+                        }
+                        last_persisted = snapshot.clone();
+                        progress_events.push(CoreEvent::DownloadProgress {
+                            job_id: snapshot.job_id.clone(),
+                            bytes_downloaded: snapshot.bytes_downloaded,
+                            total_bytes: snapshot.total_bytes,
+                            metrics,
+                        });
+                    }
+                    Ok(())
+                },
+            )?;
+            snapshot.bytes_downloaded = bytes_before_asset.saturating_add(result.bytes);
+            // A short transfer may not reach the coalescer interval/byte threshold.
+            // Persist its final bytes and emit the final event before asset staging.
+            if last_persisted.bytes_downloaded != snapshot.bytes_downloaded {
+                let elapsed_ms =
+                    u64::try_from(transfer_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+                let tick_ms = now_epoch_ms.saturating_add(elapsed_ms);
+                let metrics = metric_estimator.observe(
+                    tick_ms,
+                    snapshot.bytes_downloaded,
+                    snapshot.total_bytes,
+                );
+                if !self
+                    .library
+                    .replace_download_snapshot_if_unchanged(&last_persisted, snapshot)?
+                {
+                    return Err(CoreError::new(
+                        ErrorKind::Canceled,
+                        "download was superseded before asset staging",
+                        false,
+                    ));
+                }
+                coalescer.should_emit(tick_ms, snapshot.bytes_downloaded, true);
                 progress_events.push(CoreEvent::DownloadProgress {
                     job_id: snapshot.job_id.clone(),
                     bytes_downloaded: snapshot.bytes_downloaded,
                     total_bytes: snapshot.total_bytes,
                     metrics,
                 });
-                self.library.save_download_snapshot(snapshot)?;
             }
             let local = LocalAsset {
                 asset_id: plan_asset.asset_id.clone(),
@@ -384,6 +434,7 @@ impl DownloadWorker {
         job_id: &str,
         request: &TransferRequest,
         external_cancel: &AtomicBool,
+        on_progress: impl FnMut(u64) -> Result<(), CoreError>,
     ) -> Result<crate::TransferResult, CoreError> {
         let transfer_stop = AtomicBool::new(false);
         let polling_done = AtomicBool::new(false);
@@ -409,7 +460,8 @@ impl DownloadWorker {
                     std::thread::sleep(PAUSE_POLL_INTERVAL);
                 }
             });
-            let transfer_result = engine.transfer(request, &transfer_stop);
+            let transfer_result =
+                engine.transfer_with_progress(request, &transfer_stop, on_progress);
             polling_done.store(true, Ordering::Release);
             transfer_result
         });
@@ -727,6 +779,41 @@ mod tests {
         assert_eq!(jobs[0].state, DownloadState::Completed);
         assert_eq!(jobs[0].bytes_downloaded, data.len() as u64);
         assert_eq!(jobs[1].state, DownloadState::Queued);
+    }
+
+    #[test]
+    fn worker_persists_chunk_progress_before_single_asset_completion() {
+        let data = vec![0x42; 256 * 1024];
+        let server = FixtureServer::start(data.clone());
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("chunk-progress", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let report = worker
+            .execute_ready_at(
+                &[plan(
+                    "chunk-progress",
+                    format!("{}/chunk.mp4", server.address),
+                    data.len(),
+                )],
+                &AtomicBool::new(false),
+                10_000,
+            )
+            .unwrap();
+        assert_eq!(report.completed, vec!["chunk-progress"]);
+        assert!(report.progress_events.iter().any(|event| {
+            matches!(
+                event,
+                CoreEvent::DownloadProgress { bytes_downloaded, .. }
+                    if *bytes_downloaded > 0 && *bytes_downloaded < data.len() as u64
+            )
+        }));
+        assert_eq!(
+            store.load_download_snapshots().unwrap()[0].bytes_downloaded,
+            data.len() as u64
+        );
     }
 
     #[test]

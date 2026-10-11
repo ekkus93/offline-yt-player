@@ -139,6 +139,17 @@ impl DownloadEngine {
         request: &TransferRequest,
         cancel: &AtomicBool,
     ) -> Result<TransferResult, CoreError> {
+        self.transfer_with_progress(request, cancel, |_| Ok(()))
+    }
+
+    /// Reports actual bytes written, including safely resumed partial bytes, as
+    /// each body chunk lands. Consumers can coalesce updates before durable I/O.
+    pub fn transfer_with_progress(
+        &self,
+        request: &TransferRequest,
+        cancel: &AtomicBool,
+        mut on_progress: impl FnMut(u64) -> Result<(), CoreError>,
+    ) -> Result<TransferResult, CoreError> {
         validate_http_url(&request.url)?;
         validate_relative_library_path(&request.relative_path)?;
         if cancel.load(Ordering::Relaxed) {
@@ -263,6 +274,14 @@ impl DownloadEngine {
                 ));
             }
             file.write_all(&buffer[..count]).map_err(io_error)?;
+            if let Err(error) = on_progress(total) {
+                drop(file);
+                if error.kind == ErrorKind::Canceled && !self.policy.retain_partial_on_cancel {
+                    let _ = fs::remove_file(&partial_path);
+                    clear_resume_representation(&partial_path)?;
+                }
+                return Err(error);
+            }
         }
         file.sync_all().map_err(io_error)?;
         drop(file);
@@ -740,6 +759,30 @@ mod tests {
         assert_eq!(retry_delay(1, 0), Duration::from_secs(1));
         assert_eq!(retry_delay(2, 100), Duration::from_millis(2_100));
         assert!(retry_delay(99, 999) <= Duration::from_secs(30));
+    }
+
+    #[test]
+    fn progress_callback_reports_intermediate_written_bytes() {
+        let data = vec![0x41; COPY_BUFFER_BYTES * 3];
+        let server = FixtureServer::start(data.clone());
+        let temp = tempfile::tempdir().unwrap();
+        let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+        let request = TransferRequest {
+            url: format!("{}/media", server.address),
+            relative_path: "items/one/video.mp4".into(),
+            expected_bytes: Some(data.len() as u64),
+            expected_sha256: None,
+        };
+        let mut observed = Vec::new();
+        let result = engine
+            .transfer_with_progress(&request, &AtomicBool::new(false), |bytes| {
+                observed.push(bytes);
+                Ok(())
+            })
+            .unwrap();
+        assert!(observed.iter().any(|bytes| *bytes > 0 && *bytes < result.bytes));
+        assert_eq!(observed.last(), Some(&result.bytes));
+        assert!(observed.windows(2).all(|window| window[0] <= window[1]));
     }
 
     #[test]
