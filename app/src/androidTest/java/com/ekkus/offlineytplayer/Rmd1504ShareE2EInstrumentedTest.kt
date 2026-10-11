@@ -126,12 +126,11 @@ class Rmd1504ShareE2EInstrumentedTest {
             }
             compose.onNodeWithText("Download setup").assertIsDisplayed()
             compose.onNodeWithText("Download").performClick()
-            compose.waitUntil(20_000) {
-                runCatching {
-                    compose.onNodeWithText("Download scheduled", substring = true).assertIsDisplayed()
-                }.isSuccess
-            }
 
+            // A transient scheduling message can disappear before Compose polling
+            // observes it. Verify the actual scheduler/worker contract instead:
+            // the fixture server must receive the real transfer request, and
+            // durable Library completion is asserted below.
             server.joinAndRethrow()
 
             // The fixture socket closing is not a durable completion signal:
