@@ -1,5 +1,6 @@
 use crate::{CoreError, DurableDownloadWorkItem, ErrorKind, MediaSource, SourceRegistry};
 use futures::executor::block_on;
+use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Build provider-neutral executable work for supported production source URLs.
@@ -76,12 +77,23 @@ pub(crate) fn build_download_work_with_source_and_options(
             )
         })?,
     };
-    let plan = block_on(source.download_plan_with_options(
+    let mut plan = block_on(source.download_plan_with_options(
         &media,
         &choice.choice_id,
         subtitle_track_id,
         audio_format_id,
     ))?;
+    // Provider media IDs are not durable job identities. Different source URLs may
+    // resolve to the same media ID and must not overwrite one another's assets.
+    let job_digest = format!("{:x}", Sha256::digest(job_id.as_bytes()));
+    for asset in &mut plan.assets {
+        crate::security::validate_relative_library_path(&asset.relative_path)?;
+        let source_relative = asset
+            .relative_path
+            .strip_prefix("items/")
+            .unwrap_or(&asset.relative_path);
+        asset.relative_path = format!("items/by-job-{job_digest}/{source_relative}");
+    }
     Ok(DurableDownloadWorkItem {
         job_id: job_id.to_owned(),
         plan,
@@ -158,4 +170,32 @@ mod tests {
         assert_eq!(error.kind, ErrorKind::NoCompatibleFormat);
         assert_eq!(error.message, "requested download quality is not available");
     }
+    #[test]
+    fn distinct_job_urls_with_same_media_id_have_isolated_asset_paths() {
+        let first_url = "https://fixture.invalid/watch/one";
+        let second_url = "https://fixture.invalid/watch/one?ref=alternate";
+        let media = FixtureMedia {
+            media_id: "one".into(),
+            title: "Fixture One".into(),
+            duration_ms: 42_000,
+            media_url: "https://fixture.invalid/media/one.mp4".into(),
+            thumbnail_url: None,
+            bytes: Some(1_024),
+        };
+        let source = DirectFixtureSource::with_entries([
+            (first_url.to_owned(), media.clone()),
+            (second_url.to_owned(), media),
+        ]);
+        let first = build_download_work_with_source_and_options(
+            first_url, &source, Some("fixture-720p"), None, None,
+        ).unwrap();
+        let second = build_download_work_with_source_and_options(
+            second_url, &source, Some("fixture-720p"), None, None,
+        ).unwrap();
+        assert_eq!(first.plan.source.media_id, second.plan.source.media_id);
+        assert_ne!(first.plan.assets[0].relative_path, second.plan.assets[0].relative_path);
+        assert!(first.plan.assets[0].relative_path.starts_with("items/by-job-"));
+        assert!(second.plan.assets[0].relative_path.starts_with("items/by-job-"));
+    }
+
 }
