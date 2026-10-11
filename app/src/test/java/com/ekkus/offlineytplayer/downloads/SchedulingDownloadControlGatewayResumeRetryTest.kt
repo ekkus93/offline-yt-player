@@ -42,6 +42,7 @@ class SchedulingDownloadControlGatewayResumeRetryTest {
     fun rejectedDurableTransitionDoesNotScheduleWork() {
         val delegate = object : AppDownloadControlGateway by FakeDownloadControlGateway() {
             override fun resume(jobId: String) = CoreGatewayResult(value = false, error = null)
+            override fun enqueue(jobId: String) = CoreGatewayResult(value = false, error = null)
             override fun retry(jobId: String) = CoreGatewayResult(value = false, error = null)
         }
         val scheduler = RecordingScheduler(true)
