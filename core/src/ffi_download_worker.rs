@@ -2,7 +2,6 @@ use crate::{
     DownloadPolicy, DownloadWorkItem, DownloadWorker, DurableDownloadWorkStore,
     FfiCoreServiceOpenError, FfiError, LibraryStore,
 };
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -123,8 +122,6 @@ impl FfiDownloadWorkerService {
             ));
         };
 
-        validate_asset_identities(&work.plan.assets)?;
-
         let worker = DownloadWorker::new(
             LibraryStore::open(&self.database_path)?,
             &self.library_root,
@@ -158,72 +155,106 @@ impl FfiDownloadWorkerService {
     }
 }
 
-fn validate_asset_identities(assets: &[crate::DownloadPlanAsset]) -> Result<(), crate::CoreError> {
-    let mut ids = HashSet::with_capacity(assets.len());
-    let mut paths = HashSet::with_capacity(assets.len());
-    for asset in assets {
-        if asset.asset_id.trim().is_empty() || !ids.insert(asset.asset_id.as_str()) {
-            return Err(crate::CoreError::new(
-                crate::ErrorKind::InvalidInput,
-                "download plan has blank or duplicate asset IDs",
-                false,
-            ));
-        }
-        if asset.relative_path.trim().is_empty() {
-            return Err(crate::CoreError::new(
-                crate::ErrorKind::InvalidInput,
-                "download plan has blank or duplicate asset output paths",
-                false,
-            ));
-        }
-        crate::validate_relative_library_path(&asset.relative_path)?;
-        let normalized: PathBuf = PathBuf::from(&asset.relative_path).components().collect();
-        if normalized.file_name().is_none() || !paths.insert(normalized) {
-            return Err(crate::CoreError::new(
-                crate::ErrorKind::InvalidInput,
-                "download plan has blank or duplicate asset output paths",
-                false,
-            ));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod asset_identity_tests {
     use super::*;
+    use crate::{
+        Compatibility, DownloadPlan, DownloadPlanAsset, DownloadState, DurableDownloadSnapshot,
+        DurableDownloadWorkItem, ErrorKind, MediaKind, QualityChoice, SourceIdentity,
+    };
 
     #[test]
-    fn rejects_blank_and_duplicate_asset_identifiers_and_paths() {
-        let original = crate::DownloadPlanAsset {
-            asset_id: "video".into(),
-            kind: crate::MediaKind::Video,
-            url: "http://127.0.0.1:1/unreachable".into(),
-            relative_path: "items/job/video.mp4".into(),
-            expected_bytes: None,
-            expected_sha256: None,
-            mime_type: None,
-        };
-        let mut distinct = original.clone();
-        distinct.asset_id = "audio".into();
-        distinct.relative_path = "items/job/audio.mp4".into();
-        assert!(validate_asset_identities(&[original.clone(), distinct.clone()]).is_ok());
-
-        for defect in 0..7 {
-            let mut conflicting = distinct.clone();
+    fn malformed_persisted_assets_settle_as_nonretryable_failure_through_ffi() {
+        for defect in [
+            "duplicate-id",
+            "duplicate-path",
+            "normalized-path",
+            "blank-id",
+            "blank-path",
+            "traversal-path",
+        ] {
+            let workspace = tempfile::tempdir().expect("temporary file-backed database");
+            let database_path = workspace.path().join("downloads.sqlite3");
+            let job_id = format!("invalid-{defect}");
+            let first = DownloadPlanAsset {
+                asset_id: "video".into(),
+                kind: MediaKind::Video,
+                url: "http://127.0.0.1:1/unreachable".into(),
+                relative_path: format!("items/{job_id}/video.mp4"),
+                expected_bytes: Some(10),
+                expected_sha256: None,
+                mime_type: Some("video/mp4".into()),
+            };
+            let mut second = first.clone();
+            second.asset_id = "audio".into();
+            second.relative_path = format!("items/{job_id}/audio.mp4");
             match defect {
-                0 => conflicting.asset_id = original.asset_id.clone(),
-                1 => conflicting.relative_path = original.relative_path.clone(),
-                2 => conflicting.asset_id = "  ".into(),
-                3 => conflicting.relative_path = "  ".into(),
-                4 => conflicting.relative_path = "items/job/./video.mp4".into(),
-                5 => conflicting.relative_path = "items/job//video.mp4".into(),
-                6 => conflicting.relative_path = "../outside.mp4".into(),
+                "duplicate-id" => second.asset_id = first.asset_id.clone(),
+                "duplicate-path" => second.relative_path = first.relative_path.clone(),
+                "normalized-path" => {
+                    second.relative_path = format!("items/{job_id}/./video.mp4");
+                }
+                "blank-id" => second.asset_id = "  ".into(),
+                "blank-path" => second.relative_path = "  ".into(),
+                "traversal-path" => second.relative_path = "../escape.mp4".into(),
                 _ => unreachable!(),
             }
-            let error = validate_asset_identities(&[original.clone(), conflicting]).unwrap_err();
-            assert_eq!(error.kind, crate::ErrorKind::InvalidInput);
-            assert!(!error.retryable);
+
+            let library = LibraryStore::open(&database_path).expect("open library");
+            library
+                .save_download_snapshot(&DurableDownloadSnapshot {
+                    job_id: job_id.clone(),
+                    state: DownloadState::Queued,
+                    bytes_downloaded: 0,
+                    total_bytes: None,
+                    attempt: 0,
+                    retry_at_epoch_ms: None,
+                    last_error: None,
+                })
+                .expect("persist queued job");
+            let work_store = DurableDownloadWorkStore::open(&database_path).unwrap();
+            work_store
+                .save(&DurableDownloadWorkItem {
+                    job_id: job_id.clone(),
+                    created_at_epoch_ms: 1000,
+                    plan: DownloadPlan {
+                        source: SourceIdentity::new("fixture", &job_id),
+                        title: "Invalid identity fixture".into(),
+                        duration_ms: Some(1000),
+                        quality: QualityChoice {
+                            choice_id: "fixture".into(),
+                            label: "720p".into(),
+                            estimated_bytes: Some(20),
+                            video_height: Some(720),
+                            audio_only: false,
+                            compatibility: Compatibility::Preferred,
+                        },
+                        assets: vec![first, second],
+                    },
+                })
+                .expect("persist executable malformed work");
+            let service = FfiDownloadWorkerService::open(
+                database_path.to_string_lossy().into_owned(),
+            )
+            .expect("open FFI worker");
+            let result = service.execute_job(job_id.clone(), 10_000, 1);
+            assert!(result.executed, "{defect}: {result:?}");
+            assert!(result.failed, "{defect}: {result:?}");
+            assert!(!result.completed && !result.retry_wait, "{defect}");
+            assert!(result.error.is_none(), "{defect}: {result:?}");
+
+            let durable = library.load_download_snapshots().unwrap();
+            assert_eq!(durable.len(), 1, "{defect}");
+            let snapshot = &durable[0];
+            assert_eq!(snapshot.state, DownloadState::Failed, "{defect}");
+            assert_eq!(snapshot.attempt, 1, "{defect}");
+            assert_eq!(snapshot.bytes_downloaded, 0, "{defect}");
+            let error = snapshot.last_error.as_ref().expect("durable error");
+            assert_eq!(error.kind, ErrorKind::InvalidInput, "{defect}");
+            assert!(!error.retryable, "{defect}");
+            assert!(library.list(None).unwrap().is_empty(), "{defect}");
+            assert!(library.staged_job_ids().unwrap().is_empty(), "{defect}");
+            assert!(!workspace.path().join(format!("items/{job_id}")).exists(), "{defect}");
         }
     }
 }
