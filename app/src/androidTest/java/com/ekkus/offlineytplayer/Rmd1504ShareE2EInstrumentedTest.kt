@@ -66,7 +66,7 @@ class Rmd1504ShareE2EInstrumentedTest {
         val sharedUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         val title = "RMD-1504 shared fixture"
         val payload = "rmd-1504 deterministic downloaded bytes".toByteArray(StandardCharsets.UTF_8)
-        val server = OneShotFixtureServer(payload).also { it.start() }
+        val server = OneShotFixtureServer(payload)
         // Qualify ACTION_SEND -> real scheduler/core worker independently of
         // an emulator's default-network callback, which can report no network
         // even though the loopback fixture is reachable. OS network transitions
@@ -125,6 +125,10 @@ class Rmd1504ShareE2EInstrumentedTest {
                 runCatching { compose.onNodeWithText(title, substring = true).assertIsDisplayed() }.isSuccess
             }
             compose.onNodeWithText("Download setup").assertIsDisplayed()
+            // Start the 30-second fixture accept window only when the UI is ready to
+            // schedule the transfer. On slow software-emulated CI, bootstrap and
+            // Compose analysis can consume the timeout before Download is clicked.
+            server.start()
             compose.onNodeWithText("Download").performClick()
 
             // A transient scheduling message can disappear before Compose polling
