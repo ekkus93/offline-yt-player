@@ -57,9 +57,26 @@ impl DownloadWorker {
         cancel: &AtomicBool,
         now_epoch_ms: u64,
     ) -> Result<DownloadWorkerReport, CoreError> {
+        // Build the fallible runtime before claiming durable jobs. Otherwise a
+        // client initialization failure leaves jobs stuck in Resolving.
+        self.execute_ready_with_engine_at(
+            work_items,
+            cancel,
+            now_epoch_ms,
+            DownloadEngine::new(&self.library_root, self.policy.clone()),
+        )
+    }
+
+    fn execute_ready_with_engine_at(
+        &self,
+        work_items: &[DownloadWorkItem],
+        cancel: &AtomicBool,
+        now_epoch_ms: u64,
+        engine: Result<DownloadEngine, CoreError>,
+    ) -> Result<DownloadWorkerReport, CoreError> {
+        let engine = engine?;
         let mut report = DownloadWorkerReport::default();
         let claimed = self.claim_eligible(work_items, now_epoch_ms)?;
-        let engine = DownloadEngine::new(&self.library_root, self.policy.clone())?;
 
         for (mut snapshot, item) in claimed {
             report.claimed.push(snapshot.job_id.clone());
@@ -519,6 +536,36 @@ mod tests {
         item.plan.quality.estimated_bytes = None;
         item.plan.assets[0].expected_bytes = None;
         item
+    }
+
+    #[test]
+    fn engine_initialization_failure_does_not_claim_durable_work() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("init-failure", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let work = plan("init-failure", "http://127.0.0.1/unused".into(), 16);
+
+        // Inject the fallible engine-construction outcome without depending on
+        // process-global proxy variables or ambient network configuration.
+        let failure = CoreError::new(
+            ErrorKind::NetworkUnavailable,
+            "synthetic HTTP client initialization failure",
+            true,
+        );
+        let error = worker
+            .execute_ready_with_engine_at(&[work], &AtomicBool::new(false), 10_000, Err(failure))
+            .unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::NetworkUnavailable);
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Queued);
+        assert_eq!(durable.attempt, 0);
+        assert_eq!(durable.retry_at_epoch_ms, None);
+        assert!(durable.last_error.is_none());
+        assert!(store.get("init-failure").unwrap().is_none());
     }
 
     #[test]
