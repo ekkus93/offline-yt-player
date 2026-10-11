@@ -57,9 +57,25 @@ impl DownloadWorker {
         cancel: &AtomicBool,
         now_epoch_ms: u64,
     ) -> Result<DownloadWorkerReport, CoreError> {
+        self.execute_ready_at_with_engine_factory(work_items, cancel, now_epoch_ms, || {
+            DownloadEngine::new(&self.library_root, self.policy.clone())
+        })
+    }
+
+    fn execute_ready_at_with_engine_factory<F>(
+        &self,
+        work_items: &[DownloadWorkItem],
+        cancel: &AtomicBool,
+        now_epoch_ms: u64,
+        engine_factory: F,
+    ) -> Result<DownloadWorkerReport, CoreError>
+    where
+        F: FnOnce() -> Result<DownloadEngine, CoreError>,
+    {
+        // Engine initialization can fail. Never claim durable work before it succeeds.
+        let engine = engine_factory()?;
         let mut report = DownloadWorkerReport::default();
         let claimed = self.claim_eligible(work_items, now_epoch_ms)?;
-        let engine = DownloadEngine::new(&self.library_root, self.policy.clone())?;
 
         for (mut snapshot, item) in claimed {
             report.claimed.push(snapshot.job_id.clone());
@@ -682,6 +698,31 @@ mod tests {
         assert_eq!(*total_bytes, None);
         assert_eq!(metrics.bytes_per_second, Some(data.len() as u64));
         assert_eq!(metrics.eta_seconds, None);
+    }
+
+    #[test]
+    fn engine_setup_failure_does_not_claim_durable_work() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store
+            .save_download_snapshot(&snapshot("engine-failure", DownloadState::Queued))
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let work = plan("engine-failure", "http://127.0.0.1:1/unreachable".into(), 5);
+
+        let error = worker
+            .execute_ready_at_with_engine_factory(
+                &[work],
+                &AtomicBool::new(false),
+                10_000,
+                || Err(CoreError::new(ErrorKind::NetworkUnavailable, "engine setup failed", true)),
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::NetworkUnavailable);
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Queued);
+        assert_eq!(durable.attempt, 0);
+        assert!(store.staged_job_ids().unwrap().is_empty());
     }
 
     #[test]
