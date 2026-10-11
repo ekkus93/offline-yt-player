@@ -217,7 +217,10 @@ impl FfiDownloadControlService {
         previous: &DurableDownloadSnapshot,
         next: &DurableDownloadSnapshot,
     ) -> Result<bool, CoreError> {
-        if self.library.replace_download_snapshot_if_unchanged(previous, next)? {
+        if self
+            .library
+            .replace_download_snapshot_if_unchanged(previous, next)?
+        {
             Ok(true)
         } else {
             Err(CoreError::new(
@@ -279,8 +282,7 @@ mod stale_control_tests {
     fn stale_control_cannot_overwrite_a_concurrent_pause_or_completion() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("control.sqlite3");
-        let service =
-            FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let service = FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
         let other = LibraryStore::open(&path).unwrap();
 
         let original = fixture(DownloadState::Downloading);
@@ -291,7 +293,9 @@ mod stale_control_tests {
         let mut paused = original.clone();
         paused.state = DownloadState::Paused;
         other.save_download_snapshot(&paused).unwrap();
-        let conflict = service.save_if_unchanged(&original, &stale_cancel).unwrap_err();
+        let conflict = service
+            .save_if_unchanged(&original, &stale_cancel)
+            .unwrap_err();
         assert!(conflict.retryable);
         assert_eq!(other.load_download_snapshots().unwrap(), vec![paused]);
 
@@ -310,8 +314,7 @@ mod stale_control_tests {
     fn stale_retry_cannot_reset_an_already_reclaimed_job() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("retry.sqlite3");
-        let service =
-            FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let service = FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
         let other = LibraryStore::open(&path).unwrap();
         let failed = fixture(DownloadState::Failed);
         other.save_download_snapshot(&failed).unwrap();
@@ -332,8 +335,7 @@ mod stale_control_tests {
     fn valid_controls_still_persist_through_atomic_update() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("valid.sqlite3");
-        let service =
-            FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let service = FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
         let other = LibraryStore::open(&path).unwrap();
         other
             .save_download_snapshot(&fixture(DownloadState::Queued))
