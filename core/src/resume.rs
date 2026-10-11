@@ -1,6 +1,7 @@
 use crate::domain::{CoreError, ErrorKind};
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::{ErrorKind as IoErrorKind, Write};
 use std::path::{Path, PathBuf};
 
 /// Durable identity for the remote representation associated with a partial download.
@@ -98,14 +99,51 @@ pub fn save_resume_representation(
     })?;
     let path = resume_metadata_path(partial_path);
     let temp = path.with_extension("json.tmp");
-    fs::write(&temp, bytes).map_err(io_error)?;
+    // The library root can contain imported files. Never follow an attacker-
+    // supplied sidecar/temp symlink when persisting signed URL metadata.
+    reject_nonregular_resume_path(&path)?;
+    match fs::symlink_metadata(&temp) {
+        Ok(metadata) if metadata.is_file() => fs::remove_file(&temp).map_err(io_error)?,
+        Ok(_) => {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "Resume metadata temp path must be a regular file",
+                false,
+            ));
+        }
+        Err(error) if error.kind() == IoErrorKind::NotFound => {}
+        Err(error) => return Err(io_error(error)),
+    }
+    // create_new refuses symlinks even if the path changes after inspection.
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(io_error)?;
+    file.write_all(&bytes).map_err(io_error)?;
+    file.sync_all().map_err(io_error)?;
+    drop(file);
     fs::rename(&temp, &path).map_err(io_error)
+}
+
+fn reject_nonregular_resume_path(path: &Path) -> Result<(), CoreError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => Ok(()),
+        Ok(_) => Err(CoreError::new(
+            ErrorKind::InvalidInput,
+            "Resume metadata path must be a regular file",
+            false,
+        )),
+        Err(error) if error.kind() == IoErrorKind::NotFound => Ok(()),
+        Err(error) => Err(io_error(error)),
+    }
 }
 
 pub fn load_resume_representation(
     partial_path: &Path,
 ) -> Result<Option<ResumeRepresentation>, CoreError> {
     let path = resume_metadata_path(partial_path);
+    reject_nonregular_resume_path(&path)?;
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -300,6 +338,64 @@ mod tests {
             !prepare_partial_reuse(&partial, &representation(Some("fixture-v1"), None)).unwrap()
         );
         assert!(!partial.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resume_sidecar_symlink_cannot_read_or_replace_outside_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let outside_path = outside.path().join("private.json");
+        fs::write(&outside_path, b"outside private bytes").unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        let sidecar = resume_metadata_path(&partial);
+        symlink(&outside_path, &sidecar).unwrap();
+
+        let error = load_resume_representation(&partial).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        let error = save_resume_representation(
+            &partial,
+            &representation(Some("\"fixture-v1\""), None),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&outside_path).unwrap(), b"outside private bytes");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resume_temp_symlink_cannot_overwrite_outside_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let outside_path = outside.path().join("private.json");
+        fs::write(&outside_path, b"outside private bytes").unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        let sidecar = resume_metadata_path(&partial);
+        symlink(&outside_path, sidecar.with_extension("json.tmp")).unwrap();
+
+        let error = save_resume_representation(
+            &partial,
+            &representation(Some("\"fixture-v1\""), None),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&outside_path).unwrap(), b"outside private bytes");
+        assert!(!sidecar.exists());
+    }
+
+    #[test]
+    fn stale_regular_resume_temp_is_recovered() {
+        let temp = tempfile::tempdir().unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        let sidecar = resume_metadata_path(&partial);
+        fs::write(sidecar.with_extension("json.tmp"), b"stale crash temp").unwrap();
+        let expected = representation(Some("\"fixture-v1\""), None);
+        save_resume_representation(&partial, &expected).unwrap();
+        assert_eq!(load_resume_representation(&partial).unwrap(), Some(expected));
     }
 
     #[test]
