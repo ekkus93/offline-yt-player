@@ -181,11 +181,18 @@ impl DownloadWorker {
             let Some(item) = by_id.get(snapshot.job_id.as_str()).copied() else {
                 continue;
             };
+            let previous = snapshot.clone();
             transition_snapshot(&mut snapshot, DownloadState::Resolving)?;
             snapshot.attempt = snapshot.attempt.saturating_add(1);
             snapshot.last_error = None;
-            self.library.save_download_snapshot(&snapshot)?;
-            claimed.push((snapshot, item));
+            // A second Android runtime may have claimed or paused this row
+            // since our read; only the first exact-state claimant may execute.
+            if self
+                .library
+                .replace_download_snapshot_if_unchanged(&previous, &snapshot)?
+            {
+                claimed.push((snapshot, item));
+            }
         }
         Ok(claimed)
     }

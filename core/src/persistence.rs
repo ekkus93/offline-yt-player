@@ -330,6 +330,61 @@ impl LibraryStore {
         Ok(())
     }
 
+    /// Atomically replace a previously observed durable row. Other SQLite connections
+    /// (for example foreground and user-initiated Android workers) may have claimed or
+    /// paused the job after it was read. A stale observation must never overwrite them.
+    pub(crate) fn replace_download_snapshot_if_unchanged(
+        &self,
+        previous: &DurableDownloadSnapshot,
+        next: &DurableDownloadSnapshot,
+    ) -> Result<bool, CoreError> {
+        if previous.job_id != next.job_id {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "durable download compare-and-swap cannot change job identity",
+                false,
+            ));
+        }
+        let previous_state = serde_json::to_string(&previous.state).map_err(json_error)?;
+        let next_state = serde_json::to_string(&next.state).map_err(json_error)?;
+        let previous_error = previous
+            .last_error
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(json_error)?;
+        let next_error = next
+            .last_error
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(json_error)?;
+
+        let changed = self.connection()?.execute(
+            "UPDATE download_jobs SET state_json=?1, bytes_downloaded=?2,
+                total_bytes=?3, attempt=?4, retry_at_epoch_ms=?5, error_json=?6
+             WHERE job_id=?7 AND state_json=?8 AND bytes_downloaded=?9
+                AND total_bytes IS ?10 AND attempt=?11
+                AND retry_at_epoch_ms IS ?12 AND error_json IS ?13",
+            params![
+                next_state,
+                to_i64(next.bytes_downloaded)?,
+                next.total_bytes.map(to_i64).transpose()?,
+                i64::from(next.attempt),
+                next.retry_at_epoch_ms.map(to_i64).transpose()?,
+                next_error,
+                next.job_id,
+                previous_state,
+                to_i64(previous.bytes_downloaded)?,
+                previous.total_bytes.map(to_i64).transpose()?,
+                i64::from(previous.attempt),
+                previous.retry_at_epoch_ms.map(to_i64).transpose()?,
+                previous_error,
+            ],
+        ).map_err(db_error)?;
+        Ok(changed == 1)
+    }
+
     pub fn load_download_snapshots(&self) -> Result<Vec<DurableDownloadSnapshot>, CoreError> {
         let connection = self.connection()?;
         let mut statement = connection
@@ -629,6 +684,45 @@ mod tests {
         let deleted = store.delete("item-1").unwrap().unwrap();
         assert_eq!(deleted.item_id, "item-1");
         assert!(store.get("item-1").unwrap().is_none());
+    }
+
+    #[test]
+    fn durable_claim_compare_and_swap_rejects_stale_cross_connection_state() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("claims.sqlite3");
+        let worker_a = LibraryStore::open(&path).unwrap();
+        let worker_b = LibraryStore::open(&path).unwrap();
+        let queued = DurableDownloadSnapshot {
+            job_id: "shared-job".into(),
+            state: DownloadState::Queued,
+            bytes_downloaded: 0,
+            total_bytes: None,
+            attempt: 0,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        };
+        worker_a.save_download_snapshot(&queued).unwrap();
+        let stale = worker_b.load_download_snapshots().unwrap().remove(0);
+
+        let mut first_claim = queued.clone();
+        first_claim.state = DownloadState::Resolving;
+        first_claim.attempt = 1;
+        assert!(worker_a
+            .replace_download_snapshot_if_unchanged(&queued, &first_claim)
+            .unwrap());
+        assert!(!worker_b
+            .replace_download_snapshot_if_unchanged(&stale, &first_claim)
+            .unwrap());
+        assert_eq!(worker_b.load_download_snapshots().unwrap(), vec![first_claim]);
+
+        // A pause racing a second claim must not be reverted to Resolving.
+        let mut paused = first_claim.clone();
+        paused.state = DownloadState::Paused;
+        worker_b.save_download_snapshot(&paused).unwrap();
+        assert!(!worker_a
+            .replace_download_snapshot_if_unchanged(&first_claim, &queued)
+            .unwrap());
+        assert_eq!(worker_a.load_download_snapshots().unwrap(), vec![paused]);
     }
 
     #[test]
