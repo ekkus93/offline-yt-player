@@ -376,7 +376,7 @@ mod tests {
         assert!(store.load_one("missing-job").unwrap().is_none());
         assert_eq!(
             store.load_one("corrupt-job").unwrap_err().kind,
-            ErrorKind::Persistence
+            ErrorKind::InvalidInput
         );
     }
 
