@@ -111,12 +111,21 @@ impl FfiDownloadWorkerService {
         max_concurrent_downloads: u64,
     ) -> Result<FfiDownloadWorkerResult, crate::CoreError> {
         let work_store = DurableDownloadWorkStore::open(&self.database_path)?;
-        let Some(work) = work_store.load_one(job_id)? else {
-            return Err(crate::CoreError::new(
-                crate::ErrorKind::InvalidInput,
-                "durable download work item does not exist",
-                false,
-            ));
+        let work = match work_store.load_one(job_id) {
+            Ok(Some(work)) => work,
+            Ok(None) => {
+                return Err(crate::CoreError::new(
+                    crate::ErrorKind::InvalidInput,
+                    "durable download work item does not exist",
+                    false,
+                ));
+            }
+            Err(error) if error.kind == crate::ErrorKind::InvalidInput => {
+                // Claim and settle the broken work, rather than reporting
+                // an FFI error while leaving its queue entry stuck in QUEUED.
+                return self.settle_invalid_url_plan(job_id, error, now_epoch_ms);
+            }
+            Err(error) => return Err(error),
         };
 
         if let Err(error) = validate_url_job_asset_ownership(job_id, &work.plan.assets) {
@@ -253,6 +262,50 @@ mod asset_identity_tests {
         Compatibility, DownloadPlan, DownloadPlanAsset, DownloadState, DurableDownloadSnapshot,
         DurableDownloadWorkItem, ErrorKind, MediaKind, QualityChoice, SourceIdentity,
     };
+
+    #[test]
+    fn corrupt_targeted_plan_is_settled_as_permanent_durable_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("invalid-plan.sqlite3");
+        let job_id = "https://www.youtube.com/watch?v=corrupt-plan";
+        let library = LibraryStore::open(&path).unwrap();
+        library
+            .save_download_snapshot(&DurableDownloadSnapshot {
+                job_id: job_id.into(),
+                state: DownloadState::Queued,
+                bytes_downloaded: 0,
+                total_bytes: None,
+                attempt: 0,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            })
+            .unwrap();
+        DurableDownloadWorkStore::open(&path).unwrap();
+        rusqlite::Connection::open(&path)
+            .unwrap()
+            .execute(
+                "INSERT INTO download_work_items(job_id, plan_json, created_at_epoch_ms)
+                 VALUES(?1, ?2, ?3)",
+                rusqlite::params![job_id, "{not valid JSON", 1_i64],
+            )
+            .unwrap();
+
+        let worker = FfiDownloadWorkerService::open(path.to_string_lossy().into()).unwrap();
+        let first = worker.execute_job(job_id.into(), 10_000, 1);
+        assert!(first.executed && first.failed, "{first:?}");
+        assert!(!first.completed && !first.retry_wait, "{first:?}");
+        assert!(first.error.is_none(), "{first:?}");
+
+        let durable = library.load_download_snapshots().unwrap();
+        assert_eq!(durable.len(), 1);
+        assert_eq!(durable[0].state, DownloadState::Failed);
+        assert_eq!(durable[0].attempt, 1);
+        let error = durable[0].last_error.as_ref().unwrap();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert!(!error.retryable);
+        assert!(!worker.execute_job(job_id.into(), 20_000, 1).executed);
+        assert!(library.list(None).unwrap().is_empty());
+    }
 
     #[test]
     fn url_job_rejects_foreign_asset_directory() {

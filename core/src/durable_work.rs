@@ -174,7 +174,15 @@ impl DurableDownloadWorkStore {
         row.map(|(plan_json, created_at_epoch_ms)| {
             Ok(DurableDownloadWorkItem {
                 job_id: job_id.to_owned(),
-                plan: serde_json::from_str(&plan_json).map_err(json_error)?,
+                // Invalid executable JSON is a permanent bad plan, not a
+                // transient SQLite fault. Keep these failures distinguishable.
+                plan: serde_json::from_str(&plan_json).map_err(|_| {
+                    CoreError::new(
+                        ErrorKind::InvalidInput,
+                        "Persisted executable download plan is malformed",
+                        false,
+                    )
+                })?,
                 created_at_epoch_ms: u64::try_from(created_at_epoch_ms).map_err(|_| {
                     CoreError::new(
                         ErrorKind::Persistence,
