@@ -4,6 +4,8 @@ import android.app.job.JobInfo
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -72,6 +74,32 @@ class DownloadExecutionSchedulerPolicyTest {
         val jobId = DownloadExecutionSchedulerPolicy.stableJobId("polygenelubricants")
         assertTrue(jobId >= DownloadUserInitiatedJobService.JobIdBase)
         assertTrue(jobId < DownloadUserInitiatedJobService.JobIdBase + DownloadUserInitiatedJobService.JobIdRange)
+    }
+
+    @Test
+    fun hashCollisionNeverReplacesAnotherDurableTransfer() {
+        // Java hashes collide, so the legacy direct hash ID would replace Aa
+        // when BB was scheduled.
+        assertEquals("Aa".hashCode(), "BB".hashCode())
+        val firstId = DownloadExecutionSchedulerPolicy.stableJobId("Aa")
+        assertEquals(firstId, DownloadExecutionSchedulerPolicy.stableJobId("BB"))
+        val occupied = mapOf(firstId to "Aa")
+        assertEquals(firstId, DownloadExecutionSchedulerPolicy.availableJobId("Aa", occupied))
+        val secondId = DownloadExecutionSchedulerPolicy.availableJobId("BB", occupied)
+        assertNotEquals(firstId, secondId)
+        assertEquals(
+            secondId,
+            DownloadExecutionSchedulerPolicy.availableJobId("BB", occupied + (secondId!! to "BB")),
+        )
+        assertNotEquals(firstId, DownloadExecutionSchedulerPolicy.availableJobId("Aa", mapOf(firstId to null)))
+    }
+
+    @Test
+    fun exhaustedJobIdRangeFailsClosedInsteadOfReplacingAnotherJob() {
+        val occupied = (DownloadUserInitiatedJobService.JobIdBase until
+            DownloadUserInitiatedJobService.JobIdBase + DownloadUserInitiatedJobService.JobIdRange)
+            .associateWith { "another-queue-item" }
+        assertNull(DownloadExecutionSchedulerPolicy.availableJobId("new-queue-item", occupied))
     }
 
     @Test

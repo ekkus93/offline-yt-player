@@ -68,6 +68,24 @@ internal object DownloadExecutionSchedulerPolicy {
 
     fun stableJobId(queueItemId: String): Int =
         DownloadUserInitiatedJobService.JobIdBase + ((queueItemId.hashCode().toLong().absoluteValue % DownloadUserInitiatedJobService.JobIdRange).toInt())
+
+    /**
+     * JobScheduler IDs are process-global for this app. Hashing into a fixed
+     * range is not injective: two distinct durable queue IDs must never replace
+     * each other's pending user-initiated transfer.
+     */
+    fun availableJobId(queueItemId: String, occupied: Map<Int, String?>): Int? {
+        val base = DownloadUserInitiatedJobService.JobIdBase
+        val range = DownloadUserInitiatedJobService.JobIdRange
+        val initialOffset = stableJobId(queueItemId) - base
+        for (offset in 0 until range) {
+            val candidate = base + (initialOffset + offset) % range
+            if (!occupied.containsKey(candidate) || occupied[candidate] == queueItemId) {
+                return candidate
+            }
+        }
+        return null
+    }
 }
 
 internal class AndroidDownloadExecutionScheduler(
@@ -82,36 +100,53 @@ internal class AndroidDownloadExecutionScheduler(
         }
 
     private fun scheduleUserInitiatedJob(request: DownloadScheduleRequest): DownloadScheduleResult {
-        val jobId = DownloadExecutionSchedulerPolicy.stableJobId(request.queueItemId)
-        val builder = JobInfo.Builder(
-            jobId,
-            ComponentName(context, DownloadUserInitiatedJobService::class.java),
+        val scheduler = jobScheduler ?: return DownloadScheduleResult(
+            kind = DownloadSchedulerKind.UserInitiatedDataTransferJob,
+            accepted = false,
         )
-            .setExtras(DownloadExecutionSchedulerPolicy.durableQueueItemExtras(request.queueItemId))
-            .setRequiredNetworkType(DownloadExecutionSchedulerPolicy.requiredNetworkType(request.networkPreference))
+        // Serialize lookup + schedule for all scheduler instances in this
+        // process. A collision must not silently replace a different job.
+        return synchronized(DownloadExecutionSchedulerPolicy) {
+            val component = ComponentName(context, DownloadUserInitiatedJobService::class.java)
+            val occupied = scheduler.allPendingJobs.associate { pending ->
+                pending.id to if (pending.service == component) {
+                    pending.extras.getString(DownloadUserInitiatedJobService.ExtraQueueItemId)
+                } else {
+                    null
+                }
+            }
+            val jobId = DownloadExecutionSchedulerPolicy.availableJobId(request.queueItemId, occupied)
+                ?: return@synchronized DownloadScheduleResult(
+                    kind = DownloadSchedulerKind.UserInitiatedDataTransferJob,
+                    accepted = false,
+                )
+            val builder = JobInfo.Builder(jobId, component)
+                .setExtras(DownloadExecutionSchedulerPolicy.durableQueueItemExtras(request.queueItemId))
+                .setRequiredNetworkType(DownloadExecutionSchedulerPolicy.requiredNetworkType(request.networkPreference))
 
-        if (
-            DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(sdkInt) &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-        ) {
-            builder.setEstimatedNetworkBytes(
-                request.estimatedDownloadBytes ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
-                JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
+            if (
+                DownloadExecutionSchedulerPolicy.supportsEstimatedNetworkBytes(sdkInt) &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+            ) {
+                builder.setEstimatedNetworkBytes(
+                    request.estimatedDownloadBytes ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
+                    JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
+                )
+            }
+            if (
+                DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(sdkInt) &&
+                Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk
+            ) {
+                builder.setUserInitiated(true)
+            }
+
+            val result = scheduler.schedule(builder.build())
+            DownloadScheduleResult(
+                kind = DownloadSchedulerKind.UserInitiatedDataTransferJob,
+                accepted = result == JobScheduler.RESULT_SUCCESS,
+                jobId = jobId,
             )
         }
-        if (
-            DownloadExecutionSchedulerPolicy.supportsUserInitiatedJobFlag(sdkInt) &&
-            Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk
-        ) {
-            builder.setUserInitiated(true)
-        }
-
-        val result = jobScheduler?.schedule(builder.build()) ?: JobScheduler.RESULT_FAILURE
-        return DownloadScheduleResult(
-            kind = DownloadSchedulerKind.UserInitiatedDataTransferJob,
-            accepted = result == JobScheduler.RESULT_SUCCESS,
-            jobId = jobId,
-        )
     }
 
     private fun startForegroundFallback(request: DownloadScheduleRequest): DownloadScheduleResult {
