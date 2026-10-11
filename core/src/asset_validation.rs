@@ -43,6 +43,28 @@ fn validate_asset(
     depth: AssetValidationDepth,
 ) -> Result<AssetValidation, CoreError> {
     crate::validate_relative_library_path(&asset.relative_path)?;
+    // Persisted paths may be restored from old metadata. Reject each symlink
+    // component before following the asset path: metadata/read would otherwise
+    // validate an unrelated file outside the private library as Healthy.
+    let mut current = library_root.to_path_buf();
+    for component in Path::new(&asset.relative_path).components() {
+        current.push(component.as_os_str());
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Ok(result(
+                    asset,
+                    AssetHealth::Corrupt {
+                        reason: "asset path contains a symbolic link".into(),
+                    },
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(result(asset, AssetHealth::Missing));
+            }
+            Err(error) => return Err(validation_io_error(error)),
+        }
+    }
     let path = library_root.join(&asset.relative_path);
     let metadata = match std::fs::metadata(&path) {
         Ok(metadata) if metadata.is_file() => metadata,
@@ -155,6 +177,34 @@ mod tests {
         let path = root.join("items/item-1/video.bin");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, bytes).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_file_and_parent_never_validate_external_assets_as_healthy() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let external_file = outside.path().join("video.bin");
+        std::fs::write(&external_file, b"good").unwrap();
+        let expected = format!("{:x}", Sha256::digest(b"good"));
+        let item = item(4, Some(expected));
+        let parent = root.path().join("items/item-1");
+        std::fs::create_dir_all(&parent).unwrap();
+
+        symlink(&external_file, parent.join("video.bin")).unwrap();
+        for depth in [AssetValidationDepth::Cheap, AssetValidationDepth::Deep] {
+            let checks = validate_library_item_assets(root.path(), &item, depth).unwrap();
+            assert!(matches!(checks[0].health, AssetHealth::Corrupt { .. }));
+        }
+        std::fs::remove_file(parent.join("video.bin")).unwrap();
+        std::fs::remove_dir(&parent).unwrap();
+        symlink(outside.path(), &parent).unwrap();
+        let checks =
+            validate_library_item_assets(root.path(), &item, AssetValidationDepth::Deep).unwrap();
+        assert!(matches!(checks[0].health, AssetHealth::Corrupt { .. }));
+        assert_eq!(std::fs::read(&external_file).unwrap(), b"good");
     }
 
     #[test]
