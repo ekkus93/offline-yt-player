@@ -147,8 +147,9 @@ impl FfiDownloadControlService {
             audio_format_id,
         )?;
         match executable_work {
-            Some(work) => DurableDownloadWorkStore::open(&self.database_path)?
-                .enqueue_if_absent(&work),
+            Some(work) => {
+                DurableDownloadWorkStore::open(&self.database_path)?.enqueue_if_absent(&work)
+            }
             None => self
                 .library
                 .insert_download_snapshot_if_absent(&DurableDownloadSnapshot {
