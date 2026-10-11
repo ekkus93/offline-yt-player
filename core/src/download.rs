@@ -219,7 +219,11 @@ impl DownloadEngine {
             .get(CONTENT_LENGTH)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse::<u64>().ok());
-        if declared_body.is_some_and(|value| value > self.policy.max_asset_bytes) {
+        if declared_body.is_some_and(|value| {
+            start
+                .checked_add(value)
+                .is_none_or(|total| total > self.policy.max_asset_bytes)
+        }) {
             return Err(CoreError::new(
                 ErrorKind::InvalidInput,
                 "Remote response exceeds configured maximum size",
@@ -655,6 +659,51 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert_eq!(fs::read(&partial).unwrap(), b"too large");
+        assert!(!final_path.exists());
+    }
+
+    #[test]
+    fn resumed_response_over_asset_limit_is_rejected_before_appending() {
+        let data = b"0123456789".to_vec();
+        let server = FixtureServer::start(data.clone());
+        let root = tempfile::tempdir().unwrap();
+        let relative_path = "items/one/video.mp4";
+        let final_path = root.path().join(relative_path);
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        let partial = partial_path(&final_path);
+        fs::write(&partial, &data[..3]).unwrap();
+        let url = format!("{}/media", server.address);
+        save_resume_representation(
+            &partial,
+            &ResumeRepresentation {
+                url: url.clone(),
+                etag: Some("\"fixture-v1\"".into()),
+                last_modified: None,
+                total_bytes: Some(data.len() as u64),
+            },
+        )
+        .unwrap();
+        let engine = DownloadEngine::new(
+            root.path(),
+            DownloadPolicy {
+                max_asset_bytes: 6,
+                ..DownloadPolicy::default()
+            },
+        )
+        .unwrap();
+        let error = engine
+            .transfer(
+                &TransferRequest {
+                    url,
+                    relative_path: relative_path.into(),
+                    expected_bytes: None,
+                    expected_sha256: None,
+                },
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&partial).unwrap(), &data[..3]);
         assert!(!final_path.exists());
     }
 
