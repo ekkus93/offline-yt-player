@@ -30,6 +30,49 @@ class LibraryIdentityMappingTest {
         assertTrue(map(listOf(item("one")), listOf(asset("one"), asset(" "))) is LibraryScreenState.Failed)
     }
 
+    @Test fun relativeTraversalPlaybackPathFailsClosed() {
+        val escaped = CoreLibraryPlaybackAsset("one", "../outside.mp4", null, true, null)
+        assertTrue(map(listOf(item("one")), listOf(escaped)) is LibraryScreenState.Failed)
+    }
+
+    @Test fun absolutePlaybackPathFailsClosed() {
+        val escaped = CoreLibraryPlaybackAsset("one", "/tmp/outside.mp4", null, true, null)
+        assertTrue(map(listOf(item("one")), listOf(escaped)) is LibraryScreenState.Failed)
+    }
+
+    @Test fun symlinkEscapingLibraryRootFailsClosed() {
+        val root = java.nio.file.Files.createTempDirectory("playback-root").toFile()
+        val outside = java.nio.file.Files.createTempFile("playback-outside", ".mp4").toFile()
+        val link = File(root, "link.mp4")
+        try {
+            java.nio.file.Files.createSymbolicLink(link.toPath(), outside.toPath())
+            val result = CoreGatewayResult(value = listOf(item("one")), error = null)
+                .toLibraryScreenState(root, CoreGatewayResult(value = listOf(
+                    CoreLibraryPlaybackAsset("one", "link.mp4", null, true, null),
+                ), error = null))
+            assertTrue(result is LibraryScreenState.Failed)
+        } finally {
+            link.delete()
+            outside.delete()
+            root.delete()
+        }
+    }
+
+    @Test fun validNestedPlaybackPathStaysWithinLibraryRoot() {
+        val root = java.nio.file.Files.createTempDirectory("playback-root").toFile()
+        try {
+            val path = "items/one/video.mp4"
+            val result = CoreGatewayResult(value = listOf(item("one")), error = null)
+                .toLibraryScreenState(root, CoreGatewayResult(value = listOf(
+                    CoreLibraryPlaybackAsset("one", path, null, true, null),
+                ), error = null))
+            assertTrue(result is LibraryScreenState.Ready)
+            assertTrue(safeLocalPlaybackPath(root, path) == File(root, path).canonicalPath)
+        } finally {
+            root.delete()
+        }
+    }
+
     @Test fun validDistinctIdsRemainReady() {
         assertTrue(map(listOf(item("one")), listOf(asset("one"))) is LibraryScreenState.Ready)
     }
