@@ -233,10 +233,9 @@ mod asset_identity_tests {
                     },
                 })
                 .expect("persist executable malformed work");
-            let service = FfiDownloadWorkerService::open(
-                database_path.to_string_lossy().into_owned(),
-            )
-            .expect("open FFI worker");
+            let service =
+                FfiDownloadWorkerService::open(database_path.to_string_lossy().into_owned())
+                    .expect("open FFI worker");
             let result = service.execute_job(job_id.clone(), 10_000, 1);
             assert!(result.executed, "{defect}: {result:?}");
             assert!(result.failed, "{defect}: {result:?}");
@@ -254,7 +253,10 @@ mod asset_identity_tests {
             assert!(!error.retryable, "{defect}");
             assert!(library.list(None).unwrap().is_empty(), "{defect}");
             assert!(library.staged_job_ids().unwrap().is_empty(), "{defect}");
-            assert!(!workspace.path().join(format!("items/{job_id}")).exists(), "{defect}");
+            assert!(
+                !workspace.path().join(format!("items/{job_id}")).exists(),
+                "{defect}"
+            );
         }
     }
 }
