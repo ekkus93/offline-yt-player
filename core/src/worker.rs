@@ -606,17 +606,16 @@ mod tests {
         claimed.attempt = 1;
         store.save_download_snapshot(&claimed).unwrap();
         let root = tempfile::tempdir().unwrap();
-        let worker = DownloadWorker::new(
-            store.clone(),
-            root.path(),
-            DownloadPolicy::default(),
-            1,
-        );
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
         let mut paused = claimed.clone();
         paused.state = DownloadState::Paused;
         store.save_download_snapshot(&paused).unwrap();
         let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
-        let item = plan("pause-after-claim", "http://127.0.0.1:1/no-transfer".into(), 64);
+        let item = plan(
+            "pause-after-claim",
+            "http://127.0.0.1:1/no-transfer".into(),
+            64,
+        );
         let error = worker
             .execute_one(
                 &engine,
@@ -630,7 +629,12 @@ mod tests {
         assert_eq!(store.load_download_snapshots().unwrap(), vec![paused]);
         assert!(store.staged_job_ids().unwrap().is_empty());
         assert!(store.get("pause-after-claim").unwrap().is_none());
-        assert!(!root.path().join("items/pause-after-claim/video.mp4").exists());
+        assert!(
+            !root
+                .path()
+                .join("items/pause-after-claim/video.mp4")
+                .exists()
+        );
     }
 
     #[test]
