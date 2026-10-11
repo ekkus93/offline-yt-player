@@ -19,16 +19,21 @@ pub struct ResumeRepresentation {
 impl ResumeRepresentation {
     #[must_use]
     pub fn has_remote_validator(&self) -> bool {
-        self.etag.as_deref().is_some_and(|value| !value.is_empty())
-            || self
+        match self.etag.as_deref() {
+            // Weak ETags assert semantic equivalence, not byte-for-byte
+            // identity, so they cannot authorize appending a byte range.
+            Some(etag) => is_strong_etag(etag),
+            None => self
                 .last_modified
                 .as_deref()
-                .is_some_and(|value| !value.is_empty())
+                .is_some_and(|value| !value.trim().is_empty()),
+        }
     }
 
     /// A stored partial may only be reused when the URL is unchanged and a validator still
-    /// identifies the same remote representation. Prefer ETag when both sides provide one;
-    /// otherwise use Last-Modified. Known total length is an additional consistency check.
+    /// identifies the same remote representation. Strong ETags take precedence; Last-Modified
+    /// is a fallback only when neither response supplies an ETag. A weak ETag or validator
+    /// downgrade cannot prove byte identity. Known total length is an additional check.
     #[must_use]
     pub fn matches(&self, current: &Self) -> bool {
         if self.url != current.url
@@ -44,13 +49,24 @@ impl ResumeRepresentation {
             return false;
         }
         match (&self.etag, &current.etag) {
-            (Some(stored), Some(now)) => stored == now,
-            _ => match (&self.last_modified, &current.last_modified) {
-                (Some(stored), Some(now)) => stored == now,
+            (Some(stored), Some(now)) => {
+                is_strong_etag(stored) && is_strong_etag(now) && stored == now
+            }
+            (None, None) => match (&self.last_modified, &current.last_modified) {
+                (Some(stored), Some(now)) => !stored.trim().is_empty() && stored == now,
                 _ => false,
             },
+            _ => false,
         }
     }
+}
+
+fn is_strong_etag(value: &str) -> bool {
+    let value = value.trim();
+    !value.is_empty()
+        && !value
+            .get(..2)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("W/"))
 }
 
 #[must_use]
@@ -178,6 +194,31 @@ mod tests {
     fn etag_identity_must_match() {
         assert!(representation(Some("v1"), None).matches(&representation(Some("v1"), None)));
         assert!(!representation(Some("v1"), None).matches(&representation(Some("v2"), None)));
+    }
+
+    #[test]
+    fn weak_etag_never_authorizes_byte_range_append() {
+        let weak = representation(Some("W/\"fixture-v1\""), None);
+        assert!(!weak.has_remote_validator());
+        assert!(!weak.matches(&weak));
+        let weak_with_date = representation(
+            Some("W/\"fixture-v1\""),
+            Some("Wed, 16 Sep 2026 00:00:00 GMT"),
+        );
+        assert!(!weak_with_date.has_remote_validator());
+        assert!(!weak_with_date.matches(&weak_with_date));
+        assert!(!representation(Some("\"fixture-v1\""), None).matches(&weak));
+    }
+
+    #[test]
+    fn etag_presence_change_cannot_silently_downgrade_to_date() {
+        let strong = representation(
+            Some("\"fixture-v1\""),
+            Some("Wed, 16 Sep 2026 00:00:00 GMT"),
+        );
+        let date_only = representation(None, Some("Wed, 16 Sep 2026 00:00:00 GMT"));
+        assert!(!strong.matches(&date_only));
+        assert!(!date_only.matches(&strong));
     }
 
     #[test]
