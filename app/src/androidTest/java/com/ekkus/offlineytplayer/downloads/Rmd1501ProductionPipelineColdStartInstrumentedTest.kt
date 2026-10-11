@@ -551,6 +551,6 @@ class Rmd1501ProductionPipelineColdStartInstrumentedTest {
         const val DATABASE_NAME = "offline-yt-player.sqlite3"
         const val SOURCE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         const val TITLE = "RMD-1501 production pipeline fixture"
-        const val MEDIA_RELATIVE_PATH = "items/rmd-1501-cold-start/offline.wav"
+        const val MEDIA_RELATIVE_PATH = "items/by-job-0424974c68530290458c8d58674e2637f65abc127057957d7b3acbd24c208f93/offline.wav"
     }
 }

@@ -138,7 +138,7 @@ class Rmd1504ShareE2EInstrumentedTest {
             // the generated worker must still promote the asset and persist
             // the Library record. Avoid re-clicking the navigation tab during
             // each Compose poll; navigate once after durable core completion.
-            val completedFile = File(context.filesDir, "items/rmd-1504-share/video.mp4")
+            val completedFile = File(context.filesDir, "items/by-job-0424974c68530290458c8d58674e2637f65abc127057957d7b3acbd24c208f93/video.mp4")
             compose.waitUntil(45_000) {
                 completedFile.isFile &&
                     completedFile.length() == payload.size.toLong() &&
@@ -248,7 +248,7 @@ class Rmd1504ShareE2EInstrumentedTest {
                       "asset_id": "video",
                       "kind": "Video",
                       "url": "$mediaUrl",
-                      "relative_path": "items/rmd-1504-share/video.mp4",
+                      "relative_path": "items/by-job-0424974c68530290458c8d58674e2637f65abc127057957d7b3acbd24c208f93/video.mp4",
                       "expected_bytes": $expectedBytes,
                       "expected_sha256": null,
                       "mime_type": "video/mp4"
