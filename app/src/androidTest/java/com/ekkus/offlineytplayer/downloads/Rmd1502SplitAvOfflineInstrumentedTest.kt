@@ -349,6 +349,28 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
                 instrumentation.runOnMainSync { observer.release() }
             }
 
+
+        }
+    }
+
+    @Test
+    fun fileIdentityRejectsDeviceProtectedLookalike() {
+        assumeTrue(android.os.Build.VERSION.SDK_INT >= 26)
+        val filename = "rmd-1502-identity-probe.bin"
+        val expected = File(context.filesDir, filename)
+        val lookalike = File(context.createDeviceProtectedStorageContext().filesDir, filename)
+        try {
+            expected.writeBytes(byteArrayOf(1, 2, 3))
+            lookalike.writeBytes(byteArrayOf(4, 5, 6))
+            assertTrue(isSameLocalFile(android.net.Uri.fromFile(expected), expected))
+            // Both paths have the same package-relative suffix; they are not
+            // the same inode and must not qualify as the persisted video.
+            assertTrue(!isSameLocalFile(android.net.Uri.fromFile(lookalike), expected))
+            assertTrue(!isSameLocalFile(android.net.Uri.parse("https://example.invalid/video"), expected))
+            assertTrue(!isSameLocalFile(android.net.Uri.fromFile(File(expected.parentFile, "missing.bin")), expected))
+        } finally {
+            expected.delete()
+            lookalike.delete()
         }
     }
 
