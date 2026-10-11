@@ -175,6 +175,13 @@ impl DownloadEngine {
         ensure_safe_library_write_path(&self.root, &final_path, &partial_path)?;
 
         let existing = fs::metadata(&partial_path).map_or(0, |metadata| metadata.len());
+        if existing > self.policy.max_asset_bytes {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "Existing partial asset exceeds configured maximum size",
+                false,
+            ));
+        }
         self.preflight_transfer_space(request, existing)?;
         let mut response = self.request(&request.url, existing)?;
         ensure_success(&response)?;
@@ -618,6 +625,38 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use tiny_http::{Header, Response as TinyResponse, Server, StatusCode};
+
+    #[test]
+    fn oversized_existing_partial_is_rejected_before_any_network_request() {
+        let root = tempfile::tempdir().unwrap();
+        let relative_path = "items/oversized/video.mp4";
+        let final_path = root.path().join(relative_path);
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        let partial = partial_path(&final_path);
+        fs::write(&partial, b"too large").unwrap();
+        let engine = DownloadEngine::new(
+            root.path(),
+            DownloadPolicy {
+                max_asset_bytes: 4,
+                ..DownloadPolicy::default()
+            },
+        )
+        .unwrap();
+        let error = engine
+            .transfer(
+                &TransferRequest {
+                    url: "http://127.0.0.1:1/unreachable".into(),
+                    relative_path: relative_path.into(),
+                    expected_bytes: None,
+                    expected_sha256: None,
+                },
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&partial).unwrap(), b"too large");
+        assert!(!final_path.exists());
+    }
 
     struct FixtureServer {
         address: String,
