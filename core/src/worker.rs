@@ -95,7 +95,12 @@ impl DownloadWorker {
                         Some(DurableStopReason::Pause) => {
                             report.paused.push(snapshot.job_id.clone());
                         }
-                        _ => {
+                        Some(DurableStopReason::Cancel) => {
+                            // The durable cancellation has already been persisted.
+                            // Do not overwrite it with our stale running snapshot.
+                            report.canceled.push(snapshot.job_id.clone());
+                        }
+                        None => {
                             self.finish_canceled(&mut snapshot)?;
                             report.canceled.push(snapshot.job_id.clone());
                         }
@@ -273,11 +278,23 @@ impl DownloadWorker {
                 ));
             }
         }
+        let prior_claim = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Downloading)?;
         snapshot.total_bytes = total_expected_bytes(&item.plan);
         // Retry replays assets; transfer results report full sizes, not byte deltas.
         snapshot.bytes_downloaded = 0;
-        self.library.save_download_snapshot(snapshot)?;
+        // Pause/cancel can race the period between claim and execution startup.
+        // A stale worker must not change that durable decision back to Downloading.
+        if !self
+            .library
+            .replace_download_snapshot_if_unchanged(&prior_claim, snapshot)?
+        {
+            return Err(CoreError::new(
+                ErrorKind::Canceled,
+                "download execution was superseded by a concurrent queue update",
+                false,
+            ));
+        }
 
         let mut assets = Vec::new();
         let mut coalescer = ProgressCoalescer::default();
@@ -580,6 +597,40 @@ mod tests {
         assert_eq!(durable.retry_at_epoch_ms, None);
         assert!(durable.last_error.is_none());
         assert!(store.get("init-failure").unwrap().is_none());
+    }
+
+    #[test]
+    fn pause_after_claim_prevents_stale_worker_from_starting_transfer() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut claimed = snapshot("pause-after-claim", DownloadState::Resolving);
+        claimed.attempt = 1;
+        store.save_download_snapshot(&claimed).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(
+            store.clone(),
+            root.path(),
+            DownloadPolicy::default(),
+            1,
+        );
+        let mut paused = claimed.clone();
+        paused.state = DownloadState::Paused;
+        store.save_download_snapshot(&paused).unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let item = plan("pause-after-claim", "http://127.0.0.1:1/no-transfer".into(), 64);
+        let error = worker
+            .execute_one(
+                &engine,
+                &item,
+                &mut claimed,
+                &AtomicBool::new(false),
+                10_000,
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Canceled);
+        assert_eq!(store.load_download_snapshots().unwrap(), vec![paused]);
+        assert!(store.staged_job_ids().unwrap().is_empty());
+        assert!(store.get("pause-after-claim").unwrap().is_none());
+        assert!(!root.path().join("items/pause-after-claim/video.mp4").exists());
     }
 
     #[test]
