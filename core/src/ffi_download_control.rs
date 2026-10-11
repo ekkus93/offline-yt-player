@@ -137,8 +137,17 @@ impl FfiDownloadControlService {
             ));
         }
         let snapshots = self.library.load_download_snapshots()?;
-        if snapshots.iter().any(|snapshot| snapshot.job_id == job_id) {
-            return Ok(false);
+        if let Some(existing) = snapshots.iter().find(|snapshot| snapshot.job_id == job_id) {
+            // A platform scheduler rejection occurs after the durable enqueue.
+            // Repeated user enqueue may retry scheduling only for queued jobs
+            // that still have executable work, without rewriting either row.
+            if existing.state != DownloadState::Queued {
+                return Ok(false);
+            }
+            return Ok(DurableDownloadWorkStore::open(&self.database_path)?
+                .load_all()?
+                .iter()
+                .any(|work| work.job_id == job_id));
         }
         let executable_work = build_download_work_if_supported_source_url_with_options(
             job_id,
@@ -265,6 +274,56 @@ mod stale_control_tests {
             retry_at_epoch_ms: None,
             last_error: None,
         }
+    }
+
+    #[test]
+    fn queued_executable_work_can_retry_rejected_android_scheduling() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scheduler-retry.sqlite3");
+        let service = FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let queue = LibraryStore::open(&path).unwrap();
+        let work_store = DurableDownloadWorkStore::open(&path).unwrap();
+        let work = crate::DurableDownloadWorkItem {
+            job_id: "retry-scheduler".into(),
+            plan: crate::DownloadPlan {
+                source: crate::SourceIdentity::new("fixture", "media-1"),
+                title: "Fixture".into(),
+                duration_ms: None,
+                quality: crate::QualityChoice {
+                    choice_id: "360p".into(),
+                    label: "360p".into(),
+                    estimated_bytes: Some(10),
+                    video_height: Some(360),
+                    audio_only: false,
+                    compatibility: crate::Compatibility::Preferred,
+                },
+                assets: vec![crate::DownloadPlanAsset {
+                    asset_id: "video".into(),
+                    kind: crate::MediaKind::Video,
+                    url: "http://127.0.0.1/fixture".into(),
+                    relative_path: "items/retry-scheduler/video.mp4".into(),
+                    expected_bytes: Some(10),
+                    expected_sha256: None,
+                    mime_type: Some("video/mp4".into()),
+                }],
+            },
+            created_at_epoch_ms: 123,
+        };
+        assert!(work_store.enqueue_if_absent(&work).unwrap());
+        let queued = queue.load_download_snapshots().unwrap().remove(0);
+        assert!(service.enqueue("retry-scheduler".into()).updated);
+        assert_eq!(queue.load_download_snapshots().unwrap(), vec![queued.clone()]);
+        assert_eq!(work_store.load_all().unwrap(), vec![work]);
+
+        let mut active = queued.clone();
+        active.state = DownloadState::Downloading;
+        queue.save_download_snapshot(&active).unwrap();
+        assert!(!service.enqueue("retry-scheduler".into()).updated);
+
+        let mut no_plan = queued;
+        no_plan.job_id = "queue-only".into();
+        queue.save_download_snapshot(&no_plan).unwrap();
+        assert!(!service.enqueue("queue-only".into()).updated);
     }
 
     #[test]
