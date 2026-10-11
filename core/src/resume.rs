@@ -355,11 +355,9 @@ mod tests {
 
         let error = load_resume_representation(&partial).unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
-        let error = save_resume_representation(
-            &partial,
-            &representation(Some("\"fixture-v1\""), None),
-        )
-        .unwrap_err();
+        let error =
+            save_resume_representation(&partial, &representation(Some("\"fixture-v1\""), None))
+                .unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert_eq!(fs::read(&outside_path).unwrap(), b"outside private bytes");
     }
@@ -377,11 +375,9 @@ mod tests {
         let sidecar = resume_metadata_path(&partial);
         symlink(&outside_path, sidecar.with_extension("json.tmp")).unwrap();
 
-        let error = save_resume_representation(
-            &partial,
-            &representation(Some("\"fixture-v1\""), None),
-        )
-        .unwrap_err();
+        let error =
+            save_resume_representation(&partial, &representation(Some("\"fixture-v1\""), None))
+                .unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert_eq!(fs::read(&outside_path).unwrap(), b"outside private bytes");
         assert!(!sidecar.exists());
@@ -395,7 +391,10 @@ mod tests {
         fs::write(sidecar.with_extension("json.tmp"), b"stale crash temp").unwrap();
         let expected = representation(Some("\"fixture-v1\""), None);
         save_resume_representation(&partial, &expected).unwrap();
-        assert_eq!(load_resume_representation(&partial).unwrap(), Some(expected));
+        assert_eq!(
+            load_resume_representation(&partial).unwrap(),
+            Some(expected)
+        );
     }
 
     #[test]
