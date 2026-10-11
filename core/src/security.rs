@@ -122,7 +122,10 @@ pub fn redact_sensitive(input: &str) -> String {
             } else {
                 ""
             };
-            format!("{prefix}{separator}{} [REDACTED]", &line[offset..offset + length])
+            format!(
+                "{prefix}{separator}{} [REDACTED]",
+                &line[offset..offset + length]
+            )
         } else {
             redact_urls(line)
         };
