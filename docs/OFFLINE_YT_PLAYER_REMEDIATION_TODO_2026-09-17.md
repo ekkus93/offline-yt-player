@@ -1089,6 +1089,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 FGS timeout durability review (2026-10-11; exact-head qualification pending):** `DownloadForegroundTimeoutStore.persistTimeout` previously used asynchronous `SharedPreferences.Editor.apply()` immediately before `DownloadForegroundService.onTimeout` stops the service. The persisted timeout record could therefore lag process termination despite in-memory instrumentation assertions passing. Change to synchronous `commit()` and add a packaged Android instrumentation check that reads the actual backing XML after return. See `docs/RMD_1802_FGS_TIMEOUT_DURABILITY_REVIEW_2026-10-11.md`. This is not final RMD-1802/RMD-1803 qualification or a closeout checkbox.
 
+**RMD-1802 prefixed diagnostic-header redaction finding (2026-10-11; exact-head qualification pending):** independent Rust security review found `core/src/security.rs::redact_sensitive` only recognized credential-bearing headers at the beginning of a line. Common log prefixes such as timestamps, levels, or `request failed:` could therefore leave Authorization/Cookie/X-Api-Key values in diagnostics. The redactor now finds sensitive header fields anywhere in the line, sanitizes any URL-bearing prefix, and drops the entire sensitive suffix. Deterministic regression `prefixed_sensitive_headers_never_leak_values` covers timestamp, error prefix, and combined signed-URL/header cases. Do not close RMD-1802/RMD-1803 before the new exact-head matrix passes and the independent review is complete.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.

@@ -105,12 +105,24 @@ pub fn redact_sensitive(input: &str) -> String {
     for line in input.lines() {
         // Diagnostic renderers may indent header lines. Never treat indentation as a
         // reason to leave a credential-bearing header unredacted.
-        let lower = line.trim_start().to_ascii_lowercase();
-        let redacted = if sensitive_names.iter().any(|name| lower.starts_with(name)) {
-            line.split_once(':').map_or_else(
-                || "[REDACTED]".to_string(),
-                |(name, _)| format!("{name}: [REDACTED]"),
-            )
+        // Loggers commonly prefix header text with a timestamp, level, or
+        // "request failed:" context. Redact the header value even when the
+        // sensitive field is not the first token on its diagnostic line.
+        let lower = line.to_ascii_lowercase();
+        let header = sensitive_names
+            .iter()
+            .filter_map(|name| lower.find(name).map(|offset| (offset, name.len())))
+            .min_by_key(|(offset, _)| *offset);
+        let redacted = if let Some((offset, length)) = header {
+            // The prefix may itself contain a signed URL. Sanitize it before
+            // dropping the entire header value and remaining line suffix.
+            let prefix = redact_urls(&line[..offset]);
+            let separator = if line[..offset].ends_with(' ') && !prefix.ends_with(' ') {
+                " "
+            } else {
+                ""
+            };
+            format!("{prefix}{separator}{} [REDACTED]", &line[offset..offset + length])
         } else {
             redact_urls(line)
         };
@@ -230,6 +242,26 @@ mod tests {
         assert!(output.contains("Authorization: [REDACTED]"));
         assert!(output.contains("Cookie: [REDACTED]"));
         assert!(output.contains("X-Api-Key: [REDACTED]"));
+    }
+
+    #[test]
+    fn prefixed_sensitive_headers_never_leak_values() {
+        let marker = "RMD1802_PREFIXED_HEADER_SECRET";
+        let cases = [
+            format!("2026-10-11T20:00:00Z ERROR Authorization: Bearer {marker}"),
+            format!("request failed: Cookie: session={marker}"),
+            format!("network error: X-Api-Key: {marker}"),
+            format!("GET https://cdn.example/media?sig={marker} Authorization: Bearer {marker}"),
+        ];
+        for input in cases {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("[REDACTED]"), "{output}");
+        }
+        assert_eq!(
+            redact_sensitive("request failed: no authorization header received"),
+            "request failed: no authorization header received"
+        );
     }
 
     #[test]
