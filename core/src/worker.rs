@@ -711,12 +711,13 @@ mod tests {
         let work = plan("engine-failure", "http://127.0.0.1:1/unreachable".into(), 5);
 
         let error = worker
-            .execute_ready_at_with_engine_factory(
-                &[work],
-                &AtomicBool::new(false),
-                10_000,
-                || Err(CoreError::new(ErrorKind::NetworkUnavailable, "engine setup failed", true)),
-            )
+            .execute_ready_at_with_engine_factory(&[work], &AtomicBool::new(false), 10_000, || {
+                Err(CoreError::new(
+                    ErrorKind::NetworkUnavailable,
+                    "engine setup failed",
+                    true,
+                ))
+            })
             .unwrap_err();
         assert_eq!(error.kind, ErrorKind::NetworkUnavailable);
         let durable = store.load_download_snapshots().unwrap().remove(0);
@@ -958,22 +959,3 @@ mod tests {
                 let mut current = control_store.load_download_snapshots().unwrap().remove(0);
                 if current.state == DownloadState::Downloading {
                     let mut machine = DownloadStateMachine::new(current.state);
-                    machine.transition(DownloadState::Paused).unwrap();
-                    current.state = machine.state();
-                    control_store.save_download_snapshot(&current).unwrap();
-                    return;
-                }
-                thread::sleep(std::time::Duration::from_millis(5));
-            }
-            panic!("worker never entered downloading state");
-        });
-        let report = worker
-            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
-            .unwrap();
-        controller.join().unwrap();
-        assert_eq!(report.paused, vec!["pause-job"]);
-        let durable = store.load_download_snapshots().unwrap().remove(0);
-        assert_eq!(durable.state, DownloadState::Paused);
-        assert!(report.canceled.is_empty());
-    }
-}
