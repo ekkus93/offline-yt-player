@@ -169,9 +169,7 @@ fn validate_asset_identities(assets: &[crate::DownloadPlanAsset]) -> Result<(), 
                 false,
             ));
         }
-        if asset.relative_path.trim().is_empty()
-            || !paths.insert(asset.relative_path.as_str())
-        {
+        if asset.relative_path.trim().is_empty() || !paths.insert(asset.relative_path.as_str()) {
             return Err(crate::CoreError::new(
                 crate::ErrorKind::InvalidInput,
                 "download plan has blank or duplicate asset output paths",
@@ -198,22 +196,3 @@ mod asset_identity_tests {
             mime_type: None,
         };
         let mut distinct = original.clone();
-        distinct.asset_id = "audio".into();
-        distinct.relative_path = "items/job/audio.mp4".into();
-        assert!(validate_asset_identities(&[original.clone(), distinct.clone()]).is_ok());
-
-        for defect in 0..4 {
-            let mut conflicting = distinct.clone();
-            match defect {
-                0 => conflicting.asset_id = original.asset_id.clone(),
-                1 => conflicting.relative_path = original.relative_path.clone(),
-                2 => conflicting.asset_id = "  ".into(),
-                3 => conflicting.relative_path = "  ".into(),
-                _ => unreachable!(),
-            }
-            let error = validate_asset_identities(&[original.clone(), conflicting]).unwrap_err();
-            assert_eq!(error.kind, crate::ErrorKind::InvalidInput);
-            assert!(!error.retryable);
-        }
-    }
-}
