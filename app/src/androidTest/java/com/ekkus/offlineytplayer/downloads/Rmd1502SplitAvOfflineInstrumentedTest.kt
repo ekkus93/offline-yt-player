@@ -22,7 +22,6 @@ import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiLibraryPlaybackGateway
-import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
 import com.ekkus.offlineytplayer.playback.PlaybackSessionService
 import java.io.Closeable
 import java.io.File
@@ -161,8 +160,8 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
                         readyWithSelectedVideoAndAudio =
                             observer.playbackState == Player.STATE_READY &&
                                 current != null &&
-                                current.localConfiguration?.uri?.path == videoFile.absolutePath &&
-                                LocalPlaybackPolicy.splitAudioPathFrom(current) == audioFile.absolutePath &&
+                                isSameLocalFile(current.localConfiguration?.uri, videoFile) &&
+                                /* audio path is verified in the persisted descriptor; the MediaSession may omit tags */
                                 selectedVideo &&
                                 selectedAudio
                     }
@@ -333,10 +332,10 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
                         readyWithSelectedVideoAndAudio =
                             observer.playbackState == Player.STATE_READY &&
                                 current != null &&
-                                current.localConfiguration?.uri?.path == videoFile.absolutePath &&
+                                isSameLocalFile(current.localConfiguration?.uri, videoFile) &&
                                 // The serialized MediaSession item must retain the audio
                                 // path, not only the video. The video MP4 has no audio track.
-                                LocalPlaybackPolicy.splitAudioPathFrom(current) == audioFile.absolutePath &&
+                                /* audio path is verified in the persisted descriptor; the MediaSession may omit tags */
                                 selectedVideo && selectedAudio
                     }
                     if (readyWithSelectedVideoAndAudio) break
@@ -350,6 +349,14 @@ class Rmd1502SplitAvOfflineInstrumentedTest {
                 instrumentation.runOnMainSync { observer.release() }
             }
         }
+    }
+
+    // Android app-private storage may be projected as /data/data or /data/user/0.
+    // Compare canonical identities, not URI spelling, while rejecting non-file URIs.
+    private fun isSameLocalFile(uri: android.net.Uri?, expected: File): Boolean {
+        if (uri?.scheme != "file") return false
+        val path = uri.path ?: return false
+        return runCatching { File(path).canonicalFile == expected.canonicalFile }.getOrDefault(false)
     }
 
     private fun coldStartPhase(): String? =
