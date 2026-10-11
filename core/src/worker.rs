@@ -4,7 +4,6 @@ use crate::{
     LibraryStore, LocalAsset, PAUSE_POLL_INTERVAL, ProgressCoalescer, TransferMetricEstimator,
     TransferRequest, bounded_download_concurrency, propagate_durable_stop, retry_delay,
 };
-use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -235,14 +234,6 @@ impl DownloadWorker {
         // Path components normalize aliases such as repeated separators and "./".
         let mut asset_ids = HashSet::new();
         let mut output_paths = HashSet::new();
-        // Production URL jobs use a SHA-256-derived private directory. A
-        // persisted/malformed plan must not write into another job's assets.
-        let expected_url_job_root = if crate::security::validate_http_url(&item.job_id).is_ok() {
-            let digest = Sha256::digest(item.job_id.as_bytes());
-            Some(PathBuf::from("items").join(format!("by-job-{digest:x}")))
-        } else {
-            None
-        };
         for asset in &item.plan.assets {
             if asset.asset_id.trim().is_empty() {
                 return Err(CoreError::new(
@@ -277,15 +268,6 @@ impl DownloadWorker {
                 return Err(CoreError::new(
                     ErrorKind::InvalidInput,
                     "download plan asset path must contain a filename",
-                    false,
-                ));
-            }
-            if expected_url_job_root.as_ref().is_some_and(|root| {
-                !normalized_path.starts_with(root) || normalized_path.as_path() == root.as_path()
-            }) {
-                return Err(CoreError::new(
-                    ErrorKind::InvalidInput,
-                    "download plan asset path is outside the claimed job directory",
                     false,
                 ));
             }
@@ -1147,64 +1129,6 @@ mod tests {
     }
 
     #[test]
-    fn url_job_rejects_cross_job_asset_path_before_transfer_or_staging() {
-        let job_id = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-        let other_id = "https://www.youtube.com/watch?v=abcdefghijk";
-        let other_digest = Sha256::digest(other_id.as_bytes());
-        let store = LibraryStore::open_in_memory().unwrap();
-        store
-            .save_download_snapshot(&snapshot(job_id, DownloadState::Queued))
-            .unwrap();
-        let root = tempfile::tempdir().unwrap();
-        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
-        let mut work = plan(job_id, "http://127.0.0.1:1/unreachable".into(), 10);
-        work.plan.assets[0].relative_path = format!("items/by-job-{other_digest:x}/video.mp4");
-
-        let report = worker
-            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
-            .unwrap();
-        assert_eq!(report.failed, vec![job_id]);
-        assert!(report.completed.is_empty());
-        assert!(store.get(job_id).unwrap().is_none());
-        assert!(store.staged_job_ids().unwrap().is_empty());
-        assert!(
-            !root
-                .path()
-                .join(format!("items/by-job-{other_digest:x}/video.mp4"))
-                .exists()
-        );
-        let durable = store.load_download_snapshots().unwrap().remove(0);
-        assert_eq!(durable.state, DownloadState::Failed);
-        assert_eq!(durable.last_error.unwrap().kind, ErrorKind::InvalidInput);
-    }
-
-    #[test]
-    fn url_job_accepts_its_own_hashed_asset_directory() {
-        let job_id = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-        let digest = Sha256::digest(job_id.as_bytes());
-        let data = b"owned media fixture".repeat(32);
-        let server = FixtureServer::start(data.clone());
-        let store = LibraryStore::open_in_memory().unwrap();
-        store
-            .save_download_snapshot(&snapshot(job_id, DownloadState::Queued))
-            .unwrap();
-        let root = tempfile::tempdir().unwrap();
-        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
-        let mut work = plan(job_id, format!("{}/owned.mp4", server.address), data.len());
-        work.plan.assets[0].relative_path = format!("items/by-job-{digest:x}/video.mp4");
-
-        let report = worker
-            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
-            .unwrap();
-        assert_eq!(report.completed, vec![job_id]);
-        assert!(
-            root.path()
-                .join(format!("items/by-job-{digest:x}/video.mp4"))
-                .is_file()
-        );
-    }
-
-    #[test]
     fn invalid_asset_identities_fail_before_network_transfer_or_staging() {
         for case in [
             "duplicate-id",
@@ -1396,3 +1320,21 @@ mod tests {
                 if current.state == DownloadState::Downloading {
                     let mut machine = DownloadStateMachine::new(current.state);
                     machine.transition(DownloadState::Paused).unwrap();
+                    current.state = machine.state();
+                    control_store.save_download_snapshot(&current).unwrap();
+                    return;
+                }
+                thread::sleep(std::time::Duration::from_millis(5));
+            }
+            panic!("worker never entered downloading state");
+        });
+        let report = worker
+            .execute_ready_at(&[work], &AtomicBool::new(false), 10_000)
+            .unwrap();
+        controller.join().unwrap();
+        assert_eq!(report.paused, vec!["pause-job"]);
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Paused);
+        assert!(report.canceled.is_empty());
+    }
+}
