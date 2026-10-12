@@ -1,5 +1,6 @@
 use crate::resume::resume_metadata_path;
 use crate::{CoreError, ErrorKind, LibraryItem, LibraryStore};
+use sha2::{Digest, Sha256};
 use std::path::{Component, Path, PathBuf};
 
 /// Deletes every persisted asset owned by `item_id` before removing its library metadata.
@@ -33,6 +34,28 @@ pub fn delete_library_item_owned_assets(
         Err(error) => return Err(delete_io_error(error)),
     }
     let canonical_root = std::fs::canonicalize(library_root).map_err(delete_io_error)?;
+    // Validate every asset's namespace before any deletion, including partials
+    // and resume sidecars. Being inside library_root does not prove ownership.
+    let owned_directory = owned_item_directory(item_id)?;
+    for asset in &item.assets {
+        validate_delete_path(&asset.relative_path)?;
+        let normalized_path: PathBuf = Path::new(&asset.relative_path)
+            .components()
+            .filter_map(|component| match component {
+                Component::Normal(name) => Some(name),
+                _ => None,
+            })
+            .collect();
+        if !normalized_path.starts_with(&owned_directory)
+            || normalized_path == owned_directory
+        {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "asset path does not belong to the selected library item",
+                false,
+            ));
+        }
+    }
     for asset in &item.assets {
         validate_delete_path(&asset.relative_path)?;
         let asset_path = library_root.join(&asset.relative_path);
@@ -45,6 +68,25 @@ pub fn delete_library_item_owned_assets(
     }
 
     store.delete(item_id)
+}
+
+fn owned_item_directory(item_id: &str) -> Result<PathBuf, CoreError> {
+    if crate::security::validate_http_url(item_id).is_ok() {
+        // The durable URL job ID owns a hashed namespace, not the media ID.
+        let digest = Sha256::digest(item_id.as_bytes());
+        return Ok(PathBuf::from("items").join(format!("by-job-{digest:x}")));
+    }
+    let mut components = Path::new(item_id).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(name)), None) if !name.is_empty() => {
+            Ok(PathBuf::from("items").join(name))
+        }
+        _ => Err(CoreError::new(
+            ErrorKind::InvalidInput,
+            "library item ID is not a safe single directory name",
+            false,
+        )),
+    }
 }
 
 fn remove_owned_file(
@@ -444,6 +486,91 @@ mod tests {
         let error = delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert!(outside_file.exists());
+        assert!(store.get("item-1").unwrap().is_some());
+    }
+
+    #[test]
+    fn corrupt_asset_metadata_cannot_delete_a_different_items_files() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut victim = item();
+        victim.assets.truncate(1);
+        victim.assets[0].relative_path = "items/item-2/video.mp4".into();
+        persist(&store, &victim);
+        let root = tempdir().unwrap();
+        let (foreign, partial, resume) =
+            write_asset_family(root.path(), &victim.assets[0].relative_path, 4);
+
+        let error = delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(std::fs::read(&foreign).unwrap(), vec![0_u8; 4]);
+        assert!(partial.exists());
+        assert!(resume.exists());
+        assert!(store.get("item-1").unwrap().is_some());
+    }
+
+    #[test]
+    fn all_asset_ownership_is_checked_before_deleting_the_first_asset() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut victim = item();
+        victim.assets.truncate(2);
+        victim.assets[1].relative_path = "items/item-2/audio.m4a".into();
+        persist(&store, &victim);
+        let root = tempdir().unwrap();
+        let (owned, partial, resume) =
+            write_asset_family(root.path(), &victim.assets[0].relative_path, 4);
+        let (foreign, _, _) =
+            write_asset_family(root.path(), &victim.assets[1].relative_path, 6);
+
+        let error = delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert!(owned.exists());
+        assert!(partial.exists());
+        assert!(resume.exists());
+        assert!(foreign.exists());
+        assert!(store.get("item-1").unwrap().is_some());
+    }
+
+    #[test]
+    fn url_job_deletes_only_its_hashed_namespace() {
+        let job_id = "https://fixture.invalid/watch/item-one";
+        let directory = owned_item_directory(job_id).unwrap();
+        assert!(directory.to_string_lossy().starts_with("items/by-job-"));
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut selected = item();
+        selected.item_id = job_id.into();
+        selected.assets.truncate(1);
+        selected.assets[0].relative_path =
+            directory.join("video.mp4").to_string_lossy().into_owned();
+        persist(&store, &selected);
+        let root = tempdir().unwrap();
+        let (asset, partial, resume) =
+            write_asset_family(root.path(), &selected.assets[0].relative_path, 4);
+        delete_library_item_owned_assets(&store, root.path(), job_id).unwrap();
+        assert!(!asset.exists());
+        assert!(!partial.exists());
+        assert!(!resume.exists());
+        assert!(store.get(job_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn ownership_rejects_invalid_ids_and_sibling_prefixes() {
+        for invalid in ["", ".", "..", "item-1/../item-2", "item-1/child"] {
+            assert_eq!(owned_item_directory(invalid).unwrap_err().kind, ErrorKind::InvalidInput);
+        }
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut selected = item();
+        selected.assets.truncate(1);
+        selected.assets[0].relative_path = "items/item-1-extra/video.mp4".into();
+        persist(&store, &selected);
+        let root = tempdir().unwrap();
+        let (foreign, _, _) =
+            write_asset_family(root.path(), &selected.assets[0].relative_path, 4);
+        assert_eq!(
+            delete_library_item_owned_assets(&store, root.path(), "item-1")
+                .unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+        assert!(foreign.exists());
         assert!(store.get("item-1").unwrap().is_some());
     }
 }
