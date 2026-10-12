@@ -138,7 +138,9 @@ fn reconcile_metadata_file_mismatches(
                 error.kind,
                 ErrorKind::MissingAsset | ErrorKind::CorruptAsset
             ) {
-                store.save_download_snapshot(&DurableDownloadSnapshot {
+                // A repair row may have been queued or acted on since the
+                // metadata scan. Do not overwrite that newer durable decision.
+                if store.insert_download_snapshot_if_absent(&DurableDownloadSnapshot {
                     job_id: format!("repair:{}", item.item_id),
                     state: DownloadState::Failed,
                     bytes_downloaded: 0,
@@ -153,8 +155,9 @@ fn reconcile_metadata_file_mismatches(
                         ),
                         true,
                     )),
-                })?;
-                mismatches += 1;
+                })? {
+                    mismatches += 1;
+                }
             } else {
                 return Err(error);
             }
@@ -466,7 +469,28 @@ mod tests {
             .find(|snapshot| snapshot.job_id == "repair:missing-media")
             .unwrap();
         assert_eq!(repair.state, DownloadState::Failed);
-        assert_eq!(repair.last_error.unwrap().kind, ErrorKind::MissingAsset);
+        assert_eq!(
+            repair.last_error.as_ref().unwrap().kind,
+            ErrorKind::MissingAsset
+        );
+
+        // A recovery consumer may queue a previously reported repair item.
+        // Re-running startup inspection must not replace that queue row with
+        // the stale synthetic Failed marker.
+        let mut queued = repair;
+        queued.state = DownloadState::Queued;
+        queued.attempt = 1;
+        queued.last_error = None;
+        store.save_download_snapshot(&queued).unwrap();
+        let repeat = reconcile_startup_with_library_root(&store, temp.path()).unwrap();
+        assert_eq!(repeat.asset_mismatches_reported, 0);
+        let persisted = store
+            .load_download_snapshots()
+            .unwrap()
+            .into_iter()
+            .find(|snapshot| snapshot.job_id == "repair:missing-media")
+            .unwrap();
+        assert_eq!(persisted, queued);
     }
 
     #[cfg(unix)]

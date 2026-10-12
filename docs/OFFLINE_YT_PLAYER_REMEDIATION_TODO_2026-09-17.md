@@ -1105,6 +1105,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 concurrent startup-recovery finding (2026-10-11; exact-head qualification pending):** `reconcile_startup_downloads` previously rewrote a scanned active job unconditionally with `save_download_snapshot`, potentially reverting a newer user pause, cancel, or completion observed by another Android SQLite connection. Recovery now uses exact-state `replace_download_snapshot_if_unchanged` and counts only successful transitions. `reconcile_orphaned_staged_jobs` likewise now uses insert-if-absent to avoid overwriting a durable job enqueued after its scan. Cross-connection Rust regressions `stale_startup_requeue_cannot_override_newer_pause_or_completion` and `stale_staged_recovery_does_not_replace_concurrent_durable_enqueue` cover the races. RMD-1802/RMD-1803/RMD-1805 remain open pending exact-head CI and completion of the independent production audit.
 
+**RMD-1802 startup asset-repair overwrite follow-up (2026-10-11; exact-head qualification pending):** completed-item asset mismatch reconciliation also used an unconditional upsert for `repair:<item_id>` and could regress an existing queued repair decision to Failed on every startup. The repair-marker path now inserts only if absent, and the existing file-backed regression verifies that a second reconciliation preserves an already queued repair row. This is an additional startup concurrency correction, not completion of the independent review or final qualification gates.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.
