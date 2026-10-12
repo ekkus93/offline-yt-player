@@ -60,8 +60,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
           # Software-emulated API 35 may signal boot completion before ADB properties respond.
           # Wait for a readable SDK property before Gradle enumerates instrumentation devices.
-          script: >-
-            attempt=0; sdk=; while [ "$attempt" -lt 30 ]; do sdk=$(timeout 8s adb shell getprop ro.build.version.sdk 2>/dev/null || true); if [ "$sdk" = "35" ]; then break; fi; attempt=$((attempt + 1)); sleep 4; done; test "$sdk" = "35" || { echo "API 35 emulator never became ADB-ready"; exit 1; }; ready=; attempt=0; while [ "$attempt" -lt 60 ]; do if timeout 8s adb shell service check package 2>/dev/null | grep -Fq "Service package: found" && timeout 8s adb shell service check activity 2>/dev/null | grep -Fq "Service activity: found"; then ready=1; break; fi; attempt=$((attempt + 1)); sleep 5; done; test "$ready" = 1 || { echo "API 35 Android package/activity services did not become ready"; exit 1; }; ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutAdbInstrumentedTest && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest && python3 scripts/assert_android_smoke_execution.py --results-dir app/build/outputs/androidTest-results/connected --required-class com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest --required-test com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest#api35JobSchedulerStopHaltsNativeAndManualRetryCompletes
+          script: bash scripts/run_android_fgs_uidt_qualification.sh
       - name: Print failed Android instrumentation assertions
         if: failure()
         run: |
