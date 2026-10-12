@@ -193,9 +193,14 @@ pub fn prepare_partial_reuse(
     partial_path: &Path,
     current: &ResumeRepresentation,
 ) -> Result<bool, CoreError> {
-    if !partial_path.exists() {
-        clear_resume_representation(partial_path)?;
-        return Ok(false);
+    match fs::symlink_metadata(partial_path) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return Err(CoreError::new(ErrorKind::InvalidInput, "Resume partial must be a regular file", false)),
+        Err(error) if error.kind() == IoErrorKind::NotFound => {
+            clear_resume_representation(partial_path)?;
+            return Ok(false);
+        }
+        Err(error) => return Err(io_error(error)),
     }
 
     let stored = load_resume_representation(partial_path)?;
@@ -388,6 +393,22 @@ mod tests {
             !prepare_partial_reuse(&partial, &representation(Some("fixture-v1"), None)).unwrap()
         );
         assert!(!partial.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_partial_never_reused() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let target = external.path().join("partial");
+        fs::write(&target, b"safe").unwrap();
+        let partial = root.path().join(".video.partial");
+        symlink(&target, &partial).unwrap();
+        let current = representation(Some("fixture-v1"), None);
+        save_resume_representation(&partial, &current).unwrap();
+        assert_eq!(prepare_partial_reuse(&partial, &current).unwrap_err().kind, ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&target).unwrap(), b"safe");
     }
 
     #[cfg(unix)]
