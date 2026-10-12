@@ -121,12 +121,12 @@ class DownloadUidtExecutionInstrumentedTest {
         val db = context.filesDir.resolve("offline-yt-player.sqlite3")
         val id = "rmd-502a-uidt-stop-retry"
         val itemDir = context.filesDir.resolve("items/$id")
-        val bytes = ByteArray(256 * 1024) { (it % 251).toByte() }
+        val bytes = ByteArray(2 * 1024 * 1024) { (it % 251).toByte() }
         val firstChunk = CountDownLatch(1)
         val retryConnectionStarted = CountDownLatch(1)
         val server = ServerSocket(0, 2, InetAddress.getByName("127.0.0.1"))
         server.soTimeout = 45_000
-        val serverThread = thread(start = true) {
+        val serverThread = thread(start = true, isDaemon = true) {
             repeat(2) { attempt ->
                 try {
                     server.accept().use { socket ->
@@ -173,6 +173,12 @@ class DownloadUidtExecutionInstrumentedTest {
             assertTrue("UIDT first chunk never arrived; forced start: $forcedStart", firstChunk.await(20, TimeUnit.SECONDS))
             val stopOutput = shellJobSchedulerCommand("timeout", context.packageName, requireNotNull(jobNumber))
             assertTrue("JobScheduler timeout failed: $stopOutput", !stopOutput.contains("Error", ignoreCase = true))
+            // A timed-out UIDT can be rescheduled immediately by JobScheduler.
+            // Cancel only its framework reschedule after the timeout command;
+            // the durable queue must remain retryable, not be marked CANCELED.
+            // Otherwise a second automatic transfer can finish while we are
+            // waiting to observe the native stop's RETRY_WAIT settlement.
+            jobs.cancel(requireNotNull(jobNumber))
             GeneratedUniffiCoreGateway.open(db.absolutePath).use { gateway ->
                 fun waitFor(state: CoreDownloadState) {
                     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(40)
@@ -187,7 +193,6 @@ class DownloadUidtExecutionInstrumentedTest {
                     assertEquals(state, observed)
                 }
                 waitFor(CoreDownloadState.RETRY_WAIT)
-                jobs.cancel(requireNotNull(jobNumber))
                 assertTrue(!itemDir.resolve("video.mp4").exists())
                 val restarted = scheduler.schedule(DownloadScheduleRequest(id, bytes.size.toLong()))
                 assertTrue(restarted.accepted)
