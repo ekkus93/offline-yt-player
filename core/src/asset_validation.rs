@@ -32,7 +32,9 @@ pub fn validate_library_item_assets(
     depth: AssetValidationDepth,
 ) -> Result<Vec<AssetValidation>, CoreError> {
     if item.completed
-        && !item.assets.iter().any(|asset| matches!(asset.kind, crate::MediaKind::Video | crate::MediaKind::Audio))
+        && !item.assets.iter().any(|asset| {
+            matches!(asset.kind, crate::MediaKind::Video | crate::MediaKind::Audio)
+        })
     {
         return Err(CoreError::new(
             ErrorKind::CorruptAsset,
