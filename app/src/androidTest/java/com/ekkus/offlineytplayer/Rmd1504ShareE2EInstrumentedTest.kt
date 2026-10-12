@@ -121,7 +121,10 @@ class Rmd1504ShareE2EInstrumentedTest {
                 runCatching { compose.onNodeWithText("Analyze").assertIsEnabled() }.isSuccess
             }
             compose.onNodeWithText("Analyze").performClick()
-            compose.waitUntil(20_000) {
+            // This waits for an off-main-thread source result to be published and laid out.
+            // Software-emulated API 29 can exceed 20 seconds under shared CI runner load;
+            // retain the actual displayed-title assertion rather than accepting a status-only pass.
+            compose.waitUntil(60_000) {
                 runCatching { compose.onNodeWithText(title, substring = true).assertIsDisplayed() }.isSuccess
             }
             compose.onNodeWithText("Download setup").assertIsDisplayed()
