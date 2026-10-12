@@ -33,7 +33,10 @@ pub fn validate_library_item_assets(
 ) -> Result<Vec<AssetValidation>, CoreError> {
     if item.completed
         && !item.assets.iter().any(|asset| {
-            matches!(asset.kind, crate::MediaKind::Video | crate::MediaKind::Audio)
+            matches!(
+                asset.kind,
+                crate::MediaKind::Video | crate::MediaKind::Audio
+            )
         })
     {
         return Err(CoreError::new(
@@ -286,10 +289,20 @@ mod tests {
         let root = tempdir().unwrap();
         let mut empty = item(0, None);
         empty.assets.clear();
-        assert_eq!(validate_library_item_assets(root.path(), &empty, AssetValidationDepth::Deep).unwrap_err().kind, ErrorKind::CorruptAsset);
+        assert_eq!(
+            validate_library_item_assets(root.path(), &empty, AssetValidationDepth::Deep)
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
         let mut thumbnail_only = item(4, None);
         thumbnail_only.assets[0].kind = MediaKind::Thumbnail;
-        assert_eq!(validate_library_item_assets(root.path(), &thumbnail_only, AssetValidationDepth::Cheap).unwrap_err().kind, ErrorKind::CorruptAsset);
+        assert_eq!(
+            validate_library_item_assets(root.path(), &thumbnail_only, AssetValidationDepth::Cheap)
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
     }
 
     #[test]

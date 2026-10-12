@@ -8,7 +8,12 @@ use std::sync::{Arc, Mutex, MutexGuard};
 pub const SCHEMA_VERSION: i64 = 1;
 
 fn has_playable_media_asset(item: &LibraryItem) -> bool {
-    item.assets.iter().any(|asset| matches!(asset.kind, crate::domain::MediaKind::Video | crate::domain::MediaKind::Audio))
+    item.assets.iter().any(|asset| {
+        matches!(
+            asset.kind,
+            crate::domain::MediaKind::Video | crate::domain::MediaKind::Audio
+        )
+    })
 }
 
 #[derive(Debug, Clone)]
