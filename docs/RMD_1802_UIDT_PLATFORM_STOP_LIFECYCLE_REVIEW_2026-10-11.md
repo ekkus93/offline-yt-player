@@ -27,3 +27,5 @@ Android API reference: https://developer.android.com/reference/android/app/job/J
 ## Status
 
 **OPEN — source correction and stop/restart tests not yet implemented.** Do not interpret the existing normal-completion UIDT test as platform stop/restart acceptance. This is not a hardware, credentials, or user-decision blocker; continue implementation autonomously. Keep the canonical review, qualification, and engineering closeout checkboxes unchecked.
+
+Current work: platform-stop implementation is pending full exact-head qualification; do not close RMD-1802.
