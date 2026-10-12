@@ -26,6 +26,10 @@ Android API reference: https://developer.android.com/reference/android/app/job/J
 
 ## Status
 
-**OPEN — source correction and stop/restart tests not yet implemented.** Do not interpret the existing normal-completion UIDT test as platform stop/restart acceptance. This is not a hardware, credentials, or user-decision blocker; continue implementation autonomously. Keep the canonical review, qualification, and engineering closeout checkboxes unchecked.
+**OPEN — engineering closeout and independent review pending; the UIDT stop-callback finding is implemented and qualified on an exact source head.** Android stop/start ownership now tracks attempts, signals the native Rust platform-stop flag, and prevents post-stop framework settlement. Subsequent review of API-35 failure run `38285005426` (both attempts) identified that `onStartJob` and `onStopJob` may receive different Java `JobParameters` objects representing the same job: pure `IdentityHashMap` lookup dropped the stop signal and left the durable row `DOWNLOADING`.
 
-Current work: platform-stop implementation is pending full exact-head qualification; do not close RMD-1802.
+Implementation `5d72860b70301e3bd756be42e752d9a00a9411ec` uses framework job ID plus validated durable queue ID as a stop-lookup fallback and preserves predecessor ordering. `DownloadExecutionSchedulerPolicyTest.separatelyUnparceledStopParametersStillStopTheOriginalNativeWriter` and `parcelEquivalentStaleStopNeverTargetsRegisteredReplacement` exercise the mismatched-reference callback, foreign identity rejection, duplicate-stop suppression, and replacement isolation. The real Android API-35 `DownloadUidtExecutionInstrumentedTest.api35JobSchedulerStopHaltsNativeAndManualRetryCompletes` passed on that implementation head.
+
+**Exact-head CI evidence (implementation SHA `5d72860b70301e3bd756be42e752d9a00a9411ec`):** standard CI `38291558898`, Android smoke `38291558809`, FGS/UIDT `38291559053`, supply chain `38291558804`, CI evidence `38291558830`, deterministic fixture E2E `38291558902`, Android cold start `38291558832`, real-network E2E `38291558885`; all passed.
+
+This evidence qualifies the callback-identity stop defect only. The remaining independent Rust/Android production review, final release-candidate freeze and qualification, truthfully reconciled canonical TODO, and human service/legal release gate are still open.
