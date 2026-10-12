@@ -17,7 +17,7 @@ internal class DownloadWorkerExecution {
     }
 
     fun execute(context: Context, queueItemId: String): Boolean = try {
-        val databasePath = File(context.filesDir, ProductionDatabaseName).absolutePath
+        val databasePath = File(context.filesDir, "offline-yt-player.sqlite3").absolutePath
         val maxConcurrentDownloads = SharedPreferencesAppSettingsStore.open(context).use { store ->
             store.snapshot().maxConcurrentDownloads.toULong()
         }
