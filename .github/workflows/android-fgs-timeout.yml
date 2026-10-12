@@ -60,6 +60,36 @@ jobs:
           # Wait for a readable SDK property before Gradle enumerates instrumentation devices.
           script: >-
             attempt=0; sdk=; while [ "$attempt" -lt 30 ]; do sdk=$(timeout 8s adb shell getprop ro.build.version.sdk 2>/dev/null || true); if [ "$sdk" = "35" ]; then break; fi; attempt=$((attempt + 1)); sleep 4; done; test "$sdk" = "35" || { echo "API 35 emulator never became ADB-ready"; exit 1; }; ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutAdbInstrumentedTest && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest && python3 scripts/assert_android_smoke_execution.py --results-dir app/build/outputs/androidTest-results/connected --required-class com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest --required-test com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest#api35JobSchedulerStopHaltsNativeAndManualRetryCompletes
+      - name: Print failed Android instrumentation assertions
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          root = Path("app/build/outputs/androidTest-results/connected")
+          files = sorted(root.rglob("*.xml")) if root.exists() else []
+          print(f"Android instrumentation XML reports: {len(files)}")
+          shown = 0
+          for path in files:
+              try:
+                  tree = ET.parse(path)
+              except ET.ParseError as error:
+                  print(f"Malformed report {path}: {error}")
+                  continue
+              for case in tree.iter("testcase"):
+                  for failure in list(case.findall("failure")) + list(case.findall("error")):
+                      if shown >= 30:
+                          break
+                      shown += 1
+                      name = f"{case.get('classname', '')}#{case.get('name', '')}"
+                      print(f"FAILED {name} in {path}")
+                      print((failure.get("message") or failure.text or "")[:1800])
+          if not files:
+              print("No instrumentation XML available; failure may be setup or Gradle infrastructure.")
+          elif shown == 0:
+              print("No test assertion failures found in XML; inspect setup or Gradle task failure.")
+          PY
       - name: Upload timeout qualification evidence
         if: always()
         uses: actions/upload-artifact@v4
