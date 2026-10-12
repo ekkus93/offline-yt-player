@@ -204,7 +204,42 @@ internal fun runAndSettleDownloadJob(work: () -> Unit, settle: () -> Unit) {
     }
 }
 
+/**
+ * JobScheduler ownership is per attempt, not per durable queue item. The
+ * framework can revoke an attempt before its worker returns; a late worker
+ * must never call jobFinished on already-stopped parameters.
+ */
+internal class UidtJobAttempt {
+    private enum class State { Running, Stopped, Finished }
+    private var state = State.Running
+
+    @Synchronized
+    fun stop(): Boolean {
+        if (state != State.Running) return false
+        state = State.Stopped
+        return true
+    }
+
+    @Synchronized
+    fun finishIfRunning(settle: () -> Unit): Boolean {
+        if (state != State.Running) return false
+        state = State.Finished
+        settle()
+        return true
+    }
+}
+
+internal object UidtJobStopPolicy {
+    fun shouldReschedule(stopReason: Int): Boolean =
+        stopReason != JobParameters.STOP_REASON_USER &&
+            stopReason != JobParameters.STOP_REASON_CANCELLED_BY_APP
+}
+
 class DownloadUserInitiatedJobService : JobService() {
+    // Retain a stopped attempt until its native worker exits. This prevents a
+    // new invocation for the same JobScheduler ID from running concurrently.
+    private val activeAttempts = mutableMapOf<Int, UidtJobAttempt>()
+
     override fun onStartJob(params: JobParameters): Boolean {
         val queueItemId = params.extras.getString(ExtraQueueItemId)
         if (queueItemId.isNullOrBlank()) {
@@ -212,25 +247,61 @@ class DownloadUserInitiatedJobService : JobService() {
             // Calling jobFinished as well would settle the same job twice.
             return false
         }
-        ensureNotificationChannel()
-        if (Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk) {
-            setNotification(
-                params,
-                DownloadServicePolicy.NotificationId,
-                downloadExecutionNotification(),
-                JOB_END_NOTIFICATION_POLICY_REMOVE,
-            )
+        val attempt = UidtJobAttempt()
+        synchronized(activeAttempts) {
+            // A prior stopped attempt may still be inside synchronous UniFFI
+            // transfer. Do not start a second writer on the same queue item.
+            if (activeAttempts.containsKey(params.jobId)) return false
+            activeAttempts[params.jobId] = attempt
         }
-        Thread {
-            runAndSettleDownloadJob(
-                work = { DownloadWorkerExecutor.execute(this, queueItemId) },
-                settle = { jobFinished(params, false) },
-            )
-        }.start()
-        return true
+        try {
+            ensureNotificationChannel()
+            if (Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk) {
+                setNotification(
+                    params,
+                    DownloadServicePolicy.NotificationId,
+                    downloadExecutionNotification(),
+                    JOB_END_NOTIFICATION_POLICY_REMOVE,
+                )
+            }
+            Thread {
+                try {
+                    runAndSettleDownloadJob(
+                        work = { DownloadWorkerExecutor.execute(this, queueItemId) },
+                        settle = { attempt.finishIfRunning { jobFinished(params, false) } },
+                    )
+                } finally {
+                    synchronized(activeAttempts) {
+                        if (activeAttempts[params.jobId] === attempt) {
+                            activeAttempts.remove(params.jobId)
+                        }
+                    }
+                }
+            }.start()
+            return true
+        } catch (failure: Exception) {
+            attempt.stop()
+            synchronized(activeAttempts) {
+                if (activeAttempts[params.jobId] === attempt) {
+                    activeAttempts.remove(params.jobId)
+                }
+            }
+            throw failure
+        }
     }
 
-    override fun onStopJob(params: JobParameters): Boolean = true
+    override fun onStopJob(params: JobParameters): Boolean {
+        synchronized(activeAttempts) {
+            activeAttempts[params.jobId]?.stop()
+        }
+        // User-stopped UIDT jobs must not be automatically rescheduled.
+        // Native cooperative stop and retryable durable settlement are still
+        // required before this platform-stop path is fully qualified.
+        return UidtJobStopPolicy.shouldReschedule(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) params.stopReason
+            else JobParameters.STOP_REASON_UNDEFINED,
+        )
+    }
 
     private fun downloadExecutionNotification(): Notification {
         val openApp = PendingIntent.getActivity(
