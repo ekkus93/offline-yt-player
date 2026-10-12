@@ -43,6 +43,33 @@ fn validate_asset(
     depth: AssetValidationDepth,
 ) -> Result<AssetValidation, CoreError> {
     crate::validate_relative_library_path(&asset.relative_path)?;
+    // A persisted library root can itself be an alias to an external directory.
+    // Checking only components underneath it would still follow that symlink and
+    // incorrectly mark an unrelated file as an owned, healthy private asset.
+    match std::fs::symlink_metadata(library_root) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Ok(result(
+                asset,
+                AssetHealth::Corrupt {
+                    reason: "library root is a symbolic link".into(),
+                },
+            ));
+        }
+        Ok(metadata) if !metadata.is_dir() => {
+            return Ok(result(
+                asset,
+                AssetHealth::Corrupt {
+                    reason: "library root is not a directory".into(),
+                },
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(result(asset, AssetHealth::Missing));
+        }
+        Err(error) => return Err(validation_io_error(error)),
+    }
+
     // Persisted paths may be restored from old metadata. Reject each symlink
     // component before following the asset path: metadata/read would otherwise
     // validate an unrelated file outside the private library as Healthy.
@@ -177,6 +204,43 @@ mod tests {
         let path = root.join("items/item-1/video.bin");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, bytes).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_library_root_never_validates_external_assets_as_healthy() {
+        use std::os::unix::fs::symlink;
+
+        let app = tempdir().unwrap();
+        let external = tempdir().unwrap();
+        write_asset(external.path(), b"good");
+        let sha256 = format!("{:x}", Sha256::digest(b"good"));
+        let item = item(4, Some(sha256));
+        let linked_root = app.path().join("untrusted-library");
+        symlink(external.path(), &linked_root).unwrap();
+
+        for depth in [AssetValidationDepth::Cheap, AssetValidationDepth::Deep] {
+            let checks = validate_library_item_assets(&linked_root, &item, depth).unwrap();
+            assert!(matches!(checks[0].health, AssetHealth::Corrupt { .. }));
+        }
+        // A missing or non-directory root cannot be treated as a healthy asset.
+        let missing = validate_library_item_assets(
+            &app.path().join("missing"),
+            &item,
+            AssetValidationDepth::Cheap,
+        )
+        .unwrap();
+        assert_eq!(missing[0].health, AssetHealth::Missing);
+        let regular_file = app.path().join("not-a-directory");
+        std::fs::write(&regular_file, b"data").unwrap();
+        let invalid = validate_library_item_assets(
+            &regular_file,
+            &item,
+            AssetValidationDepth::Deep,
+        )
+        .unwrap();
+        assert!(matches!(invalid[0].health, AssetHealth::Corrupt { .. }));
+        assert_eq!(std::fs::read(external.path().join("items/item-1/video.bin")).unwrap(), b"good");
     }
 
     #[cfg(unix)]
