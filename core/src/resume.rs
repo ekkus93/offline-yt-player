@@ -86,6 +86,7 @@ pub fn save_resume_representation(
     partial_path: &Path,
     representation: &ResumeRepresentation,
 ) -> Result<(), CoreError> {
+    reject_linked_resume_parent(partial_path)?;
     if !representation.has_remote_validator() {
         return Err(CoreError::new(
             ErrorKind::IntegrityFailure,
@@ -132,6 +133,26 @@ pub fn save_resume_representation(
     fs::rename(&temp, &path).map_err(io_error)
 }
 
+/// The transfer path also validates symlink components below its library root,
+/// but standalone resume APIs must never follow a linked immediate parent into
+/// an unrelated owner's storage. Avoid checking system-managed ancestors (e.g.
+/// Android's /data/user/0 alias) that may legitimately be symlinks.
+fn reject_linked_resume_parent(partial_path: &Path) -> Result<(), CoreError> {
+    let parent = partial_path.parent().ok_or_else(|| {
+        CoreError::new(ErrorKind::InvalidInput, "Resume partial has no parent directory", false)
+    })?;
+    match fs::symlink_metadata(parent) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(CoreError::new(
+            ErrorKind::InvalidInput,
+            "Resume partial parent must not be a symlink",
+            false,
+        )),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == IoErrorKind::NotFound => Ok(()),
+        Err(error) => Err(io_error(error)),
+    }
+}
+
 fn reject_nonregular_resume_path(path: &Path) -> Result<(), CoreError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.is_file() => Ok(()),
@@ -148,6 +169,7 @@ fn reject_nonregular_resume_path(path: &Path) -> Result<(), CoreError> {
 pub fn load_resume_representation(
     partial_path: &Path,
 ) -> Result<Option<ResumeRepresentation>, CoreError> {
+    reject_linked_resume_parent(partial_path)?;
     let path = resume_metadata_path(partial_path);
     reject_nonregular_resume_path(&path)?;
     let file = match File::open(path) {
@@ -174,6 +196,7 @@ pub fn load_resume_representation(
 }
 
 pub fn clear_resume_representation(partial_path: &Path) -> Result<(), CoreError> {
+    reject_linked_resume_parent(partial_path)?;
     let path = resume_metadata_path(partial_path);
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
@@ -193,6 +216,7 @@ pub fn prepare_partial_reuse(
     partial_path: &Path,
     current: &ResumeRepresentation,
 ) -> Result<bool, CoreError> {
+    reject_linked_resume_parent(partial_path)?;
     match fs::symlink_metadata(partial_path) {
         Ok(metadata) if metadata.is_file() => {}
         Ok(_) => {
@@ -475,6 +499,42 @@ mod tests {
             load_resume_representation(&partial).unwrap(),
             Some(expected)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linked_partial_parent_cannot_read_modify_or_delete_external_resume() {
+        use std::os::unix::fs::symlink;
+
+        let library = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let external_partial = outside.path().join(".video.partial");
+        let external_sidecar = resume_metadata_path(&external_partial);
+        let current = representation(Some("\"fixture-v1\""), None);
+        fs::write(&external_partial, b"external partial bytes").unwrap();
+        let original_sidecar = serde_json::to_vec(&current).unwrap();
+        fs::write(&external_sidecar, &original_sidecar).unwrap();
+        symlink(outside.path(), library.path().join("linked")).unwrap();
+        let linked_partial = library.path().join("linked/.video.partial");
+
+        assert_eq!(
+            load_resume_representation(&linked_partial).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            save_resume_representation(&linked_partial, &current).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            clear_resume_representation(&linked_partial).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            prepare_partial_reuse(&linked_partial, &current).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+        assert_eq!(fs::read(&external_partial).unwrap(), b"external partial bytes");
+        assert_eq!(fs::read(&external_sidecar).unwrap(), original_sidecar);
     }
 
     #[test]
