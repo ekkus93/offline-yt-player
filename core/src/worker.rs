@@ -657,12 +657,22 @@ impl DownloadWorker {
         now_epoch_ms: u64,
     ) -> Result<bool, CoreError> {
         for _ in 0..16 {
-            let Some(current) = self.library.load_download_snapshots()?
-                .into_iter().find(|row| row.job_id == claim.job_id) else {
+            let Some(current) = self
+                .library
+                .load_download_snapshots()?
+                .into_iter()
+                .find(|row| row.job_id == claim.job_id)
+            else {
                 return Ok(false);
             };
-            if current.attempt != claim.attempt ||
-                !matches!(current.state, DownloadState::Resolving | DownloadState::Downloading | DownloadState::Verifying) {
+            if current.attempt != claim.attempt
+                || !matches!(
+                    current.state,
+                    DownloadState::Resolving
+                        | DownloadState::Downloading
+                        | DownloadState::Verifying
+                )
+            {
                 return Ok(false);
             }
             let mut next = current.clone();
@@ -1489,11 +1499,12 @@ mod tests {
     #[test]
     fn platform_stop_during_transfer_settles_retryable_not_canceled() {
         let data = vec![8_u8; 4 * 1024 * 1024];
-        let server = FixtureServer::start_with_delay(
-            data.clone(), std::time::Duration::from_millis(200),
-        );
+        let server =
+            FixtureServer::start_with_delay(data.clone(), std::time::Duration::from_millis(200));
         let store = LibraryStore::open_in_memory().unwrap();
-        store.save_download_snapshot(&snapshot("platform-transfer", DownloadState::Queued)).unwrap();
+        store
+            .save_download_snapshot(&snapshot("platform-transfer", DownloadState::Queued))
+            .unwrap();
         let root = tempfile::tempdir().unwrap();
         let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
         let stop = Arc::new(AtomicBool::new(false));
