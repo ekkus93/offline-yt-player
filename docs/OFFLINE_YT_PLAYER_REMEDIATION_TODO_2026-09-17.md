@@ -1095,6 +1095,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 library-root symlink containment finding (2026-10-11; qualification pending):** independent Rust asset-integrity review found `validate_library_item_assets` rejected symlinks under an asset path but did not check whether `library_root` itself was a symlink. A caller with a symlinked root could therefore certify an external file as Healthy. The validator now fails closed on a symlinked or non-directory root, reports a missing root as Missing, and includes a deterministic Unix regression for Cheap/Deep modes and invalid roots in `core/src/asset_validation.rs`. Keep RMD-1802/RMD-1803 and engineering closeout open until this exact-head change passes required CI and the independent review is finished.
 
+**RMD-1802 persistence validator symlink/hash bypass (2026-10-11; qualification pending):** `LibraryStore::validate_item_assets` separately used `std::fs::metadata` plus byte length and therefore followed symlinks and accepted same-length corruption despite recorded SHA-256. This independent production path now delegates to shared `validate_library_item_assets` at Deep depth, preserving explicit MissingAsset/CorruptAsset errors. `core/src/persistence.rs` adds executable regression coverage for a healthy asset, same-length tampering, a symlinked file, and a symlinked library root. Keep RMD-1802/RMD-1803 open pending exact-head CI and remaining review.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.

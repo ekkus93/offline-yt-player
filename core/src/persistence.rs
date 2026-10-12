@@ -341,22 +341,31 @@ impl LibraryStore {
                 false,
             )
         })?;
-        for asset in item.assets {
-            validate_relative_asset_path(&asset.relative_path)?;
-            let path = library_root.join(&asset.relative_path);
-            let metadata = std::fs::metadata(&path).map_err(|_| {
-                CoreError::new(
-                    ErrorKind::MissingAsset,
-                    format!("missing local asset {}", asset.asset_id),
-                    false,
-                )
-            })?;
-            if !metadata.is_file() || metadata.len() != asset.bytes {
-                return Err(CoreError::new(
-                    ErrorKind::CorruptAsset,
-                    format!("local asset {} has unexpected size", asset.asset_id),
-                    false,
-                ));
+        // Reuse the same symlink-safe, stored-hash-aware validator as other
+        // library inspection paths. Independent metadata() calls would follow
+        // symlinks and allow same-length content corruption to pass silently.
+        let validations = crate::validate_library_item_assets(
+            library_root,
+            &item,
+            crate::AssetValidationDepth::Deep,
+        )?;
+        for validation in validations {
+            match validation.health {
+                crate::AssetHealth::Healthy => {}
+                crate::AssetHealth::Missing => {
+                    return Err(CoreError::new(
+                        ErrorKind::MissingAsset,
+                        format!("missing local asset {}", validation.asset_id),
+                        false,
+                    ));
+                }
+                crate::AssetHealth::Corrupt { .. } => {
+                    return Err(CoreError::new(
+                        ErrorKind::CorruptAsset,
+                        format!("local asset {} failed integrity validation", validation.asset_id),
+                        false,
+                    ));
+                }
             }
         }
         Ok(())
@@ -1002,6 +1011,74 @@ mod tests {
             store.promote_completed("job-1", &bad).unwrap_err().kind,
             ErrorKind::InvalidInput
         );
+    }
+
+    #[test]
+    fn persisted_library_validator_checks_hash_not_just_length() {
+        use sha2::Digest;
+
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut completed = item(true);
+        completed.assets[0].bytes = 4;
+        completed.assets[0].sha256 = Some(format!("{:x}", sha2::Sha256::digest(b"good")));
+        store.promote_completed("job-1", &completed).unwrap();
+
+        let root = tempdir().unwrap();
+        let path = root.path().join("items/item-1/video.mp4");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"good").unwrap();
+        store.validate_item_assets(root.path(), "item-1").unwrap();
+
+        // Same size, different contents: the old metadata-only validator
+        // reported Healthy even though the persisted SHA-256 no longer matched.
+        std::fs::write(&path, b"evil").unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(root.path(), "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persisted_library_validator_rejects_symlinked_file_and_root() {
+        use sha2::Digest;
+        use std::os::unix::fs::symlink;
+
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut completed = item(true);
+        completed.assets[0].bytes = 4;
+        completed.assets[0].sha256 = Some(format!("{:x}", sha2::Sha256::digest(b"good")));
+        store.promote_completed("job-1", &completed).unwrap();
+
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let outside_file = outside.path().join("items/item-1/video.mp4");
+        std::fs::create_dir_all(outside_file.parent().unwrap()).unwrap();
+        std::fs::write(&outside_file, b"good").unwrap();
+        let inside_file = root.path().join("items/item-1/video.mp4");
+        std::fs::create_dir_all(inside_file.parent().unwrap()).unwrap();
+        symlink(&outside_file, &inside_file).unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(root.path(), "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
+
+        let linked_root = root.path().join("linked-library");
+        symlink(outside.path(), &linked_root).unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(&linked_root, "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
+        assert_eq!(std::fs::read(&outside_file).unwrap(), b"good");
     }
 
     #[test]
