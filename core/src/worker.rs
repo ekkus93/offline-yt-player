@@ -799,6 +799,7 @@ mod tests {
             total_bytes: None,
             attempt: 0,
 
+
             retry_at_epoch_ms: None,
             last_error: None,
         }
@@ -1565,12 +1566,8 @@ mod tests {
                 .save_download_snapshot(&snapshot(&job_id, DownloadState::Queued))
                 .unwrap();
             let root = tempfile::tempdir().unwrap();
-            let worker = DownloadWorker::new(
-                store.clone(),
-                root.path(),
-                DownloadPolicy::default(),
-                1,
-            );
+            let worker =
+                DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
             let stop = Arc::new(AtomicBool::new(false));
             let controller_stop = Arc::clone(&stop);
             let control_store = store.clone();
@@ -1598,6 +1595,7 @@ mod tests {
                     thread::sleep(std::time::Duration::from_millis(5));
                 }
                 panic!("worker never reached Downloading for {label}");
+
             });
             let report = worker
                 .execute_ready_with_platform_stop_at(
@@ -1625,5 +1623,4 @@ mod tests {
             assert!(store.get(&job_id).unwrap().is_none(), "{label}");
         }
     }
-
 }
