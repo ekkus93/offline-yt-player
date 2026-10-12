@@ -21,3 +21,7 @@ A separate destructive production path remains vulnerable: `core/src/deletion.rs
 ## Android cache/incomplete-cleanup root follow-up (2026-10-11; qualification pending)
 
 `StorageSettingsManager.cleanup(Cache)` enumerated `cacheRoot.listFiles()` without checking whether `cacheRoot` was a symlink. A symlinked root could cause recursive removal of external cache files despite the nested-symlink protections in `deleteManagedEntry`. The cleanup entry point now rejects symbolic-link and non-directory roots for both Cache and Incomplete before traversal. JVM regressions preserve external cache and partial files in both cases. Do not mark this or the final review closed until exact-head Android JVM/packaging and full qualification pass.
+
+## In-root linked-parent deletion finding (2026-10-11; qualification pending)
+
+Canonical containment alone permitted a symbolic-link parent to redirect a deletion into another item's directory *inside* the managed root. The owned-file removal path now rejects symlink components under the root before canonicalizing the parent. The Unix regression `linked_parent_within_library_cannot_remove_another_items_asset` preserves the unrelated file and original item's durable metadata. Exact-head CI and remaining independent review are still required.

@@ -400,6 +400,29 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn linked_parent_within_library_cannot_remove_another_items_asset() {
+        use std::os::unix::fs::symlink;
+
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut victim = item();
+        victim.assets.truncate(1);
+        persist(&store, &victim);
+        let root = tempdir().unwrap();
+        let items = root.path().join("items");
+        let other_dir = items.join("item-2");
+        std::fs::create_dir_all(&other_dir).unwrap();
+        let other_video = other_dir.join("video.mp4");
+        std::fs::write(&other_video, b"unrelated content").unwrap();
+        symlink(&other_dir, items.join("item-1")).unwrap();
+
+        let error = delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(std::fs::read(&other_video).unwrap(), b"unrelated content");
+        assert!(store.get("item-1").unwrap().is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn rejects_symlink_parent_escape_without_touching_outside_file() {
         use std::os::unix::fs::symlink;
 

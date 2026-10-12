@@ -1107,6 +1107,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 startup asset-repair overwrite follow-up (2026-10-11; exact-head qualification pending):** completed-item asset mismatch reconciliation also used an unconditional upsert for `repair:<item_id>` and could regress an existing queued repair decision to Failed on every startup. The repair-marker path now inserts only if absent, and the existing file-backed regression verifies that a second reconciliation preserves an already queued repair row. This is an additional startup concurrency correction, not completion of the independent review or final qualification gates.
 
+**RMD-1802 in-root linked-parent deletion finding (2026-10-11; exact-head qualification pending):** `delete_library_item_owned_assets` previously used canonical containment without rejecting a symlinked parent pointing to another item *inside* the same library root. This could remove the other item's asset despite passing the root check. `remove_owned_file` now rejects symlink components beneath the root, and `linked_parent_within_library_cannot_remove_another_items_asset` verifies that the unrelated file and target item's metadata survive. Independent review and RMD-1803/1805 closeout remain open pending exact-head qualification.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.
