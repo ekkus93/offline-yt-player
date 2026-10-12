@@ -46,9 +46,7 @@ pub fn delete_library_item_owned_assets(
                 _ => None,
             })
             .collect();
-        if !normalized_path.starts_with(&owned_directory)
-            || normalized_path == owned_directory
-        {
+        if !normalized_path.starts_with(&owned_directory) || normalized_path == owned_directory {
             return Err(CoreError::new(
                 ErrorKind::InvalidInput,
                 "asset path does not belong to the selected library item",
@@ -518,8 +516,7 @@ mod tests {
         let root = tempdir().unwrap();
         let (owned, partial, resume) =
             write_asset_family(root.path(), &victim.assets[0].relative_path, 4);
-        let (foreign, _, _) =
-            write_asset_family(root.path(), &victim.assets[1].relative_path, 6);
+        let (foreign, _, _) = write_asset_family(root.path(), &victim.assets[1].relative_path, 6);
 
         let error = delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
@@ -555,7 +552,10 @@ mod tests {
     #[test]
     fn ownership_rejects_invalid_ids_and_sibling_prefixes() {
         for invalid in ["", ".", "..", "item-1/../item-2", "item-1/child"] {
-            assert_eq!(owned_item_directory(invalid).unwrap_err().kind, ErrorKind::InvalidInput);
+            assert_eq!(
+                owned_item_directory(invalid).unwrap_err().kind,
+                ErrorKind::InvalidInput
+            );
         }
         let store = LibraryStore::open_in_memory().unwrap();
         let mut selected = item();
@@ -563,11 +563,11 @@ mod tests {
         selected.assets[0].relative_path = "items/item-1-extra/video.mp4".into();
         persist(&store, &selected);
         let root = tempdir().unwrap();
-        let (foreign, _, _) =
-            write_asset_family(root.path(), &selected.assets[0].relative_path, 4);
+        let (foreign, _, _) = write_asset_family(root.path(), &selected.assets[0].relative_path, 4);
         assert_eq!(
             delete_library_item_owned_assets(&store, root.path(), "item-1")
-                .unwrap_err().kind,
+                .unwrap_err()
+                .kind,
             ErrorKind::InvalidInput
         );
         assert!(foreign.exists());
