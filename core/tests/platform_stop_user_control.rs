@@ -65,7 +65,8 @@ fn platform_stop_preserves_concurrent_user_pause_and_cancel() {
         let server_thread = thread::spawn(move || {
             if let Some(request) = server.recv_timeout(Duration::from_secs(10)).unwrap() {
                 thread::sleep(Duration::from_millis(250));
-                request.respond(Response::from_data(payload)).unwrap();
+                // The platform may close the socket before the delayed response.
+                let _ = request.respond(Response::from_data(payload));
             }
         });
         let store = LibraryStore::open_in_memory().unwrap();
