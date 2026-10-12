@@ -1001,3 +1001,110 @@ mod tests {
         let mut percent = item(true);
         percent.display_title = "100% Offline".into();
         store.promote_completed("job-1", &percent).unwrap();
+        assert_eq!(store.list(Some("100%")).unwrap().len(), 1);
+        assert!(store.list(Some("100_")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_traversal_asset_paths() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut bad = item(true);
+        bad.assets[0].relative_path = "../escape.mp4".into();
+        assert_eq!(
+            store.promote_completed("job-1", &bad).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+    }
+
+    #[test]
+    fn persisted_library_validator_checks_hash_not_just_length() {
+        use sha2::Digest;
+
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut completed = item(true);
+        completed.assets[0].bytes = 4;
+        completed.assets[0].sha256 = Some(format!("{:x}", sha2::Sha256::digest(b"good")));
+        store.promote_completed("job-1", &completed).unwrap();
+
+        let root = tempdir().unwrap();
+        let path = root.path().join("items/item-1/video.mp4");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"good").unwrap();
+        store.validate_item_assets(root.path(), "item-1").unwrap();
+
+        // Same size, different contents: the old metadata-only validator
+        // reported Healthy even though the persisted SHA-256 no longer matched.
+        std::fs::write(&path, b"evil").unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(root.path(), "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persisted_library_validator_rejects_symlinked_file_and_root() {
+        use sha2::Digest;
+        use std::os::unix::fs::symlink;
+
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut completed = item(true);
+        completed.assets[0].bytes = 4;
+        completed.assets[0].sha256 = Some(format!("{:x}", sha2::Sha256::digest(b"good")));
+        store.promote_completed("job-1", &completed).unwrap();
+
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let outside_file = outside.path().join("items/item-1/video.mp4");
+        std::fs::create_dir_all(outside_file.parent().unwrap()).unwrap();
+        std::fs::write(&outside_file, b"good").unwrap();
+        let inside_file = root.path().join("items/item-1/video.mp4");
+        std::fs::create_dir_all(inside_file.parent().unwrap()).unwrap();
+        symlink(&outside_file, &inside_file).unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(root.path(), "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
+
+        let linked_root = root.path().join("linked-library");
+        symlink(outside.path(), &linked_root).unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(&linked_root, "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
+        assert_eq!(std::fs::read(&outside_file).unwrap(), b"good");
+    }
+
+    #[test]
+    fn detects_missing_and_wrong_sized_assets() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store.promote_completed("job-1", &item(true)).unwrap();
+        let root = tempdir().unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(root.path(), "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::MissingAsset
+        );
+        let path = root.path().join("items/item-1");
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(path.join("video.mp4"), [0_u8; 3]).unwrap();
+        assert_eq!(
+            store
+                .validate_item_assets(root.path(), "item-1")
+                .unwrap_err()
+                .kind,
+            ErrorKind::CorruptAsset
+        );
+    }
+}
