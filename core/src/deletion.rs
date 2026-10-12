@@ -77,6 +77,19 @@ fn owned_item_directory(item_id: &str) -> Result<PathBuf, CoreError> {
     let mut components = Path::new(item_id).components();
     match (components.next(), components.next()) {
         (Some(Component::Normal(name)), None) if !name.is_empty() => {
+            // This namespace is reserved for URL-owned downloads. Otherwise
+            // a forged non-URL item ID could impersonate a URL item's digest
+            // and delete its media while staying inside the library root.
+            if item_id
+                .strip_prefix("by-job-")
+                .is_some_and(|suffix| suffix.len() == 64 && suffix.bytes().all(|b| b.is_ascii_hexdigit()))
+            {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "hashed URL download directory is reserved",
+                    false,
+                ));
+            }
             Ok(PathBuf::from("items").join(name))
         }
         _ => Err(CoreError::new(
@@ -547,6 +560,36 @@ mod tests {
         assert!(!partial.exists());
         assert!(!resume.exists());
         assert!(store.get(job_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn non_url_item_cannot_impersonate_a_url_downloads_hashed_directory() {
+        let url_id = "https://fixture.invalid/watch/private";
+        let reserved = owned_item_directory(url_id).unwrap();
+        let spoofed_id = reserved.file_name().unwrap().to_str().unwrap();
+        assert_eq!(
+            owned_item_directory(spoofed_id).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
+
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut forged = item();
+        forged.item_id = spoofed_id.to_owned();
+        forged.assets.truncate(1);
+        forged.assets[0].relative_path =
+            reserved.join("video.mp4").to_string_lossy().into_owned();
+        persist(&store, &forged);
+        let root = tempdir().unwrap();
+        let (foreign, partial, resume) =
+            write_asset_family(root.path(), &forged.assets[0].relative_path, 4);
+
+        let error = delete_library_item_owned_assets(&store, root.path(), spoofed_id)
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert!(foreign.exists());
+        assert!(partial.exists());
+        assert!(resume.exists());
+        assert!(store.get(spoofed_id).unwrap().is_some());
     }
 
     #[test]
