@@ -343,7 +343,16 @@ internal fun safeLocalPlaybackPath(libraryRoot: File, relativePath: String): Str
     if (relativePath.isBlank() || relativePath.contains(Char(0)) || File(relativePath).isAbsolute) return null
     return runCatching {
         val root = libraryRoot.canonicalFile
-        val candidate = File(root, relativePath).canonicalFile
+        val relative = File(relativePath).toPath()
+        // Canonical containment alone permits symlinks to another library item
+        // *inside* the root. Playback must not follow any unowned link.
+        if (relative.any { it.toString() == ".." || it.toString() == "." }) return@runCatching null
+        var current = root.toPath()
+        for (component in relative) {
+            current = current.resolve(component)
+            if (java.nio.file.Files.isSymbolicLink(current)) return@runCatching null
+        }
+        val candidate = current.toFile().canonicalFile
         candidate.takeIf { it != root && it.toPath().startsWith(root.toPath()) }?.absolutePath
     }.getOrNull()
 }

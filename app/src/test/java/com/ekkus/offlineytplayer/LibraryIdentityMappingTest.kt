@@ -58,6 +58,51 @@ class LibraryIdentityMappingTest {
         }
     }
 
+    @Test fun linkedFileInsideLibraryCannotBorrowAnotherItemsPlayback() {
+        val root = java.nio.file.Files.createTempDirectory("playback-linked-file").toFile()
+        val owned = File(root, "owned.mp4")
+        val linked = File(root, "borrowed.mp4")
+        try {
+            owned.writeBytes(byteArrayOf(1, 2, 3))
+            java.nio.file.Files.createSymbolicLink(linked.toPath(), owned.toPath())
+            val mapped = CoreGatewayResult(value = listOf(item("one")), error = null)
+                .toLibraryScreenState(root, CoreGatewayResult(value = listOf(
+                    CoreLibraryPlaybackAsset("one", "borrowed.mp4", null, true, null),
+                ), error = null))
+            assertTrue(mapped is LibraryScreenState.Failed)
+            assertTrue(owned.readBytes().contentEquals(byteArrayOf(1, 2, 3)))
+        } finally {
+            linked.delete()
+            owned.delete()
+            root.delete()
+        }
+    }
+
+    @Test fun linkedParentInsideLibraryCannotBorrowAnotherItemsPlayback() {
+        val root = java.nio.file.Files.createTempDirectory("playback-linked-parent").toFile()
+        val items = File(root, "items")
+        val owned = File(items, "owner")
+        val linked = File(items, "other")
+        val video = File(owned, "video.mp4")
+        try {
+            owned.mkdirs()
+            video.writeBytes(byteArrayOf(4, 5, 6))
+            java.nio.file.Files.createSymbolicLink(linked.toPath(), owned.toPath())
+            val mapped = CoreGatewayResult(value = listOf(item("one")), error = null)
+                .toLibraryScreenState(root, CoreGatewayResult(value = listOf(
+                    CoreLibraryPlaybackAsset("one", "items/other/video.mp4", null, true, null),
+                ), error = null))
+            assertTrue(mapped is LibraryScreenState.Failed)
+            assertTrue(video.readBytes().contentEquals(byteArrayOf(4, 5, 6)))
+        } finally {
+            linked.delete()
+            video.delete()
+            owned.delete()
+            items.delete()
+            root.delete()
+        }
+    }
+
     @Test fun validNestedPlaybackPathStaysWithinLibraryRoot() {
         val root = java.nio.file.Files.createTempDirectory("playback-root").toFile()
         try {
