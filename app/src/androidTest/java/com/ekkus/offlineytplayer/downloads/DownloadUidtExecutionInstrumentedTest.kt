@@ -35,7 +35,8 @@ class DownloadUidtExecutionInstrumentedTest {
         val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
         val mediaUrl = "http://127.0.0.1:${server.localPort}/media.mp4"
         val serverThread = thread(start = true, name = "rmd-502a-uidt-server") {
-            server.accept().use { socket ->
+            try {
+                server.accept().use { socket ->
                 val input = socket.getInputStream().bufferedReader()
                 while (true) {
                     val line = input.readLine() ?: break
@@ -47,6 +48,13 @@ class DownloadUidtExecutionInstrumentedTest {
                     output.write(payload)
                     output.flush()
                 }
+                }
+            } catch (error: java.net.SocketException) {
+                // Closing the fixture server during test cleanup interrupts accept().
+                // That is expected when the job never connected; let the main test
+                // report the actual scheduling/queue failure instead of replacing it
+                // with an uncaught background-thread SocketException.
+                if (!server.isClosed) throw error
             }
         }
 
