@@ -7,6 +7,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 pub const SCHEMA_VERSION: i64 = 1;
 
+fn has_playable_media_asset(item: &LibraryItem) -> bool {
+    item.assets.iter().any(|asset| matches!(asset.kind, crate::domain::MediaKind::Video | crate::domain::MediaKind::Audio))
+}
+
 #[derive(Debug, Clone)]
 pub struct LibraryStore {
     connection: Arc<Mutex<Connection>>,
@@ -151,7 +155,7 @@ impl LibraryStore {
     /// Atomically promotes the metadata for a verified item and clears its staging records.
     /// Files must already have been durably moved to their final relative paths.
     pub fn promote_completed(&self, job_id: &str, item: &LibraryItem) -> Result<(), CoreError> {
-        if !item.completed {
+        if !item.completed || !has_playable_media_asset(item) {
             return Err(CoreError::new(
                 ErrorKind::IntegrityFailure,
                 "cannot promote an incomplete library item",
@@ -189,7 +193,7 @@ impl LibraryStore {
                 false,
             ));
         }
-        if !item.completed {
+        if !item.completed || !has_playable_media_asset(item) {
             return Err(CoreError::new(
                 ErrorKind::IntegrityFailure,
                 "cannot promote an incomplete library item",
@@ -864,6 +868,18 @@ mod tests {
         let store = LibraryStore::open_in_memory().unwrap();
         let error = store.promote_completed("job-1", &item(false)).unwrap_err();
         assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+        assert!(store.list(None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn completed_items_require_playable_media_for_promotion() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut empty = item(true);
+        empty.assets.clear();
+        assert_eq!(store.promote_completed("job-1", &empty).unwrap_err().kind, ErrorKind::IntegrityFailure);
+        let mut thumbnails = item(true);
+        thumbnails.assets[0].kind = MediaKind::Thumbnail;
+        assert_eq!(store.promote_completed("job-1", &thumbnails).unwrap_err().kind, ErrorKind::IntegrityFailure);
         assert!(store.list(None).unwrap().is_empty());
     }
 
