@@ -19,6 +19,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.ekkus.offlineytplayer.MainActivity
 import kotlin.math.absoluteValue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 internal enum class DownloadSchedulerKind {
     UserInitiatedDataTransferJob,
@@ -212,6 +214,20 @@ internal fun runAndSettleDownloadJob(work: () -> Unit, settle: () -> Unit) {
 internal class UidtJobAttempt(private val stopNative: () -> Unit = {}) {
     private enum class State { Running, Stopped, Finished }
     private var state = State.Running
+    private val workerExited = CountDownLatch(1)
+
+    @Synchronized
+    private fun isStopped(): Boolean = state == State.Stopped
+
+    /** Wait off the JobService callback thread until the prior native writer exits. */
+    fun awaitPredecessor(previous: UidtJobAttempt?): Boolean {
+        while (previous != null && !previous.workerExited.await(100, TimeUnit.MILLISECONDS)) {
+            if (isStopped()) return false
+        }
+        return !isStopped()
+    }
+
+    fun markWorkerExited() = workerExited.countDown()
 
     @Synchronized
     fun stop(): Boolean {
@@ -250,11 +266,11 @@ class DownloadUserInitiatedJobService : JobService() {
         }
         val execution = DownloadWorkerExecution()
         val attempt = UidtJobAttempt { execution.requestStop() }
-        synchronized(activeAttempts) {
-            // A prior stopped attempt may still be inside synchronous UniFFI
-            // transfer. Do not start a second writer on the same queue item.
-            if (activeAttempts.containsKey(params.jobId)) return false
-            activeAttempts[params.jobId] = attempt
+        // JobScheduler may reschedule while a stopped UniFFI call is unwinding.
+        // Chain attempts rather than discarding the replacement or overlapping
+        // writers against the same durable queue and partial asset.
+        val predecessor = synchronized(activeAttempts) {
+            activeAttempts.put(params.jobId, attempt)
         }
         try {
             ensureNotificationChannel()
@@ -269,10 +285,15 @@ class DownloadUserInitiatedJobService : JobService() {
             Thread {
                 try {
                     runAndSettleDownloadJob(
-                        work = { execution.execute(this, queueItemId) },
+                        work = {
+                            if (attempt.awaitPredecessor(predecessor)) {
+                                execution.execute(this, queueItemId)
+                            }
+                        },
                         settle = { attempt.finishIfRunning { jobFinished(params, false) } },
                     )
                 } finally {
+                    attempt.markWorkerExited()
                     synchronized(activeAttempts) {
                         if (activeAttempts[params.jobId] === attempt) {
                             activeAttempts.remove(params.jobId)
@@ -283,6 +304,7 @@ class DownloadUserInitiatedJobService : JobService() {
             return true
         } catch (failure: Exception) {
             attempt.stop()
+            attempt.markWorkerExited()
             synchronized(activeAttempts) {
                 if (activeAttempts[params.jobId] === attempt) {
                     activeAttempts.remove(params.jobId)

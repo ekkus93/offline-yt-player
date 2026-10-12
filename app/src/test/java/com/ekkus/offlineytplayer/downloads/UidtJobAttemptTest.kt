@@ -28,6 +28,35 @@ class UidtJobAttemptTest {
     }
 
     @Test
+    fun replacementAttemptWaitsUntilStoppedNativeWriterHasExited() {
+        val previous = UidtJobAttempt()
+        val next = UidtJobAttempt()
+        val waiting = java.util.concurrent.CountDownLatch(1)
+        val completed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val thread = Thread {
+            waiting.countDown()
+            completed.set(next.awaitPredecessor(previous))
+        }
+        thread.start()
+        assertTrue(waiting.await(1, java.util.concurrent.TimeUnit.SECONDS))
+        assertFalse(completed.get())
+        previous.stop()
+        previous.markWorkerExited()
+        thread.join(2_000)
+        assertFalse(thread.isAlive)
+        assertTrue(completed.get())
+    }
+
+    @Test
+    fun stoppedReplacementDoesNotRunAfterPriorWriterExits() {
+        val previous = UidtJobAttempt()
+        val next = UidtJobAttempt()
+        next.stop()
+        previous.markWorkerExited()
+        assertFalse(next.awaitPredecessor(previous))
+    }
+
+    @Test
     fun userAndAppStopsDoNotRequestJobSchedulerRetry() {
         assertFalse(UidtJobStopPolicy.shouldReschedule(JobParameters.STOP_REASON_USER))
         assertFalse(UidtJobStopPolicy.shouldReschedule(JobParameters.STOP_REASON_CANCELLED_BY_APP))

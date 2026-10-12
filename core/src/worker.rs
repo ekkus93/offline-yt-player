@@ -1432,4 +1432,65 @@ mod tests {
         assert_eq!(durable.state, DownloadState::Paused);
         assert!(report.canceled.is_empty());
     }
+
+    #[test]
+    fn platform_stop_before_claim_keeps_durable_work_queued() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        store.save_download_snapshot(&snapshot("platform-preclaim", DownloadState::Queued)).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let stop = AtomicBool::new(true);
+        let report = worker.execute_ready_with_platform_stop_at(
+            &[plan("platform-preclaim", "http://127.0.0.1:1/unused".into(), 12)],
+            &AtomicBool::new(false),
+            &stop,
+            10_000,
+        ).unwrap();
+        assert!(report.claimed.is_empty());
+        assert!(report.canceled.is_empty());
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::Queued);
+        assert_eq!(durable.attempt, 0);
+    }
+
+    #[test]
+    fn platform_stop_during_transfer_settles_retryable_not_canceled() {
+        let data = vec![8_u8; 4 * 1024 * 1024];
+        let server = FixtureServer::start_with_delay(
+            data.clone(), std::time::Duration::from_millis(200),
+        );
+        let store = LibraryStore::open_in_memory().unwrap();
+        store.save_download_snapshot(&snapshot("platform-transfer", DownloadState::Queued)).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
+        let stop = Arc::new(AtomicBool::new(false));
+        let controller_stop = Arc::clone(&stop);
+        let control_store = store.clone();
+        let controller = thread::spawn(move || {
+            for _ in 0..200 {
+                let current = control_store.load_download_snapshots().unwrap().remove(0);
+                if current.state == DownloadState::Downloading {
+                    controller_stop.store(true, Ordering::Release);
+                    return;
+                }
+                thread::sleep(std::time::Duration::from_millis(5));
+            }
+            panic!("platform stop fixture never entered Downloading");
+        });
+        let report = worker.execute_ready_with_platform_stop_at(
+            &[plan("platform-transfer", format!("{}/video.mp4", server.address), data.len())],
+            &AtomicBool::new(false),
+            &stop,
+            10_000,
+        ).unwrap();
+        controller.join().unwrap();
+        assert_eq!(report.retry_wait, vec!["platform-transfer"]);
+        assert!(report.canceled.is_empty());
+        assert!(report.completed.is_empty());
+        let durable = store.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(durable.state, DownloadState::RetryWait);
+        assert_eq!(durable.retry_at_epoch_ms, Some(10_000));
+        assert!(durable.last_error.unwrap().retryable);
+        assert!(store.get("platform-transfer").unwrap().is_none());
+    }
 }
