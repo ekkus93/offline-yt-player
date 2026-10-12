@@ -1,5 +1,6 @@
 package com.ekkus.offlineytplayer.downloads
 
+import android.app.job.JobScheduler
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import android.os.Build
@@ -9,6 +10,7 @@ import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import org.junit.Assert.assertEquals
@@ -86,6 +88,88 @@ class DownloadUidtExecutionInstrumentedTest {
             serverThread.join(1_000)
             itemDir.deleteRecursively()
             database.delete()
+        }
+    }
+
+
+    @Test
+    fun api35JobSchedulerStopHaltsNativeAndManualRetryCompletes() {
+        assumeTrue(Build.VERSION.SDK_INT >= 34)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = context.filesDir.resolve("offline-yt-player.sqlite3")
+        val itemDir = context.filesDir.resolve("items/rmd-502a-uidt")
+        val id = "rmd-502a-uidt-fixture"
+        val bytes = ByteArray(256 * 1024) { (it % 251).toByte() }
+        val firstChunk = CountDownLatch(1)
+        val server = ServerSocket(0, 2, InetAddress.getByName("127.0.0.1"))
+        server.soTimeout = 45_000
+        val serverThread = thread(start = true) {
+            repeat(2) { attempt ->
+                try {
+                    server.accept().use { socket ->
+                        val input = socket.getInputStream().bufferedReader()
+                        while (true) {
+                            val line = input.readLine() ?: break
+                            if (line.isEmpty()) break
+                        }
+                        val output = socket.getOutputStream()
+                        output.write(("HTTP/1.1 200 OK\\r\\nContent-Length: ${bytes.size}\\r\\n" +
+                            "Content-Type: video/mp4\\r\\nConnection: close\\r\\n\\r\\n").toByteArray())
+                        for (offset in bytes.indices step 1024) {
+                            output.write(bytes, offset, minOf(1024, bytes.size - offset))
+                            output.flush()
+                            if (attempt == 0) {
+                                firstChunk.countDown()
+                                Thread.sleep(25)
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                    // The first connection is expected to terminate on stop.
+                }
+            }
+        }
+        val jobs = context.getSystemService(JobScheduler::class.java)
+        var jobNumber: Int? = null
+        try {
+            db.delete()
+            itemDir.deleteRecursively()
+            System.loadLibrary("offline_yt_core")
+            GeneratedUniffiCoreGateway.open(db.absolutePath).close()
+            seedDurableFixtureWork(db.absolutePath, id, "http://127.0.0.1:${server.localPort}/media.mp4", bytes.size)
+            val scheduler = AndroidDownloadExecutionScheduler(context)
+            val initial = scheduler.schedule(DownloadScheduleRequest(id, bytes.size.toLong()))
+            assertTrue(initial.accepted)
+            jobNumber = initial.jobId
+            assertTrue(firstChunk.await(25, TimeUnit.SECONDS))
+            jobs.cancel(requireNotNull(jobNumber))
+            GeneratedUniffiCoreGateway.open(db.absolutePath).use { gateway ->
+                fun waitFor(state: CoreDownloadState) {
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(40)
+                    var observed: CoreDownloadState? = null
+                    while (System.nanoTime() < deadline) {
+                        val queue = gateway.listDownloadQueueAsync().get(10, TimeUnit.SECONDS)
+                        assertNull(queue.error)
+                        observed = queue.value.orEmpty().firstOrNull { it.jobId == id }?.state
+                        if (observed == state) return
+                        Thread.sleep(100)
+                    }
+                    assertEquals(state, observed)
+                }
+                waitFor(CoreDownloadState.RETRY_WAIT)
+                assertTrue(!itemDir.resolve("video.mp4").exists())
+                val restarted = scheduler.schedule(DownloadScheduleRequest(id, bytes.size.toLong()))
+                assertTrue(restarted.accepted)
+                jobNumber = restarted.jobId
+                waitFor(CoreDownloadState.COMPLETED)
+                assertTrue(bytes.contentEquals(itemDir.resolve("video.mp4").readBytes()))
+            }
+        } finally {
+            jobNumber?.let { jobs.cancel(it) }
+            server.close()
+            serverThread.join(2_000)
+            itemDir.deleteRecursively()
+            db.delete()
         }
     }
 
