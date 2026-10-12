@@ -240,4 +240,41 @@ class DownloadExecutionSchedulerPolicyTest {
         assertTrue(manifest.contains("android.permission.BIND_JOB_SERVICE"))
     }
 
+    @Test
+    fun stalePlatformStopCannotCancelNewAttemptReusingJobId() {
+        val registry = UidtJobAttemptRegistry<Any>()
+        val oldParams = Any()
+        val newParams = Any()
+        var oldStops = 0
+        var newStops = 0
+        val old = UidtJobAttempt { oldStops++ }
+        val replacement = UidtJobAttempt { newStops++ }
+
+        assertNull(registry.register(7301, oldParams, old))
+        assertEquals(old, registry.register(7301, newParams, replacement))
+        assertTrue(registry.stop(oldParams))
+        assertEquals(1, oldStops)
+        assertEquals(0, newStops)
+        registry.unregister(7301, oldParams, old)
+        assertFalse(registry.stop(oldParams))
+        assertTrue(replacement.finishIfRunning {})
+        assertEquals(0, newStops)
+        registry.unregister(7301, newParams, replacement)
+    }
+
+    @Test
+    fun sameJobIdWithDifferentParametersNeverStopsUnrelatedAttempt() {
+        val registry = UidtJobAttemptRegistry<Any>()
+        val params = Any()
+        val unrelated = Any()
+        var stopSignals = 0
+        val attempt = UidtJobAttempt { stopSignals++ }
+        registry.register(7302, params, attempt)
+        assertFalse(registry.stop(unrelated))
+        assertEquals(0, stopSignals)
+        assertTrue(registry.stop(params))
+        assertEquals(1, stopSignals)
+        registry.unregister(7302, params, attempt)
+    }
+
 }

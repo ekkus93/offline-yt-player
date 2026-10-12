@@ -113,8 +113,8 @@ class DownloadUidtExecutionInstrumentedTest {
                             if (line.isEmpty()) break
                         }
                         val output = socket.getOutputStream()
-                        output.write(("HTTP/1.1 200 OK\\r\\nContent-Length: ${bytes.size}\\r\\n" +
-                            "Content-Type: video/mp4\\r\\nConnection: close\\r\\n\\r\\n").toByteArray())
+                        output.write(("HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\n" +
+                            "Content-Type: video/mp4\r\nConnection: close\r\n\r\n").toByteArray())
                         for (offset in bytes.indices step 1024) {
                             output.write(bytes, offset, minOf(1024, bytes.size - offset))
                             output.flush()

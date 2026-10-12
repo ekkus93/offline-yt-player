@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.ekkus.offlineytplayer.MainActivity
 import kotlin.math.absoluteValue
+import java.util.IdentityHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -246,6 +247,30 @@ internal class UidtJobAttempt(private val stopNative: () -> Unit = {}) {
     }
 }
 
+/** Track platform callbacks by their exact JobParameters identity, not only job ID.
+ * A late stop for a previous attempt must never stop a newer replacement.
+ */
+internal class UidtJobAttemptRegistry<Params : Any> {
+    private val latestByJobId = mutableMapOf<Int, UidtJobAttempt>()
+    private val byParameters = IdentityHashMap<Params, UidtJobAttempt>()
+
+    @Synchronized
+    fun register(jobId: Int, params: Params, attempt: UidtJobAttempt): UidtJobAttempt? {
+        val predecessor = latestByJobId.put(jobId, attempt)
+        byParameters[params] = attempt
+        return predecessor
+    }
+
+    @Synchronized
+    fun stop(params: Params): Boolean = byParameters[params]?.stop() ?: false
+
+    @Synchronized
+    fun unregister(jobId: Int, params: Params, attempt: UidtJobAttempt) {
+        if (byParameters[params] === attempt) byParameters.remove(params)
+        if (latestByJobId[jobId] === attempt) latestByJobId.remove(jobId)
+    }
+}
+
 internal object UidtJobStopPolicy {
     fun shouldReschedule(stopReason: Int): Boolean =
         stopReason != JobParameters.STOP_REASON_USER &&
@@ -255,7 +280,7 @@ internal object UidtJobStopPolicy {
 class DownloadUserInitiatedJobService : JobService() {
     // Retain a stopped attempt until its native worker exits. This prevents a
     // new invocation for the same JobScheduler ID from running concurrently.
-    private val activeAttempts = mutableMapOf<Int, UidtJobAttempt>()
+    private val activeAttempts = UidtJobAttemptRegistry<JobParameters>()
 
     override fun onStartJob(params: JobParameters): Boolean {
         val queueItemId = params.extras.getString(ExtraQueueItemId)
@@ -269,9 +294,7 @@ class DownloadUserInitiatedJobService : JobService() {
         // JobScheduler may reschedule while a stopped UniFFI call is unwinding.
         // Chain attempts rather than discarding the replacement or overlapping
         // writers against the same durable queue and partial asset.
-        val predecessor = synchronized(activeAttempts) {
-            activeAttempts.put(params.jobId, attempt)
-        }
+        val predecessor = activeAttempts.register(params.jobId, params, attempt)
         try {
             ensureNotificationChannel()
             if (Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk) {
@@ -294,30 +317,20 @@ class DownloadUserInitiatedJobService : JobService() {
                     )
                 } finally {
                     attempt.markWorkerExited()
-                    synchronized(activeAttempts) {
-                        if (activeAttempts[params.jobId] === attempt) {
-                            activeAttempts.remove(params.jobId)
-                        }
-                    }
+                    activeAttempts.unregister(params.jobId, params, attempt)
                 }
             }.start()
             return true
         } catch (failure: Exception) {
             attempt.stop()
             attempt.markWorkerExited()
-            synchronized(activeAttempts) {
-                if (activeAttempts[params.jobId] === attempt) {
-                    activeAttempts.remove(params.jobId)
-                }
-            }
+            activeAttempts.unregister(params.jobId, params, attempt)
             throw failure
         }
     }
 
     override fun onStopJob(params: JobParameters): Boolean {
-        synchronized(activeAttempts) {
-            activeAttempts[params.jobId]?.stop()
-        }
+        activeAttempts.stop(params)
         // User-stopped UIDT jobs must not be automatically rescheduled.
         // Native cooperative stop and retryable durable settlement are still
         // required before this platform-stop path is fully qualified.
