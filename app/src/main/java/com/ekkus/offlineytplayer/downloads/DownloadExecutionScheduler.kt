@@ -206,6 +206,12 @@ internal fun runAndSettleDownloadJob(work: () -> Unit, settle: () -> Unit) {
 
 class DownloadUserInitiatedJobService : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
+        val queueItemId = params.extras.getString(ExtraQueueItemId)
+        if (queueItemId.isNullOrBlank()) {
+            // Returning false already tells JobScheduler the job is finished.
+            // Calling jobFinished as well would settle the same job twice.
+            return false
+        }
         ensureNotificationChannel()
         if (Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk) {
             setNotification(
@@ -214,11 +220,6 @@ class DownloadUserInitiatedJobService : JobService() {
                 downloadExecutionNotification(),
                 JOB_END_NOTIFICATION_POLICY_REMOVE,
             )
-        }
-        val queueItemId = params.extras.getString(ExtraQueueItemId)
-        if (queueItemId.isNullOrBlank()) {
-            jobFinished(params, false)
-            return false
         }
         Thread {
             runAndSettleDownloadJob(

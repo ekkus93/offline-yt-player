@@ -1097,6 +1097,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 persistence validator symlink/hash bypass (2026-10-11; qualification pending):** `LibraryStore::validate_item_assets` separately used `std::fs::metadata` plus byte length and therefore followed symlinks and accepted same-length corruption despite recorded SHA-256. This independent production path now delegates to shared `validate_library_item_assets` at Deep depth, preserving explicit MissingAsset/CorruptAsset errors. `core/src/persistence.rs` adds executable regression coverage for a healthy asset, same-length tampering, a symlinked file, and a symlinked library root. Keep RMD-1802/RMD-1803 open pending exact-head CI and remaining review.
 
+**RMD-1802 UIDT invalid-start double-settlement finding (2026-10-11; qualification pending):** `DownloadUserInitiatedJobService.onStartJob` previously called `jobFinished(params, false)` and then returned `false` for blank/missing durable queue IDs. Android's `JobService` contract already treats return `false` as completed, so the extra call could double-settle an invalid job. The invalid-ID branch now returns `false` before creating a notification without explicitly finishing; `DownloadExecutionSchedulerPolicyTest.invalidJobExtrasReturnAlreadyFinishedWithoutDoubleSettlement` guards the source-level framework contract. This check does not replace Android runtime or stop/cancellation E2E qualification; RMD-1802/RMD-1803 remain open pending exact-head evidence.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.

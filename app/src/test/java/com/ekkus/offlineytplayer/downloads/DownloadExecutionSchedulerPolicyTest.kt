@@ -103,6 +103,20 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
+    fun invalidJobExtrasReturnAlreadyFinishedWithoutDoubleSettlement() {
+        // Android treats onStartJob=false as an already-completed job. Ensure
+        // malformed durable IDs cannot double-settle or post a UIDT notification.
+        val source = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadExecutionScheduler.kt").readText()
+        val onStart = source.substringAfter("override fun onStartJob(params: JobParameters): Boolean {")
+            .substringBefore("Thread {")
+        val invalidIdBranch = onStart.substringAfter("if (queueItemId.isNullOrBlank()) {")
+            .substringBefore("}")
+        assertTrue(invalidIdBranch.contains("return false"))
+        assertFalse(invalidIdBranch.contains("jobFinished("))
+        assertTrue(onStart.indexOf("if (queueItemId.isNullOrBlank())") < onStart.indexOf("setNotification("))
+    }
+
+    @Test
     fun jobIsSettledExactlyOnceWhenWorkerThrowsUnexpectedly() {
         var settlements = 0
         var executed = 0
