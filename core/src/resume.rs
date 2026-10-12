@@ -139,7 +139,11 @@ pub fn save_resume_representation(
 /// Android's /data/user/0 alias) that may legitimately be symlinks.
 fn reject_linked_resume_parent(partial_path: &Path) -> Result<(), CoreError> {
     let parent = partial_path.parent().ok_or_else(|| {
-        CoreError::new(ErrorKind::InvalidInput, "Resume partial has no parent directory", false)
+        CoreError::new(
+            ErrorKind::InvalidInput,
+            "Resume partial has no parent directory",
+            false,
+        )
     })?;
     match fs::symlink_metadata(parent) {
         Ok(metadata) if metadata.file_type().is_symlink() => Err(CoreError::new(
@@ -518,22 +522,33 @@ mod tests {
         let linked_partial = library.path().join("linked/.video.partial");
 
         assert_eq!(
-            load_resume_representation(&linked_partial).unwrap_err().kind,
+            load_resume_representation(&linked_partial)
+                .unwrap_err()
+                .kind,
             ErrorKind::InvalidInput
         );
         assert_eq!(
-            save_resume_representation(&linked_partial, &current).unwrap_err().kind,
+            save_resume_representation(&linked_partial, &current)
+                .unwrap_err()
+                .kind,
             ErrorKind::InvalidInput
         );
         assert_eq!(
-            clear_resume_representation(&linked_partial).unwrap_err().kind,
+            clear_resume_representation(&linked_partial)
+                .unwrap_err()
+                .kind,
             ErrorKind::InvalidInput
         );
         assert_eq!(
-            prepare_partial_reuse(&linked_partial, &current).unwrap_err().kind,
+            prepare_partial_reuse(&linked_partial, &current)
+                .unwrap_err()
+                .kind,
             ErrorKind::InvalidInput
         );
-        assert_eq!(fs::read(&external_partial).unwrap(), b"external partial bytes");
+        assert_eq!(
+            fs::read(&external_partial).unwrap(),
+            b"external partial bytes"
+        );
         assert_eq!(fs::read(&external_sidecar).unwrap(), original_sidecar);
     }
 
