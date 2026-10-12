@@ -195,7 +195,13 @@ pub fn prepare_partial_reuse(
 ) -> Result<bool, CoreError> {
     match fs::symlink_metadata(partial_path) {
         Ok(metadata) if metadata.is_file() => {}
-        Ok(_) => return Err(CoreError::new(ErrorKind::InvalidInput, "Resume partial must be a regular file", false)),
+        Ok(_) => {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "Resume partial must be a regular file",
+                false,
+            ));
+        }
         Err(error) if error.kind() == IoErrorKind::NotFound => {
             clear_resume_representation(partial_path)?;
             return Ok(false);
@@ -407,7 +413,10 @@ mod tests {
         symlink(&target, &partial).unwrap();
         let current = representation(Some("fixture-v1"), None);
         save_resume_representation(&partial, &current).unwrap();
-        assert_eq!(prepare_partial_reuse(&partial, &current).unwrap_err().kind, ErrorKind::InvalidInput);
+        assert_eq!(
+            prepare_partial_reuse(&partial, &current).unwrap_err().kind,
+            ErrorKind::InvalidInput
+        );
         assert_eq!(fs::read(&target).unwrap(), b"safe");
     }
 
