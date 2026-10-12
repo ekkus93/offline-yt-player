@@ -171,7 +171,8 @@ class DownloadUidtExecutionInstrumentedTest {
                 forceScheduledJobToRun(context.packageName, requireNotNull(jobNumber))
             } else null
             assertTrue("UIDT first chunk never arrived; forced start: $forcedStart", firstChunk.await(20, TimeUnit.SECONDS))
-            jobs.cancel(requireNotNull(jobNumber))
+            val stopOutput = shellJobSchedulerCommand("timeout", context.packageName, requireNotNull(jobNumber))
+            assertTrue("JobScheduler timeout failed: $stopOutput", !stopOutput.contains("Error", ignoreCase = true))
             GeneratedUniffiCoreGateway.open(db.absolutePath).use { gateway ->
                 fun waitFor(state: CoreDownloadState) {
                     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(40)
@@ -186,6 +187,7 @@ class DownloadUidtExecutionInstrumentedTest {
                     assertEquals(state, observed)
                 }
                 waitFor(CoreDownloadState.RETRY_WAIT)
+                jobs.cancel(requireNotNull(jobNumber))
                 assertTrue(!itemDir.resolve("video.mp4").exists())
                 val restarted = scheduler.schedule(DownloadScheduleRequest(id, bytes.size.toLong()))
                 assertTrue(restarted.accepted)
@@ -210,6 +212,13 @@ class DownloadUidtExecutionInstrumentedTest {
         ParcelFileDescriptor.AutoCloseInputStream(
             InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
                 "cmd jobscheduler run -f $packageName $jobId",
+            ),
+        ).bufferedReader().use { it.readText().trim() }
+
+    private fun shellJobSchedulerCommand(command: String, packageName: String, jobId: Int): String =
+        ParcelFileDescriptor.AutoCloseInputStream(
+            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+                "cmd jobscheduler $command $packageName $jobId",
             ),
         ).bufferedReader().use { it.readText().trim() }
 
