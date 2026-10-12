@@ -27,10 +27,10 @@ class DownloadUidtExecutionInstrumentedTest {
         assumeTrue(Build.VERSION.SDK_INT >= 34)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val database = context.filesDir.resolve("offline-yt-player.sqlite3")
-        val itemDir = context.filesDir.resolve("items/rmd-502a-uidt")
+        val jobId = "rmd-502a-uidt-completion"
+        val itemDir = context.filesDir.resolve("items/$jobId")
         database.delete()
         itemDir.deleteRecursively()
-        val jobId = "rmd-502a-uidt-fixture"
         val payload = "uidt fixture bytes".toByteArray()
         val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
         val mediaUrl = "http://127.0.0.1:${server.localPort}/media.mp4"
@@ -58,6 +58,8 @@ class DownloadUidtExecutionInstrumentedTest {
             }
         }
 
+        val jobs = context.getSystemService(JobScheduler::class.java)
+        var scheduledJobId: Int? = null
         try {
             System.loadLibrary("offline_yt_core")
             GeneratedUniffiCoreGateway.open(database.absolutePath).close()
@@ -73,6 +75,7 @@ class DownloadUidtExecutionInstrumentedTest {
             assertEquals(DownloadSchedulerKind.UserInitiatedDataTransferJob, scheduled.kind)
             assertTrue(scheduled.accepted)
             assertTrue(scheduled.jobId != null)
+            scheduledJobId = scheduled.jobId
 
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { gateway ->
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
@@ -92,6 +95,7 @@ class DownloadUidtExecutionInstrumentedTest {
             }
             assertEquals(payload.size.toLong(), itemDir.resolve("video.mp4").length())
         } finally {
+            scheduledJobId?.let { jobs.cancel(it) }
             server.close()
             serverThread.join(1_000)
             itemDir.deleteRecursively()
@@ -105,8 +109,8 @@ class DownloadUidtExecutionInstrumentedTest {
         assumeTrue(Build.VERSION.SDK_INT >= 34)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val db = context.filesDir.resolve("offline-yt-player.sqlite3")
-        val itemDir = context.filesDir.resolve("items/rmd-502a-uidt")
-        val id = "rmd-502a-uidt-fixture"
+        val id = "rmd-502a-uidt-stop-retry"
+        val itemDir = context.filesDir.resolve("items/$id")
         val bytes = ByteArray(256 * 1024) { (it % 251).toByte() }
         val firstChunk = CountDownLatch(1)
         val server = ServerSocket(0, 2, InetAddress.getByName("127.0.0.1"))
@@ -208,14 +212,14 @@ class DownloadUidtExecutionInstrumentedTest {
                 null,
                 ContentValues().apply {
                     put("job_id", jobId)
-                    put("plan_json", durablePlanJson(mediaUrl, bytes))
+                    put("plan_json", durablePlanJson(mediaUrl, bytes, jobId))
                     put("created_at_epoch_ms", System.currentTimeMillis())
                 },
             )
         }
     }
 
-    private fun durablePlanJson(mediaUrl: String, bytes: Int): String = """
+    private fun durablePlanJson(mediaUrl: String, bytes: Int, jobId: String): String = """
         {
           "source": {"provider": "direct-fixture", "media_id": "rmd-502a-uidt", "canonical_url": null},
           "title": "RMD 502a UIDT fixture",
@@ -232,7 +236,7 @@ class DownloadUidtExecutionInstrumentedTest {
               "asset_id": "video",
               "kind": "Video",
               "url": "$mediaUrl",
-              "relative_path": "items/rmd-502a-uidt/video.mp4",
+              "relative_path": "items/$jobId/video.mp4",
               "expected_bytes": $bytes,
               "expected_sha256": null,
               "mime_type": "video/mp4"

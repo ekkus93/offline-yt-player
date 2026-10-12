@@ -4,17 +4,47 @@ import android.content.Context
 import com.ekkus.offlineytplayer.core.FfiDownloadWorkerService
 import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
+internal class NativeWorkerStopGate<T : Any>(private val stopNative: (T) -> Unit) {
+    private val lock = Any()
+    private var stopped = false
+    private var active: T? = null
+    private var stopSignaled = false
+
+    fun requestStop() = synchronized(lock) {
+        stopped = true
+        val handle = active
+        if (handle != null && !stopSignaled) {
+            stopSignaled = true
+            stopNative(handle)
+        }
+    }
+
+    fun attach(handle: T) = synchronized(lock) {
+        check(active == null) { "native worker handle already attached" }
+        active = handle
+        stopSignaled = false
+        if (stopped) {
+            stopSignaled = true
+            stopNative(handle)
+        }
+    }
+
+    fun detach(handle: T) = synchronized(lock) {
+        if (active === handle) {
+            active = null
+            stopSignaled = false
+        }
+    }
+}
 
 internal class DownloadWorkerExecution {
-    private val stopped = AtomicBoolean(false)
-    private val activeService = AtomicReference<FfiDownloadWorkerService?>(null)
-
-    fun requestStop() {
-        stopped.set(true)
-        activeService.get()?.requestPlatformStop()
+    // Attach, stop and detach serialize around the UniFFI handle. An Android
+    // stop callback must never invoke requestPlatformStop on a closed handle.
+    private val stopGate = NativeWorkerStopGate<FfiDownloadWorkerService> {
+        it.requestPlatformStop()
     }
+
+    fun requestStop() = stopGate.requestStop()
 
     fun execute(context: Context, queueItemId: String): Boolean = try {
         val databasePath = File(context.filesDir, "offline-yt-player.sqlite3").absolutePath
@@ -23,8 +53,7 @@ internal class DownloadWorkerExecution {
         }
         val service = FfiDownloadWorkerService.open(databasePath)
         try {
-            activeService.set(service)
-            if (stopped.get()) service.requestPlatformStop()
+            stopGate.attach(service)
             // Use the generated Kotlin API directly. Methods accepting ULong have
             // mangled JVM names, so Java reflection looking for "executeJob" by
             // its unmangled name silently failed and left scheduled work QUEUED.
@@ -35,7 +64,7 @@ internal class DownloadWorkerExecution {
             )
             result.error == null && result.executed
         } finally {
-            activeService.compareAndSet(service, null)
+            stopGate.detach(service)
             (service as? AutoCloseable)?.close()
         }
     } catch (_: Exception) {
