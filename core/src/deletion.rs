@@ -341,13 +341,18 @@ mod tests {
         let aliased_root = root_parent.path().join("linked-library");
         symlink(outside.path(), &aliased_root).unwrap();
 
-        let error = delete_library_item_owned_assets(&store, &aliased_root, "item-1")
-            .unwrap_err();
+        let error = delete_library_item_owned_assets(&store, &aliased_root, "item-1").unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert!(asset.is_file(), "an external completed asset was deleted");
-        assert!(partial.is_file(), "an external transfer partial was deleted");
+        assert!(
+            partial.is_file(),
+            "an external transfer partial was deleted"
+        );
         assert!(resume.is_file(), "an external resume sidecar was deleted");
-        assert!(store.get("item-1").unwrap().is_some(), "metadata was deleted");
+        assert!(
+            store.get("item-1").unwrap().is_some(),
+            "metadata was deleted"
+        );
     }
 
     #[test]
@@ -361,11 +366,13 @@ mod tests {
         let invalid_root = root_parent.path().join("regular-file");
         std::fs::write(&invalid_root, b"unrelated data").unwrap();
 
-        let error = delete_library_item_owned_assets(&store, &invalid_root, "item-1")
-            .unwrap_err();
+        let error = delete_library_item_owned_assets(&store, &invalid_root, "item-1").unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert_eq!(std::fs::read(&invalid_root).unwrap(), b"unrelated data");
-        assert!(store.get("item-1").unwrap().is_some(), "metadata was deleted");
+        assert!(
+            store.get("item-1").unwrap().is_some(),
+            "metadata was deleted"
+        );
     }
 
     #[cfg(unix)]
