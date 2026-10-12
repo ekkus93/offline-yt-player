@@ -457,8 +457,25 @@ fn ensure_safe_library_write_path(
     Ok(())
 }
 
+fn reject_symlink_or_non_directory_root(root: &Path) -> Result<(), CoreError> {
+    match fs::symlink_metadata(root) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "library root must be a real directory, not a symlink",
+                false,
+            ))
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == IoErrorKind::NotFound => Ok(()),
+        Err(error) => Err(io_error(error)),
+    }
+}
+
 fn canonical_library_root(root: &Path) -> Result<PathBuf, CoreError> {
+    reject_symlink_or_non_directory_root(root)?;
     fs::create_dir_all(root).map_err(io_error)?;
+    reject_symlink_or_non_directory_root(root)?;
     fs::canonicalize(root).map_err(io_error)
 }
 
@@ -1460,5 +1477,55 @@ mod tests {
             fs::read(outside.path().join(".stolen.partial")).unwrap(),
             b"outside bytes"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transfer_and_cleanup_reject_symlinked_library_root_without_touching_outside() {
+        use std::os::unix::fs::symlink;
+
+        let parent = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let root = parent.path().join("library");
+        symlink(outside.path(), &root).unwrap();
+        let outside_partial = outside.path().join(".video.mp4.partial");
+        fs::write(&outside_partial, b"outside bytes").unwrap();
+
+        let engine = DownloadEngine::new(root.as_path(), DownloadPolicy::default()).unwrap();
+        let request = TransferRequest {
+            url: "http://127.0.0.1:1/unreachable".into(),
+            relative_path: "video.mp4".into(),
+            expected_bytes: None,
+            expected_sha256: None,
+        };
+        let transfer_error = engine
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap_err();
+        assert_eq!(transfer_error.kind, ErrorKind::InvalidInput);
+        let cleanup_error = engine.cleanup_orphan_partials().unwrap_err();
+        assert_eq!(cleanup_error.kind, ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&outside_partial).unwrap(), b"outside bytes");
+        assert!(!outside.path().join("video.mp4").exists());
+    }
+
+    #[test]
+    fn transfer_and_cleanup_reject_non_directory_library_root() {
+        let parent = tempfile::tempdir().unwrap();
+        let root = parent.path().join("library");
+        fs::write(&root, b"not a directory").unwrap();
+        let engine = DownloadEngine::new(root.as_path(), DownloadPolicy::default()).unwrap();
+        let request = TransferRequest {
+            url: "http://127.0.0.1:1/unreachable".into(),
+            relative_path: "video.mp4".into(),
+            expected_bytes: None,
+            expected_sha256: None,
+        };
+        let transfer_error = engine
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap_err();
+        assert_eq!(transfer_error.kind, ErrorKind::InvalidInput);
+        let cleanup_error = engine.cleanup_orphan_partials().unwrap_err();
+        assert_eq!(cleanup_error.kind, ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&root).unwrap(), b"not a directory");
     }
 }
