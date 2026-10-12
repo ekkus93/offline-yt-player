@@ -1,8 +1,11 @@
 use crate::domain::{CoreError, ErrorKind};
 use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
-use std::io::{ErrorKind as IoErrorKind, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{ErrorKind as IoErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
+
+// Bound corrupted/imported sidecars before allocating or parsing JSON.
+const MAX_RESUME_METADATA_BYTES: usize = 64 * 1024;
 
 /// Durable identity for the remote representation associated with a partial download.
 ///
@@ -97,6 +100,9 @@ pub fn save_resume_representation(
             false,
         )
     })?;
+    if bytes.len() > MAX_RESUME_METADATA_BYTES {
+        return Err(oversized_resume_metadata());
+    }
     let path = resume_metadata_path(partial_path);
     let temp = path.with_extension("json.tmp");
     // The library root can contain imported files. Never follow an attacker-
@@ -144,11 +150,20 @@ pub fn load_resume_representation(
 ) -> Result<Option<ResumeRepresentation>, CoreError> {
     let path = resume_metadata_path(partial_path);
     reject_nonregular_resume_path(&path)?;
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == IoErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(io_error(error)),
     };
+    // A metadata length check followed by fs::read is still unbounded if a
+    // file grows concurrently. Read at most limit+1 bytes from the opened file.
+    let mut bytes = Vec::new();
+    file.take((MAX_RESUME_METADATA_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    if bytes.len() > MAX_RESUME_METADATA_BYTES {
+        return Err(oversized_resume_metadata());
+    }
     serde_json::from_slice(&bytes).map(Some).map_err(|_| {
         CoreError::new(
             ErrorKind::IntegrityFailure,
@@ -198,6 +213,14 @@ pub fn prepare_partial_reuse(
     }
     clear_resume_representation(partial_path)?;
     Ok(false)
+}
+
+fn oversized_resume_metadata() -> CoreError {
+    CoreError::new(
+        ErrorKind::IntegrityFailure,
+        "Stored resume metadata exceeds the permitted size",
+        false,
+    )
 }
 
 fn io_error(error: std::io::Error) -> CoreError {
@@ -299,6 +322,36 @@ mod tests {
         fs::write(resume_metadata_path(&partial), b"not-json").unwrap();
         let error = load_resume_representation(&partial).unwrap_err();
         assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+    }
+
+    #[test]
+    fn oversized_sidecar_fails_closed_without_consuming_partial() {
+        let temp = tempfile::tempdir().unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        fs::write(&partial, b"original partial").unwrap();
+        let sidecar = resume_metadata_path(&partial);
+        fs::write(&sidecar, vec![b'X'; MAX_RESUME_METADATA_BYTES + 1]).unwrap();
+
+        let error = load_resume_representation(&partial).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+        assert!(!error.retryable);
+        let error = prepare_partial_reuse(
+            &partial,
+            &representation(Some("\"fixture-v1\""), None),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+        assert_eq!(fs::read(&partial).unwrap(), b"original partial");
+    }
+
+    #[test]
+    fn oversized_resume_representation_is_not_written() {
+        let temp = tempfile::tempdir().unwrap();
+        let partial = temp.path().join(".video.mp4.partial");
+        let oversized = representation(Some(&"X".repeat(MAX_RESUME_METADATA_BYTES)), None);
+        let error = save_resume_representation(&partial, &oversized).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+        assert!(!resume_metadata_path(&partial).exists());
     }
 
     #[test]
