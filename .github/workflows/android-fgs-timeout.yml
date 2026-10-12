@@ -47,6 +47,8 @@ jobs:
           export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           cargo build -p offline-yt-core --target aarch64-linux-android
           cargo build -p offline-yt-core --target x86_64-linux-android
+      - name: Prebuild Android instrumentation APKs before emulator startup
+        run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Run API 35 dataSync timeout and UIDT qualification
         uses: reactivecircus/android-emulator-runner@v2
         with:
