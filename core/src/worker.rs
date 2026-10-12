@@ -798,8 +798,6 @@ mod tests {
             bytes_downloaded: 0,
             total_bytes: None,
             attempt: 0,
-
-
             retry_at_epoch_ms: None,
             last_error: None,
         }
@@ -1595,7 +1593,6 @@ mod tests {
                     thread::sleep(std::time::Duration::from_millis(5));
                 }
                 panic!("worker never reached Downloading for {label}");
-
             });
             let report = worker
                 .execute_ready_with_platform_stop_at(
