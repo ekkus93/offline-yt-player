@@ -335,11 +335,8 @@ mod tests {
         let error = load_resume_representation(&partial).unwrap_err();
         assert_eq!(error.kind, ErrorKind::IntegrityFailure);
         assert!(!error.retryable);
-        let error = prepare_partial_reuse(
-            &partial,
-            &representation(Some("\"fixture-v1\""), None),
-        )
-        .unwrap_err();
+        let error = prepare_partial_reuse(&partial, &representation(Some("\"fixture-v1\""), None))
+            .unwrap_err();
         assert_eq!(error.kind, ErrorKind::IntegrityFailure);
         assert_eq!(fs::read(&partial).unwrap(), b"original partial");
     }
