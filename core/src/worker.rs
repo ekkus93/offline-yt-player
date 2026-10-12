@@ -128,7 +128,14 @@ impl DownloadWorker {
                 }
                 continue;
             }
-            match self.execute_one(&engine, item, &mut snapshot, cancel, platform_stop, now_epoch_ms) {
+            match self.execute_one(
+                &engine,
+                item,
+                &mut snapshot,
+                cancel,
+                platform_stop,
+                now_epoch_ms,
+            ) {
                 Ok(progress_events) => {
                     report.progress_events.extend(progress_events);
                     report.completed.push(snapshot.job_id.clone());
@@ -334,7 +341,11 @@ impl DownloadWorker {
             }
         }
         if platform_stop.load(Ordering::Acquire) {
-            return Err(CoreError::new(ErrorKind::Canceled, "platform stopped download", false));
+            return Err(CoreError::new(
+                ErrorKind::Canceled,
+                "platform stopped download",
+                false,
+            ));
         }
         let prior_claim = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Downloading)?;
@@ -464,7 +475,11 @@ impl DownloadWorker {
         }
 
         if platform_stop.load(Ordering::Acquire) {
-            return Err(CoreError::new(ErrorKind::Canceled, "platform stopped before verification", false));
+            return Err(CoreError::new(
+                ErrorKind::Canceled,
+                "platform stopped before verification",
+                false,
+            ));
         }
         let previous_downloading = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Verifying)?;
@@ -490,7 +505,11 @@ impl DownloadWorker {
             completed: true,
         };
         if platform_stop.load(Ordering::Acquire) {
-            return Err(CoreError::new(ErrorKind::Canceled, "platform stopped before completion", false));
+            return Err(CoreError::new(
+                ErrorKind::Canceled,
+                "platform stopped before completion",
+                false,
+            ));
         }
         let previous_verifying = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Completed)?;
@@ -528,7 +547,9 @@ impl DownloadWorker {
         let result = std::thread::scope(|scope| {
             scope.spawn(|| {
                 while !polling_done.load(Ordering::Acquire) {
-                    if external_cancel.load(Ordering::Acquire) || platform_stop.load(Ordering::Acquire) {
+                    if external_cancel.load(Ordering::Acquire)
+                        || platform_stop.load(Ordering::Acquire)
+                    {
                         transfer_stop.store(true, Ordering::Release);
                         break;
                     }
@@ -652,7 +673,10 @@ impl DownloadWorker {
                 "Platform interrupted download; safe to retry",
                 true,
             ));
-            if self.library.replace_download_snapshot_if_unchanged(&current, &next)? {
+            if self
+                .library
+                .replace_download_snapshot_if_unchanged(&current, &next)?
+            {
                 *claim = next;
                 return Ok(true);
             }
@@ -963,6 +987,7 @@ mod tests {
                 &engine,
                 &item,
                 &mut claimed,
+                &AtomicBool::new(false),
                 &AtomicBool::new(false),
                 10_000,
             )
@@ -1436,16 +1461,24 @@ mod tests {
     #[test]
     fn platform_stop_before_claim_keeps_durable_work_queued() {
         let store = LibraryStore::open_in_memory().unwrap();
-        store.save_download_snapshot(&snapshot("platform-preclaim", DownloadState::Queued)).unwrap();
+        store
+            .save_download_snapshot(&snapshot("platform-preclaim", DownloadState::Queued))
+            .unwrap();
         let root = tempfile::tempdir().unwrap();
         let worker = DownloadWorker::new(store.clone(), root.path(), DownloadPolicy::default(), 1);
         let stop = AtomicBool::new(true);
-        let report = worker.execute_ready_with_platform_stop_at(
-            &[plan("platform-preclaim", "http://127.0.0.1:1/unused".into(), 12)],
-            &AtomicBool::new(false),
-            &stop,
-            10_000,
-        ).unwrap();
+        let report = worker
+            .execute_ready_with_platform_stop_at(
+                &[plan(
+                    "platform-preclaim",
+                    "http://127.0.0.1:1/unused".into(),
+                    12,
+                )],
+                &AtomicBool::new(false),
+                &stop,
+                10_000,
+            )
+            .unwrap();
         assert!(report.claimed.is_empty());
         assert!(report.canceled.is_empty());
         let durable = store.load_download_snapshots().unwrap().remove(0);
@@ -1477,12 +1510,18 @@ mod tests {
             }
             panic!("platform stop fixture never entered Downloading");
         });
-        let report = worker.execute_ready_with_platform_stop_at(
-            &[plan("platform-transfer", format!("{}/video.mp4", server.address), data.len())],
-            &AtomicBool::new(false),
-            &stop,
-            10_000,
-        ).unwrap();
+        let report = worker
+            .execute_ready_with_platform_stop_at(
+                &[plan(
+                    "platform-transfer",
+                    format!("{}/video.mp4", server.address),
+                    data.len(),
+                )],
+                &AtomicBool::new(false),
+                &stop,
+                10_000,
+            )
+            .unwrap();
         controller.join().unwrap();
         assert_eq!(report.retry_wait, vec!["platform-transfer"]);
         assert!(report.canceled.is_empty());
