@@ -34,6 +34,14 @@ internal class StorageSettingsManager private constructor(
 
     fun cleanup(action: ManagedCleanup): Long {
         val root = if (action == ManagedCleanup.Cache) cacheRoot else filesRoot
+        // A symlinked cleanup root turns an external directory into an apparent
+        // app-private cleanup boundary. Reject it before enumerating children,
+        // including cacheRoot.listFiles(), which otherwise follows the link.
+        if (Files.isSymbolicLink(root.toPath()) ||
+            !Files.isDirectory(root.toPath(), LinkOption.NOFOLLOW_LINKS)
+        ) {
+            throw IOException("Managed cleanup root must be a real directory")
+        }
         val targets = when (action) {
             ManagedCleanup.Cache -> (cacheRoot.listFiles()
                 ?: if (cacheRoot.exists()) throw IOException("Cannot enumerate managed cache") else emptyArray()).toList()

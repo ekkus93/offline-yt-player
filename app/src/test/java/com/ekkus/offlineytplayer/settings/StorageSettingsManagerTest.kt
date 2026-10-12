@@ -84,6 +84,52 @@ class StorageSettingsManagerTest {
     }
 
     @Test
+    fun cacheCleanupRejectsSymlinkedRootWithoutDeletingExternalFiles() {
+        val sandbox = Files.createTempDirectory("storage-cache-root-link").toFile()
+        val external = Files.createTempDirectory("storage-cache-root-external").toFile()
+        val cacheLink = sandbox.resolve("cache")
+        try {
+            val files = sandbox.resolve("files").apply { mkdirs() }
+            external.resolve("preserve.bin").writeBytes(ByteArray(37))
+            Files.createSymbolicLink(cacheLink.toPath(), external.toPath())
+            val manager = StorageSettingsManager.forTest(files, cacheLink)
+
+            val error = runCatching { manager.cleanup(ManagedCleanup.Cache) }.exceptionOrNull()
+            assertTrue(error is java.io.IOException)
+            assertTrue(Files.isSymbolicLink(cacheLink.toPath()))
+            assertTrue(external.resolve("preserve.bin").isFile)
+            assertEquals(37, external.resolve("preserve.bin").length())
+        } finally {
+            Files.deleteIfExists(cacheLink.toPath())
+            sandbox.deleteRecursively()
+            external.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun incompleteCleanupRejectsSymlinkedRootWithoutDeletingExternalPartials() {
+        val sandbox = Files.createTempDirectory("storage-incomplete-root-link").toFile()
+        val external = Files.createTempDirectory("storage-incomplete-root-external").toFile()
+        val filesLink = sandbox.resolve("files")
+        try {
+            val cache = sandbox.resolve("cache").apply { mkdirs() }
+            external.resolve("preserve.partial").writeBytes(ByteArray(29))
+            Files.createSymbolicLink(filesLink.toPath(), external.toPath())
+            val manager = StorageSettingsManager.forTest(filesLink, cache)
+
+            val error = runCatching { manager.cleanup(ManagedCleanup.Incomplete) }.exceptionOrNull()
+            assertTrue(error is java.io.IOException)
+            assertTrue(Files.isSymbolicLink(filesLink.toPath()))
+            assertTrue(external.resolve("preserve.partial").isFile)
+            assertEquals(29, external.resolve("preserve.partial").length())
+        } finally {
+            Files.deleteIfExists(filesLink.toPath())
+            sandbox.deleteRecursively()
+            external.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cacheCleanupRejectsAnUnenumerableRootInsteadOfReportingSuccess() {
         val root = Files.createTempDirectory("storage-cache-enumeration").toFile()
         try {
