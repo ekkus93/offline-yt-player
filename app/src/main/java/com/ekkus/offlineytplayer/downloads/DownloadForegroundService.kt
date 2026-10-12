@@ -115,6 +115,7 @@ internal object ForegroundWorkerRelaunchPolicy {
 
 class DownloadForegroundService : Service() {
     private val workerRunning = AtomicBoolean(false)
+    private val workerOwnership = ForegroundWorkerOwnership()
     private val controlExecutor: ExecutorService = Executors.newSingleThreadExecutor { task ->
         Thread(task, "offline-yt-notification-controls").apply { isDaemon = true }
     }
@@ -136,9 +137,11 @@ class DownloadForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (workerOwnership.isStopped) return START_NOT_STICKY
         val queueItemId = intent?.getStringExtra(EXTRA_QUEUE_ITEM_ID)
         when (intent?.action) {
             ACTION_STOP -> {
+                workerOwnership.stop()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -176,6 +179,9 @@ class DownloadForegroundService : Service() {
             startId = startId,
             foregroundServiceType = fgsType,
         )
+        // A stopped dataSync service must not leave its native transfer running.
+        // Rust settles the claimed attempt as retryable without user cancellation.
+        workerOwnership.stop()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf(startId)
     }
@@ -184,6 +190,7 @@ class DownloadForegroundService : Service() {
 
     override fun onDestroy() {
         serviceDestroyed = true
+        workerOwnership.stop()
         controlExecutor.shutdown()
         connectivityObserver?.close()
         connectivityObserver = null
@@ -210,6 +217,7 @@ class DownloadForegroundService : Service() {
     }
 
     private fun ensureConnectivityObserver() {
+        if (workerOwnership.isStopped || serviceDestroyed) return
         if (connectivityObserver != null) {
             // A registered callback does not replay its current network state for a new
             // schedule/resume intent. Kick durable work using the last observed state.
@@ -232,6 +240,7 @@ class DownloadForegroundService : Service() {
 
     @Synchronized
     private fun handleConnectivityChange(connectivity: DownloadConnectivity) {
+        if (workerOwnership.isStopped || serviceDestroyed) return
         // ConnectivityManager callbacks are ordered, but each event is dispatched onto a
         // separate worker thread. Ignore a superseded event rather than letting an old
         // network-loss task pause a transfer after a newer eligible-network callback.
@@ -267,22 +276,35 @@ class DownloadForegroundService : Service() {
     }
 
     private fun launchWorkerIfEligible(queueItemId: String) {
+        if (workerOwnership.isStopped || serviceDestroyed) return
         if (lastNetworkDecision != DownloadNetworkDecision.Allow) return
         if (!workerRunning.compareAndSet(false, true)) return
 
+        val execution = DownloadWorkerExecution()
+        val stopWorker: () -> Unit = { execution.requestStop() }
+        if (!workerOwnership.tryBegin(stopWorker)) {
+            workerRunning.set(false)
+            return
+        }
         Thread {
             var claimed = false
             try {
-                claimed = DownloadWorkerExecutor.execute(this, queueItemId)
+                if (!workerOwnership.isStopped) {
+                    claimed = execution.execute(this, queueItemId)
+                }
             } finally {
+                workerOwnership.finish(stopWorker)
                 workerRunning.set(false)
-                settleWorkerAfterExecution(queueItemId, claimed)
+                if (!workerOwnership.isStopped) {
+                    settleWorkerAfterExecution(queueItemId, claimed)
+                }
             }
         }.start()
     }
 
     @Synchronized
     private fun settleWorkerAfterExecution(queueItemId: String, claimed: Boolean) {
+        if (workerOwnership.isStopped || serviceDestroyed) return
         if (activeQueueItemId != queueItemId) {
             // A newer schedule/resume command can replace the active job while the previous
             // worker is still running. Its observer-reuse kick sees workerRunning=true and

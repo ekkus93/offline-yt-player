@@ -33,11 +33,13 @@ class DownloadForegroundServiceTimeoutPolicyTest {
             .substringBefore("override fun onBind")
 
         val persistIndex = timeoutBody.indexOf("DownloadForegroundTimeoutStore.persistTimeout")
+        val stopNativeIndex = timeoutBody.indexOf("workerOwnership.stop()")
         val stopForegroundIndex = timeoutBody.indexOf("stopForeground(STOP_FOREGROUND_REMOVE)")
         val stopSelfIndex = timeoutBody.indexOf("stopSelf(startId)")
 
         assertTrue(persistIndex >= 0)
-        assertTrue(stopForegroundIndex > persistIndex)
+        assertTrue(stopNativeIndex > persistIndex)
+        assertTrue(stopForegroundIndex > stopNativeIndex)
         assertTrue(stopSelfIndex > stopForegroundIndex)
         assertTrue(timeoutBody.contains("foregroundServiceType = fgsType"))
     }
