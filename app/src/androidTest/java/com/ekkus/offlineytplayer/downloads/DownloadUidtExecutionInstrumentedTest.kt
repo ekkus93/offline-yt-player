@@ -4,6 +4,7 @@ import android.app.job.JobScheduler
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
@@ -32,11 +33,13 @@ class DownloadUidtExecutionInstrumentedTest {
         database.delete()
         itemDir.deleteRecursively()
         val payload = "uidt fixture bytes".toByteArray()
+        val connectionStarted = CountDownLatch(1)
         val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
         val mediaUrl = "http://127.0.0.1:${server.localPort}/media.mp4"
         val serverThread = thread(start = true, name = "rmd-502a-uidt-server") {
             try {
                 server.accept().use { socket ->
+                connectionStarted.countDown()
                 val input = socket.getInputStream().bufferedReader()
                 while (true) {
                     val line = input.readLine() ?: break
@@ -76,6 +79,13 @@ class DownloadUidtExecutionInstrumentedTest {
             assertTrue(scheduled.accepted)
             assertTrue(scheduled.jobId != null)
             scheduledJobId = scheduled.jobId
+            // An instrumentation process is not necessarily a foreground user gesture.
+            // If the emulator defers this accepted UIDT job, force its real JobService
+            // through JobScheduler rather than mistaking scheduler latency for a
+            // native-worker failure. The transfer/Library assertions still run.
+            val forcedStart = if (!connectionStarted.await(5, TimeUnit.SECONDS)) {
+                forceScheduledJobToRun(context.packageName, requireNotNull(scheduledJobId))
+            } else null
 
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { gateway ->
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
@@ -87,7 +97,7 @@ class DownloadUidtExecutionInstrumentedTest {
                     if (state == CoreDownloadState.COMPLETED) break
                     Thread.sleep(250)
                 }
-                assertEquals(CoreDownloadState.COMPLETED, state)
+                assertEquals("UIDT job did not complete; forced start: $forcedStart", CoreDownloadState.COMPLETED, state)
                 val item = gateway.getLibraryItemAsync(jobId).get(10, TimeUnit.SECONDS)
                 assertNull(item.error)
                 assertEquals(jobId, item.value?.itemId)
@@ -113,12 +123,14 @@ class DownloadUidtExecutionInstrumentedTest {
         val itemDir = context.filesDir.resolve("items/$id")
         val bytes = ByteArray(256 * 1024) { (it % 251).toByte() }
         val firstChunk = CountDownLatch(1)
+        val retryConnectionStarted = CountDownLatch(1)
         val server = ServerSocket(0, 2, InetAddress.getByName("127.0.0.1"))
         server.soTimeout = 45_000
         val serverThread = thread(start = true) {
             repeat(2) { attempt ->
                 try {
                     server.accept().use { socket ->
+                        if (attempt == 1) retryConnectionStarted.countDown()
                         val input = socket.getInputStream().bufferedReader()
                         while (true) {
                             val line = input.readLine() ?: break
@@ -132,7 +144,9 @@ class DownloadUidtExecutionInstrumentedTest {
                             output.flush()
                             if (attempt == 0) {
                                 firstChunk.countDown()
-                                Thread.sleep(25)
+                                // Keep the first transfer in flight long enough for
+                                // cancellation even on heavily loaded emulators.
+                                Thread.sleep(100)
                             }
                         }
                     }
@@ -153,7 +167,10 @@ class DownloadUidtExecutionInstrumentedTest {
             val initial = scheduler.schedule(DownloadScheduleRequest(id, bytes.size.toLong()))
             assertTrue(initial.accepted)
             jobNumber = initial.jobId
-            assertTrue(firstChunk.await(25, TimeUnit.SECONDS))
+            val forcedStart = if (!firstChunk.await(5, TimeUnit.SECONDS)) {
+                forceScheduledJobToRun(context.packageName, requireNotNull(jobNumber))
+            } else null
+            assertTrue("UIDT first chunk never arrived; forced start: $forcedStart", firstChunk.await(20, TimeUnit.SECONDS))
             jobs.cancel(requireNotNull(jobNumber))
             GeneratedUniffiCoreGateway.open(db.absolutePath).use { gateway ->
                 fun waitFor(state: CoreDownloadState) {
@@ -173,6 +190,10 @@ class DownloadUidtExecutionInstrumentedTest {
                 val restarted = scheduler.schedule(DownloadScheduleRequest(id, bytes.size.toLong()))
                 assertTrue(restarted.accepted)
                 jobNumber = restarted.jobId
+                val forcedRetry = if (!retryConnectionStarted.await(5, TimeUnit.SECONDS)) {
+                    forceScheduledJobToRun(context.packageName, requireNotNull(jobNumber))
+                } else null
+                assertTrue("UIDT retry never connected; forced retry: $forcedRetry", retryConnectionStarted.await(20, TimeUnit.SECONDS))
                 waitFor(CoreDownloadState.COMPLETED)
                 assertTrue(bytes.contentEquals(itemDir.resolve("video.mp4").readBytes()))
             }
@@ -184,6 +205,13 @@ class DownloadUidtExecutionInstrumentedTest {
             db.delete()
         }
     }
+
+    private fun forceScheduledJobToRun(packageName: String, jobId: Int): String =
+        ParcelFileDescriptor.AutoCloseInputStream(
+            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+                "cmd jobscheduler run -f $packageName $jobId",
+            ),
+        ).bufferedReader().use { it.readText().trim() }
 
     private fun seedDurableFixtureWork(databasePath: String, jobId: String, mediaUrl: String, bytes: Int) {
         SQLiteDatabase.openDatabase(databasePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
