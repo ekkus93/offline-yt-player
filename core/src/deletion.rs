@@ -59,6 +59,29 @@ fn remove_owned_file(
             false,
         ));
     };
+    // Canonical containment alone does not prove ownership. An alias
+    // inside the root may resolve to a different library item's directory.
+    let relative_parent = parent.strip_prefix(library_root).map_err(|_| {
+        CoreError::new(ErrorKind::InvalidInput, "asset path escapes the library root", false)
+    })?;
+    let mut current = library_root.to_path_buf();
+    for component in relative_parent.components() {
+        if let Component::Normal(name) = component {
+            current.push(name);
+            match std::fs::symlink_metadata(&current) {
+                Ok(meta) if meta.file_type().is_symlink() => {
+                    return Err(CoreError::new(
+                        ErrorKind::InvalidInput,
+                        "asset parent must not traverse a symbolic link",
+                        false,
+                    ));
+                }
+                Ok(_) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(err) => return Err(delete_io_error(err)),
+            }
+        }
+    }
     let canonical_parent = match std::fs::canonicalize(parent) {
         Ok(parent) => parent,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
