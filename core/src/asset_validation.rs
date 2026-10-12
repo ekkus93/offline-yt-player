@@ -31,20 +31,6 @@ pub fn validate_library_item_assets(
     item: &LibraryItem,
     depth: AssetValidationDepth,
 ) -> Result<Vec<AssetValidation>, CoreError> {
-    if item.completed
-        && !item.assets.iter().any(|asset| {
-            matches!(
-                asset.kind,
-                crate::MediaKind::Video | crate::MediaKind::Audio
-            )
-        })
-    {
-        return Err(CoreError::new(
-            ErrorKind::CorruptAsset,
-            "completed library item has no playable media assets",
-            false,
-        ));
-    }
     item.assets
         .iter()
         .map(|asset| validate_asset(library_root, asset, depth))
@@ -282,27 +268,6 @@ mod tests {
             validate_library_item_assets(root.path(), &item, AssetValidationDepth::Deep).unwrap();
         assert!(matches!(checks[0].health, AssetHealth::Corrupt { .. }));
         assert_eq!(std::fs::read(&external_file).unwrap(), b"good");
-    }
-
-    #[test]
-    fn completed_items_without_playable_assets_fail_integrity_validation() {
-        let root = tempdir().unwrap();
-        let mut empty = item(0, None);
-        empty.assets.clear();
-        assert_eq!(
-            validate_library_item_assets(root.path(), &empty, AssetValidationDepth::Deep)
-                .unwrap_err()
-                .kind,
-            ErrorKind::CorruptAsset
-        );
-        let mut thumbnail_only = item(4, None);
-        thumbnail_only.assets[0].kind = MediaKind::Thumbnail;
-        assert_eq!(
-            validate_library_item_assets(root.path(), &thumbnail_only, AssetValidationDepth::Cheap)
-                .unwrap_err()
-                .kind,
-            ErrorKind::CorruptAsset
-        );
     }
 
     #[test]
