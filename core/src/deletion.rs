@@ -80,10 +80,9 @@ fn owned_item_directory(item_id: &str) -> Result<PathBuf, CoreError> {
             // This namespace is reserved for URL-owned downloads. Otherwise
             // a forged non-URL item ID could impersonate a URL item's digest
             // and delete its media while staying inside the library root.
-            if item_id
-                .strip_prefix("by-job-")
-                .is_some_and(|suffix| suffix.len() == 64 && suffix.bytes().all(|b| b.is_ascii_hexdigit()))
-            {
+            if item_id.strip_prefix("by-job-").is_some_and(|suffix| {
+                suffix.len() == 64 && suffix.bytes().all(|b| b.is_ascii_hexdigit())
+            }) {
                 return Err(CoreError::new(
                     ErrorKind::InvalidInput,
                     "hashed URL download directory is reserved",
@@ -576,15 +575,13 @@ mod tests {
         let mut forged = item();
         forged.item_id = spoofed_id.to_owned();
         forged.assets.truncate(1);
-        forged.assets[0].relative_path =
-            reserved.join("video.mp4").to_string_lossy().into_owned();
+        forged.assets[0].relative_path = reserved.join("video.mp4").to_string_lossy().into_owned();
         persist(&store, &forged);
         let root = tempdir().unwrap();
         let (foreign, partial, resume) =
             write_asset_family(root.path(), &forged.assets[0].relative_path, 4);
 
-        let error = delete_library_item_owned_assets(&store, root.path(), spoofed_id)
-            .unwrap_err();
+        let error = delete_library_item_owned_assets(&store, root.path(), spoofed_id).unwrap_err();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert!(foreign.exists());
         assert!(partial.exists());
