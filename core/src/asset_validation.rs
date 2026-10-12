@@ -233,14 +233,13 @@ mod tests {
         assert_eq!(missing[0].health, AssetHealth::Missing);
         let regular_file = app.path().join("not-a-directory");
         std::fs::write(&regular_file, b"data").unwrap();
-        let invalid = validate_library_item_assets(
-            &regular_file,
-            &item,
-            AssetValidationDepth::Deep,
-        )
-        .unwrap();
+        let invalid =
+            validate_library_item_assets(&regular_file, &item, AssetValidationDepth::Deep).unwrap();
         assert!(matches!(invalid[0].health, AssetHealth::Corrupt { .. }));
-        assert_eq!(std::fs::read(external.path().join("items/item-1/video.bin")).unwrap(), b"good");
+        assert_eq!(
+            std::fs::read(external.path().join("items/item-1/video.bin")).unwrap(),
+            b"good"
+        );
     }
 
     #[cfg(unix)]
