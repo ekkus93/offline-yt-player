@@ -21,16 +21,8 @@ pub fn reconcile_startup_downloads(
 ) -> Result<StartupReconciliation, CoreError> {
     let snapshots = store.load_download_snapshots()?;
     let mut jobs_requeued = 0;
-    for mut snapshot in snapshots {
-        if requires_live_worker(snapshot.state) {
-            snapshot.state = DownloadState::Queued;
-            snapshot.retry_at_epoch_ms = None;
-            snapshot.last_error = Some(CoreError::new(
-                ErrorKind::Internal,
-                "download was interrupted by process shutdown and has been queued for recovery",
-                true,
-            ));
-            store.save_download_snapshot(&snapshot)?;
+    for snapshot in snapshots {
+        if requeue_interrupted_snapshot_if_unchanged(store, &snapshot)? {
             jobs_requeued += 1;
         }
     }
@@ -38,6 +30,26 @@ pub fn reconcile_startup_downloads(
         jobs_requeued,
         ..StartupReconciliation::default()
     })
+}
+
+/// Only transition the exact row observed at startup. Another Android runtime
+/// may have paused, canceled, completed, or reclaimed the job after the scan.
+fn requeue_interrupted_snapshot_if_unchanged(
+    store: &LibraryStore,
+    snapshot: &DurableDownloadSnapshot,
+) -> Result<bool, CoreError> {
+    if !requires_live_worker(snapshot.state) {
+        return Ok(false);
+    }
+    let mut recovered = snapshot.clone();
+    recovered.state = DownloadState::Queued;
+    recovered.retry_at_epoch_ms = None;
+    recovered.last_error = Some(CoreError::new(
+        ErrorKind::Internal,
+        "download was interrupted by process shutdown and has been queued for recovery",
+        true,
+    ));
+    store.replace_download_snapshot_if_unchanged(snapshot, &recovered)
 }
 
 /// Reconcile startup state that requires access to the managed media root.
@@ -84,22 +96,32 @@ fn reconcile_orphaned_staged_jobs(store: &LibraryStore) -> Result<usize, CoreErr
         if durable_job_ids.contains(job_id.as_str()) {
             continue;
         }
-        store.save_download_snapshot(&DurableDownloadSnapshot {
-            job_id: job_id.clone(),
-            state: DownloadState::Failed,
-            bytes_downloaded: 0,
-            total_bytes: None,
-            attempt: 0,
-            retry_at_epoch_ms: None,
-            last_error: Some(CoreError::new(
-                ErrorKind::MissingAsset,
-                "staged download metadata had no durable queue entry and needs user retry",
-                true,
-            )),
-        })?;
-        recovered += 1;
+        // The staged/queue scan is not a single SQLite snapshot. An enqueue
+        // can create this durable row after the initial scan; never overwrite it.
+        if recover_orphaned_staged_job_if_absent(store, &job_id)? {
+            recovered += 1;
+        }
     }
     Ok(recovered)
+}
+
+fn recover_orphaned_staged_job_if_absent(
+    store: &LibraryStore,
+    job_id: &str,
+) -> Result<bool, CoreError> {
+    store.insert_download_snapshot_if_absent(&DurableDownloadSnapshot {
+        job_id: job_id.to_owned(),
+        state: DownloadState::Failed,
+        bytes_downloaded: 0,
+        total_bytes: None,
+        attempt: 0,
+        retry_at_epoch_ms: None,
+        last_error: Some(CoreError::new(
+            ErrorKind::MissingAsset,
+            "staged download metadata had no durable queue entry and needs user retry",
+            true,
+        )),
+    })
 }
 
 fn reconcile_metadata_file_mismatches(
@@ -302,6 +324,62 @@ mod tests {
                 assert!(after.last_error.is_none());
             }
         }
+    }
+
+    #[test]
+    fn stale_startup_requeue_cannot_override_newer_pause_or_completion() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("startup-race.sqlite3");
+        let recovery = LibraryStore::open(&path).unwrap();
+        let controls = LibraryStore::open(&path).unwrap();
+
+        let active = snapshot("shared", DownloadState::Downloading);
+        controls.save_download_snapshot(&active).unwrap();
+        let observed = recovery.load_download_snapshots().unwrap().remove(0);
+
+        let mut paused = active.clone();
+        paused.state = DownloadState::Paused;
+        controls.save_download_snapshot(&paused).unwrap();
+        assert!(!requeue_interrupted_snapshot_if_unchanged(&recovery, &observed).unwrap());
+        assert_eq!(recovery.load_download_snapshots().unwrap(), vec![paused]);
+
+        let mut completed = active.clone();
+        completed.state = DownloadState::Completed;
+        completed.bytes_downloaded = 1024;
+        controls.save_download_snapshot(&completed).unwrap();
+        assert!(!requeue_interrupted_snapshot_if_unchanged(&recovery, &observed).unwrap());
+        assert_eq!(recovery.load_download_snapshots().unwrap(), vec![completed]);
+
+        controls.save_download_snapshot(&active).unwrap();
+        assert!(requeue_interrupted_snapshot_if_unchanged(&recovery, &active).unwrap());
+        let recovered = recovery.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(recovered.state, DownloadState::Queued);
+        assert_eq!(recovered.attempt, active.attempt);
+        assert!(recovered.last_error.unwrap().retryable);
+    }
+
+    #[test]
+    fn stale_staged_recovery_does_not_replace_concurrent_durable_enqueue() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("staged-race.sqlite3");
+        let recovery = LibraryStore::open(&path).unwrap();
+        let enqueue = LibraryStore::open(&path).unwrap();
+        let queued = snapshot("staged", DownloadState::Queued);
+        enqueue.save_download_snapshot(&queued).unwrap();
+
+        // A concurrent enqueue appeared after recovery's staged-ID scan.
+        assert!(!recover_orphaned_staged_job_if_absent(&recovery, "staged").unwrap());
+        assert_eq!(recovery.load_download_snapshots().unwrap(), vec![queued]);
+        assert!(recover_orphaned_staged_job_if_absent(&recovery, "orphan").unwrap());
+        assert!(!recover_orphaned_staged_job_if_absent(&recovery, "orphan").unwrap());
+        let recovered = recovery
+            .load_download_snapshots()
+            .unwrap()
+            .into_iter()
+            .find(|row| row.job_id == "orphan")
+            .unwrap();
+        assert_eq!(recovered.state, DownloadState::Failed);
+        assert_eq!(recovered.last_error.unwrap().kind, ErrorKind::MissingAsset);
     }
 
     #[test]
