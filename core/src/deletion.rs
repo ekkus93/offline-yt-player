@@ -18,6 +18,20 @@ pub fn delete_library_item_owned_assets(
         None => return Ok(None),
     };
 
+    // The root itself must be an owned directory. Canonicalizing a symbolic
+    // link first would redefine an external directory as our deletion boundary.
+    // Keep all file/sidecar operations and metadata untouched on invalid roots.
+    match std::fs::symlink_metadata(library_root) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "library root must be a real directory, not a symlink",
+                false,
+            ));
+        }
+        Ok(_) => {}
+        Err(error) => return Err(delete_io_error(error)),
+    }
     let canonical_root = std::fs::canonicalize(library_root).map_err(delete_io_error)?;
     for asset in &item.assets {
         validate_delete_path(&asset.relative_path)?;
@@ -308,6 +322,50 @@ mod tests {
         delete_library_item_owned_assets(&store, root.path(), "item-1").unwrap();
         assert!(!resume_path.exists());
         assert!(store.get("item-1").unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlinked_root_without_deleting_external_assets_or_metadata() {
+        use std::os::unix::fs::symlink;
+
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut item = item();
+        item.assets.truncate(1);
+        persist(&store, &item);
+
+        let outside = tempdir().unwrap();
+        let root_parent = tempdir().unwrap();
+        let (asset, partial, resume) =
+            write_asset_family(outside.path(), &item.assets[0].relative_path, 4);
+        let aliased_root = root_parent.path().join("linked-library");
+        symlink(outside.path(), &aliased_root).unwrap();
+
+        let error = delete_library_item_owned_assets(&store, &aliased_root, "item-1")
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert!(asset.is_file(), "an external completed asset was deleted");
+        assert!(partial.is_file(), "an external transfer partial was deleted");
+        assert!(resume.is_file(), "an external resume sidecar was deleted");
+        assert!(store.get("item-1").unwrap().is_some(), "metadata was deleted");
+    }
+
+    #[test]
+    fn rejects_non_directory_root_without_removing_library_metadata() {
+        let store = LibraryStore::open_in_memory().unwrap();
+        let mut item = item();
+        item.assets.truncate(1);
+        persist(&store, &item);
+
+        let root_parent = tempdir().unwrap();
+        let invalid_root = root_parent.path().join("regular-file");
+        std::fs::write(&invalid_root, b"unrelated data").unwrap();
+
+        let error = delete_library_item_owned_assets(&store, &invalid_root, "item-1")
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidInput);
+        assert_eq!(std::fs::read(&invalid_root).unwrap(), b"unrelated data");
+        assert!(store.get("item-1").unwrap().is_some(), "metadata was deleted");
     }
 
     #[cfg(unix)]
