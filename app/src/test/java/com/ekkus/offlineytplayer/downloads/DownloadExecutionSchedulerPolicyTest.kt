@@ -1,6 +1,10 @@
 package com.ekkus.offlineytplayer.downloads
 
 import java.io.File
+import android.app.job.JobParameters
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -134,6 +138,90 @@ class DownloadExecutionSchedulerPolicyTest {
         runAndSettleDownloadJob(work = { executed++ }, settle = { settlements++ })
         assertEquals(2, executed)
         assertEquals(2, settlements)
+    }
+
+    @Test
+    fun platformStopSignalsNativeOnceAndSuppressesLateJobSettlement() {
+        var stopSignals = 0
+        var settlements = 0
+        val attempt = UidtJobAttempt { stopSignals++ }
+
+        assertTrue(attempt.stop())
+        assertFalse(attempt.stop())
+        assertFalse(attempt.finishIfRunning { settlements++ })
+        attempt.markWorkerExited()
+        assertEquals(1, stopSignals)
+        assertEquals(0, settlements)
+    }
+
+    @Test
+    fun completedAttemptCannotBeStoppedOrSettledAgain() {
+        var stopSignals = 0
+        var settlements = 0
+        val attempt = UidtJobAttempt { stopSignals++ }
+
+        assertTrue(attempt.finishIfRunning { settlements++ })
+        assertFalse(attempt.finishIfRunning { settlements++ })
+        assertFalse(attempt.stop())
+        assertEquals(1, settlements)
+        assertEquals(0, stopSignals)
+    }
+
+    @Test
+    fun replacementWaitsUntilPreviousNativeWriterHasExited() {
+        val previous = UidtJobAttempt()
+        val replacement = UidtJobAttempt()
+        val entered = CountDownLatch(1)
+        val completed = CountDownLatch(1)
+        val result = AtomicReference<Boolean>()
+        val waiter = Thread {
+            entered.countDown()
+            result.set(replacement.awaitPredecessor(previous))
+            completed.countDown()
+        }
+        waiter.start()
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            assertFalse(completed.await(200, TimeUnit.MILLISECONDS))
+            previous.markWorkerExited()
+            assertTrue(completed.await(2, TimeUnit.SECONDS))
+            assertEquals(true, result.get())
+        } finally {
+            previous.markWorkerExited()
+            waiter.join(2_000)
+        }
+    }
+
+    @Test
+    fun stoppedReplacementDoesNotBeginBeforePreviousNativeWriterExits() {
+        val previous = UidtJobAttempt()
+        val replacement = UidtJobAttempt()
+        val entered = CountDownLatch(1)
+        val completed = CountDownLatch(1)
+        val result = AtomicReference<Boolean>()
+        val waiter = Thread {
+            entered.countDown()
+            result.set(replacement.awaitPredecessor(previous))
+            completed.countDown()
+        }
+        waiter.start()
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            assertFalse(completed.await(200, TimeUnit.MILLISECONDS))
+            assertTrue(replacement.stop())
+            assertTrue(completed.await(2, TimeUnit.SECONDS))
+            assertEquals(false, result.get())
+        } finally {
+            previous.markWorkerExited()
+            waiter.join(2_000)
+        }
+    }
+
+    @Test
+    fun userAndAppRequestedUidtStopsDoNotAutomaticallyReschedule() {
+        assertFalse(UidtJobStopPolicy.shouldReschedule(JobParameters.STOP_REASON_USER))
+        assertFalse(UidtJobStopPolicy.shouldReschedule(JobParameters.STOP_REASON_CANCELLED_BY_APP))
+        assertTrue(UidtJobStopPolicy.shouldReschedule(JobParameters.STOP_REASON_TIMEOUT))
     }
 
     @Test

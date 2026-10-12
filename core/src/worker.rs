@@ -83,6 +83,7 @@ impl DownloadWorker {
         )
     }
 
+    #[cfg(test)]
     fn execute_ready_with_engine_at(
         &self,
         work_items: &[DownloadWorkItem],
