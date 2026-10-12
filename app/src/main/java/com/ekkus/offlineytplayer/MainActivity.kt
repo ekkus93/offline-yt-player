@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
     private var stateRefresher: AppStateRefresher? = null
     private var activityStarted = false
     private val statePublicationGate = LifecyclePublicationGate()
+    private val downloadMetricsTracker = DownloadProgressMetricsTracker()
     private var settingsSnapshot by mutableStateOf(AppSettingsSnapshot())
 
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -131,6 +133,7 @@ class MainActivity : ComponentActivity() {
         activityStarted = false
         statePublicationGate.stop()
         stateRefresher?.stop()
+        downloadMetricsTracker.clear()
         super.onStop()
     }
 
@@ -227,6 +230,9 @@ class MainActivity : ComponentActivity() {
                         },
                         onDownloads = { result ->
                             val token = statePublicationGate.capture()
+                            // Use successive durable queue samples on a monotonic clock.
+                            // Estimates remain transient and are never fabricated in persistence.
+                            val rates = downloadMetricsTracker.observe(result.value.orEmpty(), SystemClock.elapsedRealtime())
                             if (token != null) {
                                 val titles = runCatching {
                                     checkNotNull(downloadPresentationGateway) { "Download presentation gateway is unavailable" }
@@ -235,7 +241,7 @@ class MainActivity : ComponentActivity() {
                                 runOnUiThread {
                                     if (!isDestroyed && statePublicationGate.permits(token)) {
                                         uiState.downloadsState = titles.fold(
-                                            onSuccess = { result.toDownloadsScreenState(it) },
+                                            onSuccess = { result.toDownloadsScreenState(it, rates) },
                                             onFailure = { DownloadsScreenState.Failed("Download presentation metadata is unavailable.") },
                                         )
                                     }
@@ -350,6 +356,7 @@ private fun CoreLibraryItem.libraryDetail(playback: CoreLibraryPlaybackAsset?): 
 
 internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenState(
     titlesByJobId: Map<String, String>,
+    liveMetrics: Map<String, DownloadLiveMetrics> = emptyMap(),
 ): DownloadsScreenState {
     error?.let { return DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(it.message)) }
     val snapshots = value ?: return DownloadsScreenState.Failed("Download queue data is unavailable.")
@@ -371,6 +378,8 @@ internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenStat
             percent = percent,
             size = if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes",
             error = snapshot.lastError?.message?.let(SourceMetadataPolicy::diagnostic),
+            speedLabel = formatDownloadSpeed(liveMetrics[snapshot.jobId]),
+            etaLabel = formatDownloadEta(liveMetrics[snapshot.jobId]),
         )
     })
 }
