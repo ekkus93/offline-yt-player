@@ -94,6 +94,35 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
+    fun reschedulingCollisionVictimReusesItsExistingJobAfterEarlierSlotBecomesFree() {
+        val firstId = DownloadExecutionSchedulerPolicy.stableJobId("Aa")
+        val secondId = DownloadExecutionSchedulerPolicy.availableJobId("BB", mapOf(firstId to "Aa"))!!
+        // The first collision occupant completed, leaving its slot available.
+        // A reschedule of BB must reuse BB's pending job, not create a duplicate.
+        assertEquals(secondId, DownloadExecutionSchedulerPolicy.availableJobId("BB", mapOf(secondId to "BB")))
+    }
+
+    @Test
+    fun jobIsSettledExactlyOnceWhenWorkerThrowsUnexpectedly() {
+        var settlements = 0
+        var executed = 0
+        try {
+            runAndSettleDownloadJob(
+                work = { executed++; throw IllegalStateException("unexpected worker failure") },
+                settle = { settlements++ },
+            )
+            org.junit.Assert.fail("Expected the unexpected worker failure to propagate")
+        } catch (expected: IllegalStateException) {
+            assertEquals("unexpected worker failure", expected.message)
+        }
+        assertEquals(1, executed)
+        assertEquals(1, settlements)
+        runAndSettleDownloadJob(work = { executed++ }, settle = { settlements++ })
+        assertEquals(2, executed)
+        assertEquals(2, settlements)
+    }
+
+    @Test
     fun exhaustedJobIdRangeFailsClosedInsteadOfReplacingAnotherJob() {
         val occupied = (DownloadUserInitiatedJobService.JobIdBase until
             DownloadUserInitiatedJobService.JobIdBase + DownloadUserInitiatedJobService.JobIdRange)

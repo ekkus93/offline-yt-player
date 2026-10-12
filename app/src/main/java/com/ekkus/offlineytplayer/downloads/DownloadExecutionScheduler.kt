@@ -98,11 +98,15 @@ internal object DownloadExecutionSchedulerPolicy {
         val base = DownloadUserInitiatedJobService.JobIdBase
         val range = DownloadUserInitiatedJobService.JobIdRange
         val initialOffset = stableJobId(queueItemId) - base
+        // Prefer an already scheduled transfer even if an earlier collision slot
+        // has become vacant. Otherwise the same durable item gets two jobs.
+        val existing = occupied.entries.firstOrNull { (id, itemId) ->
+            id in base until base + range && itemId == queueItemId
+        }
+        if (existing != null) return existing.key
         for (offset in 0 until range) {
             val candidate = base + (initialOffset + offset) % range
-            if (!occupied.containsKey(candidate) || occupied[candidate] == queueItemId) {
-                return candidate
-            }
+            if (!occupied.containsKey(candidate)) return candidate
         }
         return null
     }
@@ -191,6 +195,15 @@ internal class AndroidDownloadExecutionScheduler(
     }
 }
 
+/** Settle JobScheduler ownership even when unexpected worker failures escape. */
+internal fun runAndSettleDownloadJob(work: () -> Unit, settle: () -> Unit) {
+    try {
+        work()
+    } finally {
+        settle()
+    }
+}
+
 class DownloadUserInitiatedJobService : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
         ensureNotificationChannel()
@@ -208,8 +221,10 @@ class DownloadUserInitiatedJobService : JobService() {
             return false
         }
         Thread {
-            DownloadWorkerExecutor.execute(this, queueItemId)
-            jobFinished(params, false)
+            runAndSettleDownloadJob(
+                work = { DownloadWorkerExecutor.execute(this, queueItemId) },
+                settle = { jobFinished(params, false) },
+            )
         }.start()
         return true
     }
