@@ -62,7 +62,11 @@ fn remove_owned_file(
     // Canonical containment alone does not prove ownership. An alias
     // inside the root may resolve to a different library item's directory.
     let relative_parent = parent.strip_prefix(library_root).map_err(|_| {
-        CoreError::new(ErrorKind::InvalidInput, "asset path escapes the library root", false)
+        CoreError::new(
+            ErrorKind::InvalidInput,
+            "asset path escapes the library root",
+            false,
+        )
     })?;
     let mut current = library_root.to_path_buf();
     for component in relative_parent.components() {
