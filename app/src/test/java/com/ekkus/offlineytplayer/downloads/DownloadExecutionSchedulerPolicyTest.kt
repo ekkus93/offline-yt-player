@@ -225,6 +225,48 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
+    fun slowNativeStopDoesNotBlockOtherJobAttemptsOrLateSettlement() {
+        val registry = UidtJobAttemptRegistry<Any>()
+        val firstParams = Any()
+        val secondParams = Any()
+        val stopEntered = CountDownLatch(1)
+        val releaseStop = CountDownLatch(1)
+        val first = UidtJobAttempt {
+            stopEntered.countDown()
+            check(releaseStop.await(5, TimeUnit.SECONDS))
+        }
+        var secondStops = 0
+        val second = UidtJobAttempt { secondStops++ }
+        registry.register(7301, firstParams, first)
+        registry.register(7302, secondParams, second)
+        val firstStopper = Thread { registry.stop(firstParams) }
+        val secondDone = CountDownLatch(1)
+        val secondStopper = Thread {
+            try {
+                assertTrue(registry.stop(secondParams))
+            } finally {
+                secondDone.countDown()
+            }
+        }
+        firstStopper.start()
+        try {
+            assertTrue(stopEntered.await(2, TimeUnit.SECONDS))
+            // Both the attempt and registry must publish stopped state before
+            // entering a slow native callback. No late jobFinished is allowed.
+            assertFalse(first.finishIfRunning { error("stale jobFinished") })
+            secondStopper.start()
+            assertTrue("second UIDT stop blocked on first native stop", secondDone.await(2, TimeUnit.SECONDS))
+            assertEquals(1, secondStops)
+        } finally {
+            releaseStop.countDown()
+            firstStopper.join(2_000)
+            secondStopper.join(2_000)
+            registry.unregister(7301, firstParams, first)
+            registry.unregister(7302, secondParams, second)
+        }
+    }
+
+    @Test
     fun exhaustedJobIdRangeFailsClosedInsteadOfReplacingAnotherJob() {
         val occupied = (DownloadUserInitiatedJobService.JobIdBase until
             DownloadUserInitiatedJobService.JobIdBase + DownloadUserInitiatedJobService.JobIdRange)

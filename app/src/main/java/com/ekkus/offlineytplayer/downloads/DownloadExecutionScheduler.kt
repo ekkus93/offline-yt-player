@@ -230,18 +230,23 @@ internal class UidtJobAttempt(private val stopNative: () -> Unit = {}) {
 
     fun markWorkerExited() = workerExited.countDown()
 
-    @Synchronized
     fun stop(): Boolean {
-        if (state != State.Running) return false
-        state = State.Stopped
+        synchronized(this) {
+            if (state != State.Running) return false
+            state = State.Stopped
+        }
+        // The platform callback must not hold attempt ownership while
+        // signaling a synchronous native worker. A racing completion observes
+        // Stopped immediately, even if the native stop call is delayed.
         stopNative()
         return true
     }
 
-    @Synchronized
     fun finishIfRunning(settle: () -> Unit): Boolean {
-        if (state != State.Running) return false
-        state = State.Finished
+        synchronized(this) {
+            if (state != State.Running) return false
+            state = State.Finished
+        }
         settle()
         return true
     }
@@ -261,8 +266,12 @@ internal class UidtJobAttemptRegistry<Params : Any> {
         return predecessor
     }
 
-    @Synchronized
-    fun stop(params: Params): Boolean = byParameters[params]?.stop() ?: false
+    fun stop(params: Params): Boolean {
+        val attempt = synchronized(this) { byParameters[params] } ?: return false
+        // Do not hold the registry monitor across a potentially blocking
+        // UniFFI stop signal; other jobs must still be able to stop/unregister.
+        return attempt.stop()
+    }
 
     @Synchronized
     fun unregister(jobId: Int, params: Params, attempt: UidtJobAttempt) {
