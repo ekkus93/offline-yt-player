@@ -876,10 +876,19 @@ mod tests {
         let store = LibraryStore::open_in_memory().unwrap();
         let mut empty = item(true);
         empty.assets.clear();
-        assert_eq!(store.promote_completed("job-1", &empty).unwrap_err().kind, ErrorKind::IntegrityFailure);
+        assert_eq!(
+            store.promote_completed("job-1", &empty).unwrap_err().kind,
+            ErrorKind::IntegrityFailure
+        );
         let mut thumbnails = item(true);
         thumbnails.assets[0].kind = MediaKind::Thumbnail;
-        assert_eq!(store.promote_completed("job-1", &thumbnails).unwrap_err().kind, ErrorKind::IntegrityFailure);
+        assert_eq!(
+            store
+                .promote_completed("job-1", &thumbnails)
+                .unwrap_err()
+                .kind,
+            ErrorKind::IntegrityFailure
+        );
         assert!(store.list(None).unwrap().is_empty());
     }
 
