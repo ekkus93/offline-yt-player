@@ -89,13 +89,11 @@ fn platform_stop_preserves_concurrent_user_pause_and_cancel() {
                 if current.state == DownloadState::Downloading {
                     let mut updated = current.clone();
                     updated.state = requested_state;
-                    if controller_store
-                        .replace_download_snapshot_if_unchanged(&current, &updated)
-                        .unwrap()
-                    {
-                        controller_stop.store(true, Ordering::Release);
-                        return;
-                    }
+                    // The public durable control path updates the persisted
+                    // user state; the native worker must not overwrite it.
+                    controller_store.save_download_snapshot(&updated).unwrap();
+                    controller_stop.store(true, Ordering::Release);
+                    return;
                 }
                 thread::sleep(Duration::from_millis(5));
             }
