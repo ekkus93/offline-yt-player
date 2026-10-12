@@ -252,31 +252,61 @@ internal class UidtJobAttempt(private val stopNative: () -> Unit = {}) {
     }
 }
 
-/** Track platform callbacks by their exact JobParameters identity, not only job ID.
- * A late stop for a previous attempt must never stop a newer replacement.
+/**
+ * Android's JobService callbacks can carry separately unparceled JobParameters
+ * objects for the same scheduled job. Reference identity alone therefore cannot
+ * locate a running native worker on onStopJob. Match the durable queue identity
+ * and framework job ID, but keep registrations ordered across reschedules so
+ * an old stop is not redirected to a newer writer waiting for its predecessor.
  */
 internal class UidtJobAttemptRegistry<Params : Any> {
-    private val latestByJobId = mutableMapOf<Int, UidtJobAttempt>()
-    private val byParameters = IdentityHashMap<Params, UidtJobAttempt>()
+    private class Registration<Params : Any>(
+        val params: Params,
+        val queueItemId: String?,
+        val attempt: UidtJobAttempt,
+    )
+
+    private val byJobId = mutableMapOf<Int, MutableList<Registration<Params>>>()
+    private val byParameters = IdentityHashMap<Params, Registration<Params>>()
 
     @Synchronized
-    fun register(jobId: Int, params: Params, attempt: UidtJobAttempt): UidtJobAttempt? {
-        val predecessor = latestByJobId.put(jobId, attempt)
-        byParameters[params] = attempt
+    fun register(
+        jobId: Int,
+        params: Params,
+        attempt: UidtJobAttempt,
+        queueItemId: String? = null,
+    ): UidtJobAttempt? {
+        val registrations = byJobId.getOrPut(jobId) { mutableListOf() }
+        val predecessor = registrations.lastOrNull()?.attempt
+        val registration = Registration(params, queueItemId, attempt)
+        registrations.add(registration)
+        byParameters[params] = registration
         return predecessor
     }
 
-    fun stop(params: Params): Boolean {
-        val attempt = synchronized(this) { byParameters[params] } ?: return false
-        // Do not hold the registry monitor across a potentially blocking
-        // UniFFI stop signal; other jobs must still be able to stop/unregister.
+    fun stop(params: Params, jobId: Int? = null, queueItemId: String? = null): Boolean {
+        val attempt = synchronized(this) {
+            byParameters[params]?.attempt ?: if (!queueItemId.isNullOrBlank()) {
+                // A distinct framework JobParameters object must still stop
+                // its original worker. The oldest retained matching attempt
+                // wins over a replacement for the same durable queue item.
+                jobId?.let { byJobId[it] }
+                    ?.firstOrNull { it.queueItemId == queueItemId }
+                    ?.attempt
+            } else null
+        } ?: return false
+        // Do not hold the registry lock across a native stop signal.
         return attempt.stop()
     }
 
     @Synchronized
     fun unregister(jobId: Int, params: Params, attempt: UidtJobAttempt) {
-        if (byParameters[params] === attempt) byParameters.remove(params)
-        if (latestByJobId[jobId] === attempt) latestByJobId.remove(jobId)
+        val registration = byParameters[params]
+        if (registration?.attempt !== attempt) return
+        byParameters.remove(params)
+        val registrations = byJobId[jobId] ?: return
+        registrations.remove(registration)
+        if (registrations.isEmpty()) byJobId.remove(jobId)
     }
 }
 
@@ -303,7 +333,7 @@ class DownloadUserInitiatedJobService : JobService() {
         // JobScheduler may reschedule while a stopped UniFFI call is unwinding.
         // Chain attempts rather than discarding the replacement or overlapping
         // writers against the same durable queue and partial asset.
-        val predecessor = activeAttempts.register(params.jobId, params, attempt)
+        val predecessor = activeAttempts.register(params.jobId, params, attempt, queueItemId)
         try {
             ensureNotificationChannel()
             if (Build.VERSION.SDK_INT >= DownloadExecutionSchedulerPolicy.UserInitiatedDataTransferMinSdk) {
@@ -339,7 +369,7 @@ class DownloadUserInitiatedJobService : JobService() {
     }
 
     override fun onStopJob(params: JobParameters): Boolean {
-        activeAttempts.stop(params)
+        activeAttempts.stop(params, params.jobId, params.extras.getString(ExtraQueueItemId))
         // User-stopped UIDT jobs must not be automatically rescheduled.
         // Native cooperative stop and retryable durable settlement are still
         // required before this platform-stop path is fully qualified.

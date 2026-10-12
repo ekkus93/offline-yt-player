@@ -266,6 +266,54 @@ class DownloadExecutionSchedulerPolicyTest {
         }
     }
 
+
+    @Test
+    fun separatelyUnparceledStopParametersStillStopTheOriginalNativeWriter() {
+        val registry = UidtJobAttemptRegistry<Any>()
+        val startParams = Any()
+        val stoppedParams = Any() // Android may unmarshal a distinct object.
+        var stops = 0
+        var settled = 0
+        val attempt = UidtJobAttempt { stops++ }
+        registry.register(7301, startParams, attempt, "durable-job")
+
+        assertFalse(registry.stop(stoppedParams, 7301, "another-job"))
+        assertFalse(registry.stop(stoppedParams, 7302, "durable-job"))
+        assertFalse(registry.stop(stoppedParams, 7301, null))
+        assertTrue(registry.stop(stoppedParams, 7301, "durable-job"))
+        assertFalse(registry.stop(stoppedParams, 7301, "durable-job"))
+        assertFalse(attempt.finishIfRunning { settled++ })
+        assertEquals(1, stops)
+        assertEquals(0, settled)
+        registry.unregister(7301, startParams, attempt)
+    }
+
+    @Test
+    fun parcelEquivalentStaleStopNeverTargetsRegisteredReplacement() {
+        val registry = UidtJobAttemptRegistry<Any>()
+        val originalParams = Any()
+        val replacementParams = Any()
+        val recreatedOldStop = Any()
+        var oldStops = 0
+        var replacementStops = 0
+        val old = UidtJobAttempt { oldStops++ }
+        val replacement = UidtJobAttempt { replacementStops++ }
+
+        registry.register(7301, originalParams, old, "same-durable-job")
+        assertEquals(
+            old,
+            registry.register(7301, replacementParams, replacement, "same-durable-job"),
+        )
+        assertTrue(registry.stop(recreatedOldStop, 7301, "same-durable-job"))
+        assertFalse(registry.stop(recreatedOldStop, 7301, "same-durable-job"))
+        assertEquals(1, oldStops)
+        assertEquals(0, replacementStops)
+        registry.unregister(7301, originalParams, old)
+        assertTrue(registry.stop(Any(), 7301, "same-durable-job"))
+        assertEquals(1, replacementStops)
+        registry.unregister(7301, replacementParams, replacement)
+    }
+
     @Test
     fun exhaustedJobIdRangeFailsClosedInsteadOfReplacingAnotherJob() {
         val occupied = (DownloadUserInitiatedJobService.JobIdBase until
