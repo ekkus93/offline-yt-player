@@ -5,7 +5,7 @@ use crate::{
 use sha2::{Digest, Sha256};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FfiDownloadWorkerResult {
@@ -34,6 +34,7 @@ pub struct FfiDownloadPresentationResult {
 pub struct FfiDownloadWorkerService {
     database_path: PathBuf,
     library_root: PathBuf,
+    platform_stop: AtomicBool,
 }
 
 #[uniffi::export]
@@ -58,7 +59,13 @@ impl FfiDownloadWorkerService {
         Ok(Arc::new(Self {
             database_path,
             library_root,
+            platform_stop: AtomicBool::new(false),
         }))
+    }
+
+    /// Called by Android JobService.onStopJob; does not block on native I/O.
+    pub fn request_platform_stop(&self) {
+        self.platform_stop.store(true, Ordering::Release);
     }
 
     pub fn execute_job(
@@ -139,13 +146,14 @@ impl FfiDownloadWorkerService {
             usize::try_from(max_concurrent_downloads).unwrap_or(usize::MAX),
         );
         let cancel = AtomicBool::new(false);
-        let report = worker.execute_ready_at(
+        let report = worker.execute_ready_with_platform_stop_at(
             &[DownloadWorkItem {
                 job_id: work.job_id.clone(),
                 plan: work.plan,
                 created_at_epoch_ms: work.created_at_epoch_ms,
             }],
             &cancel,
+            &self.platform_stop,
             now_epoch_ms,
         )?;
         let completed = report.completed.iter().any(|id| id == job_id);

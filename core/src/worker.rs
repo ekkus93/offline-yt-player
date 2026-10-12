@@ -57,11 +57,27 @@ impl DownloadWorker {
         cancel: &AtomicBool,
         now_epoch_ms: u64,
     ) -> Result<DownloadWorkerReport, CoreError> {
-        // Build the fallible runtime before claiming durable jobs. Otherwise a
-        // client initialization failure leaves jobs stuck in Resolving.
-        self.execute_ready_with_engine_at(
+        self.execute_ready_with_platform_stop_at(
             work_items,
             cancel,
+            &AtomicBool::new(false),
+            now_epoch_ms,
+        )
+    }
+
+    /// A platform stop is not a user cancellation. Preserve the durable work
+    /// and settle the original attempt as retryable, never as Canceled.
+    pub fn execute_ready_with_platform_stop_at(
+        &self,
+        work_items: &[DownloadWorkItem],
+        cancel: &AtomicBool,
+        platform_stop: &AtomicBool,
+        now_epoch_ms: u64,
+    ) -> Result<DownloadWorkerReport, CoreError> {
+        self.execute_ready_with_engine_and_platform_stop_at(
+            work_items,
+            cancel,
+            platform_stop,
             now_epoch_ms,
             DownloadEngine::new(&self.library_root, self.policy.clone()),
         )
@@ -74,19 +90,45 @@ impl DownloadWorker {
         now_epoch_ms: u64,
         engine: Result<DownloadEngine, CoreError>,
     ) -> Result<DownloadWorkerReport, CoreError> {
+        self.execute_ready_with_engine_and_platform_stop_at(
+            work_items,
+            cancel,
+            &AtomicBool::new(false),
+            now_epoch_ms,
+            engine,
+        )
+    }
+
+    fn execute_ready_with_engine_and_platform_stop_at(
+        &self,
+        work_items: &[DownloadWorkItem],
+        cancel: &AtomicBool,
+        platform_stop: &AtomicBool,
+        now_epoch_ms: u64,
+        engine: Result<DownloadEngine, CoreError>,
+    ) -> Result<DownloadWorkerReport, CoreError> {
         let engine = engine?;
+        if platform_stop.load(Ordering::Acquire) {
+            return Ok(DownloadWorkerReport::default());
+        }
         let mut report = DownloadWorkerReport::default();
         let claimed = self.claim_eligible(work_items, now_epoch_ms)?;
 
         for (mut snapshot, item) in claimed {
             report.claimed.push(snapshot.job_id.clone());
+            if platform_stop.load(Ordering::Acquire) {
+                if self.finish_platform_stopped(&mut snapshot, now_epoch_ms)? {
+                    report.retry_wait.push(snapshot.job_id.clone());
+                }
+                continue;
+            }
             if cancel.load(Ordering::Relaxed) {
                 if self.finish_canceled(&mut snapshot)? {
                     report.canceled.push(snapshot.job_id.clone());
                 }
                 continue;
             }
-            match self.execute_one(&engine, item, &mut snapshot, cancel, now_epoch_ms) {
+            match self.execute_one(&engine, item, &mut snapshot, cancel, platform_stop, now_epoch_ms) {
                 Ok(progress_events) => {
                     report.progress_events.extend(progress_events);
                     report.completed.push(snapshot.job_id.clone());
@@ -99,6 +141,11 @@ impl DownloadWorker {
                         Some(DurableStopReason::Cancel) => {
                             report.canceled.push(snapshot.job_id.clone())
                         }
+                        None if platform_stop.load(Ordering::Acquire) => {
+                            if self.finish_platform_stopped(&mut snapshot, now_epoch_ms)? {
+                                report.retry_wait.push(snapshot.job_id.clone());
+                            }
+                        }
                         None => {
                             if self.finish_canceled(&mut snapshot)? {
                                 report.canceled.push(snapshot.job_id.clone());
@@ -107,6 +154,12 @@ impl DownloadWorker {
                     }
                 }
                 Err(error) => {
+                    if platform_stop.load(Ordering::Acquire) {
+                        if self.finish_platform_stopped(&mut snapshot, now_epoch_ms)? {
+                            report.retry_wait.push(snapshot.job_id.clone());
+                        }
+                        continue;
+                    }
                     let retryable = error.retryable && snapshot.attempt < self.policy.max_attempts;
                     if self.finish_failed_or_retry(&mut snapshot, error, retryable, now_epoch_ms)? {
                         if retryable {
@@ -216,6 +269,7 @@ impl DownloadWorker {
         item: &DownloadWorkItem,
         snapshot: &mut DurableDownloadSnapshot,
         cancel: &AtomicBool,
+        platform_stop: &AtomicBool,
         now_epoch_ms: u64,
     ) -> Result<Vec<CoreEvent>, CoreError> {
         if !item.plan.assets.iter().any(|asset| {
@@ -279,6 +333,9 @@ impl DownloadWorker {
                 ));
             }
         }
+        if platform_stop.load(Ordering::Acquire) {
+            return Err(CoreError::new(ErrorKind::Canceled, "platform stopped download", false));
+        }
         let prior_claim = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Downloading)?;
         snapshot.total_bytes = total_expected_bytes(&item.plan);
@@ -311,10 +368,10 @@ impl DownloadWorker {
         );
 
         for plan_asset in &item.plan.assets {
-            if cancel.load(Ordering::Relaxed) {
+            if cancel.load(Ordering::Relaxed) || platform_stop.load(Ordering::Acquire) {
                 return Err(CoreError::new(
                     ErrorKind::Canceled,
-                    "Download canceled",
+                    "Download execution stopped",
                     false,
                 ));
             }
@@ -331,6 +388,7 @@ impl DownloadWorker {
                 &item.job_id,
                 &request,
                 cancel,
+                platform_stop,
                 |written| {
                     snapshot.bytes_downloaded = bytes_before_asset.saturating_add(written);
                     let elapsed_ms =
@@ -405,6 +463,9 @@ impl DownloadWorker {
             assets.push(local);
         }
 
+        if platform_stop.load(Ordering::Acquire) {
+            return Err(CoreError::new(ErrorKind::Canceled, "platform stopped before verification", false));
+        }
         let previous_downloading = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Verifying)?;
         if !self
@@ -428,6 +489,9 @@ impl DownloadWorker {
             playback_position_ms: 0,
             completed: true,
         };
+        if platform_stop.load(Ordering::Acquire) {
+            return Err(CoreError::new(ErrorKind::Canceled, "platform stopped before completion", false));
+        }
         let previous_verifying = snapshot.clone();
         transition_snapshot(snapshot, DownloadState::Completed)?;
         snapshot.bytes_downloaded = snapshot.total_bytes.unwrap_or(snapshot.bytes_downloaded);
@@ -454,6 +518,7 @@ impl DownloadWorker {
         job_id: &str,
         request: &TransferRequest,
         external_cancel: &AtomicBool,
+        platform_stop: &AtomicBool,
         on_progress: impl FnMut(u64) -> Result<(), CoreError>,
     ) -> Result<crate::TransferResult, CoreError> {
         let transfer_stop = AtomicBool::new(false);
@@ -463,7 +528,7 @@ impl DownloadWorker {
         let result = std::thread::scope(|scope| {
             scope.spawn(|| {
                 while !polling_done.load(Ordering::Acquire) {
-                    if external_cancel.load(Ordering::Acquire) {
+                    if external_cancel.load(Ordering::Acquire) || platform_stop.load(Ordering::Acquire) {
                         transfer_stop.store(true, Ordering::Release);
                         break;
                     }
@@ -562,6 +627,36 @@ impl DownloadWorker {
             }
         }
         // Contention alone never constitutes a successful outcome.
+        Ok(false)
+    }
+
+    fn finish_platform_stopped(
+        &self,
+        claim: &mut DurableDownloadSnapshot,
+        now_epoch_ms: u64,
+    ) -> Result<bool, CoreError> {
+        for _ in 0..16 {
+            let Some(current) = self.library.load_download_snapshots()?
+                .into_iter().find(|row| row.job_id == claim.job_id) else {
+                return Ok(false);
+            };
+            if current.attempt != claim.attempt ||
+                !matches!(current.state, DownloadState::Resolving | DownloadState::Downloading | DownloadState::Verifying) {
+                return Ok(false);
+            }
+            let mut next = current.clone();
+            transition_snapshot(&mut next, DownloadState::RetryWait)?;
+            next.retry_at_epoch_ms = Some(now_epoch_ms);
+            next.last_error = Some(CoreError::new(
+                ErrorKind::NetworkUnavailable,
+                "Platform interrupted download; safe to retry",
+                true,
+            ));
+            if self.library.replace_download_snapshot_if_unchanged(&current, &next)? {
+                *claim = next;
+                return Ok(true);
+            }
+        }
         Ok(false)
     }
 

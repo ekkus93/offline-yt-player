@@ -209,7 +209,7 @@ internal fun runAndSettleDownloadJob(work: () -> Unit, settle: () -> Unit) {
  * framework can revoke an attempt before its worker returns; a late worker
  * must never call jobFinished on already-stopped parameters.
  */
-internal class UidtJobAttempt {
+internal class UidtJobAttempt(private val stopNative: () -> Unit = {}) {
     private enum class State { Running, Stopped, Finished }
     private var state = State.Running
 
@@ -217,6 +217,7 @@ internal class UidtJobAttempt {
     fun stop(): Boolean {
         if (state != State.Running) return false
         state = State.Stopped
+        stopNative()
         return true
     }
 
@@ -247,7 +248,8 @@ class DownloadUserInitiatedJobService : JobService() {
             // Calling jobFinished as well would settle the same job twice.
             return false
         }
-        val attempt = UidtJobAttempt()
+        val execution = DownloadWorkerExecution()
+        val attempt = UidtJobAttempt { execution.requestStop() }
         synchronized(activeAttempts) {
             // A prior stopped attempt may still be inside synchronous UniFFI
             // transfer. Do not start a second writer on the same queue item.
@@ -267,7 +269,7 @@ class DownloadUserInitiatedJobService : JobService() {
             Thread {
                 try {
                     runAndSettleDownloadJob(
-                        work = { DownloadWorkerExecutor.execute(this, queueItemId) },
+                        work = { execution.execute(this, queueItemId) },
                         settle = { attempt.finishIfRunning { jobFinished(params, false) } },
                     )
                 } finally {
