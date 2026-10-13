@@ -96,6 +96,8 @@ class SourceAnalysisUseCase(
             normalizedKind.contains("SOURCE_CHANGED") || normalizedKind.contains("SOURCECHANGE") ||
                 normalizedKind.contains("PARSER") ->
                 SourceAnalysisState.SourceChanged(error.copy(message = "Source metadata changed or could not be parsed. Analyze again."))
+            normalizedKind == "SOURCE_ANALYSIS_UNAVAILABLE" ->
+                SourceAnalysisState.Failed(error.copy(message = "Source analysis is unavailable."))
             else ->
                 SourceAnalysisState.Failed(error.copy(message = "Source analysis failed. Check the video and try again."))
         }
