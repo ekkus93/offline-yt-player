@@ -1,0 +1,15 @@
+# RMD-1802 — Dead metadata-presentation policy and circular host-test removal (2026-10-13)
+
+## Independent production-path finding
+
+The production Kotlin `app/src/main/java/com/ekkus/offlineytplayer/ui/MetadataPresentation.kt` defined `MetadataPresentationPolicy.compact`, `MetadataPresentationPolicy.details`, `CompactMetadata`, and `MetadataDetailRow`. Its three host-JVM tests in `MetadataPresentationPolicyTest.kt` invoked those helpers and asserted declaration constants for title line counts and primary metadata field counts. An independent review of `ui/AppShell.kt`, `ui/LibraryDownloads.kt`, `ui/PlayerScreen.kt`, `ui/PlaybackScreen.kt`, `MainActivity.kt`, relevant source/core gateways, downloads, playback, and remaining Kotlin production UI policies found no production call to `MetadataPresentationPolicy`. Accordingly these self-contained tests could pass even if the actual UI presented unsafe or unbounded metadata. The unused policy's raw `source.trim().take(...)` and map-detail projection also lacked the production signed-URL/header sanitizer, but did not provide a reachable production disclosure path.
+
+## Correction
+
+Delete the unused `MetadataPresentation.kt` source and corresponding `MetadataPresentationPolicyTest.kt`. Do not replace the dead declarative tests with more assertions about constants. The production paths actually render via `SourceMetadataPolicy`, `AddWorkflowPolicy.displayLabel`, `LibraryScreen`, `DownloadsScreen`, `LibraryDetailsPanel`, `DownloadSetupPanel` and the Media3 playback screen; those remain unchanged by this cleanup.
+
+Production-path behavioral evidence remains `ProductionComposeBehaviorTest` (library rows/details/rename/remove, Add→Analyze→Setup, Downloads controls and redaction), `ProductionComposeLayoutAccessibilityTest`, `ProductionComposeGoldenTest` pinned rasters, `Rmd1500AppPipelineFixtureTest` and Android runtime fixture/real-network E2E, plus host-JVM source/diagnostic mapping regressions. This change avoids citing a dead policy's circular tests as evidence of a real UI capability. It is **not** proof that the entire repo's independent policy audit is complete.
+
+## Qualification discipline
+
+The preceding implementation head `072b6d7443ee6c6ff4ac805b99184ae4bb1624ac` passed all eight standard exact-head workflows, including Android smoke run `38459518608` attempt 2 (attempt 1 failed before emulator start from a corrupt Android SDK emulator archive), CI `38459518573`, FGS/UIDT `38459518734`, supply chain `38459519027`, CI evidence `38459518720`, deterministic E2E `38459518739`, Android cold start `38459518966`, and real-network E2E `38459518541`. Those results do **not** qualify the later deletion or this audit update; require new exact-head CI. Keep RMD-1802 independent-review, RMD-1803 final candidate freeze, RMD-1804 post-merge checks, RMD-1805 and all global boxes unchecked until their complete independent acceptance is supported. The human YouTube/service-policy/legal gate remains unapproved and separate.
