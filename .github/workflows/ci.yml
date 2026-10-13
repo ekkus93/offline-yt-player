@@ -28,6 +28,8 @@ jobs:
         run: python3 -m unittest tests/test_check_remediation_closeout.py
       - name: Instrumentation execution guard tests
         run: python3 -m unittest tests/test_assert_android_smoke_execution.py
+      - name: Required Android smoke driver contract tests
+        run: python3 -m unittest tests/test_run_required_android_smoke.py
       - name: Exact-head Compose golden preflight tests
         run: python3 -m unittest tests/test_register_download_setup_golden_variant.py
       - name: Android exact-SHA workflow concurrency tests
