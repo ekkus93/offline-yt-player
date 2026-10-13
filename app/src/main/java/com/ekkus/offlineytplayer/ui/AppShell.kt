@@ -409,11 +409,11 @@ private fun ColumnScope.DownloadSetupPreview(
             verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
         ) {
             Text("Download setup")
-            Text(setup.title)
+            Text(SourceMetadataPolicy.title(SourceMetadataPolicy.diagnostic(setup.title)))
             val sourceIdentity = listOfNotNull(setup.sourceProvider, setup.sourceMediaId)
                 .takeIf { it.isNotEmpty() }
                 ?.joinToString(" / ")
-            Text("Source: ${sourceIdentity ?: setup.sourceUrl}")
+            Text("Source: ${SourceMetadataPolicy.diagnostic(sourceIdentity ?: setup.sourceUrl)}")
             Text("Canonical URL: ${SourceMetadataPolicy.diagnostic(setup.sourceUrl)}")
             setup.thumbnailUrl?.let { SetupThumbnailPreview(it) }
             Text("Quality options: ${AddWorkflowPolicy.optionSummary(setup.qualityOptions, setup.qualityLabel)}")
