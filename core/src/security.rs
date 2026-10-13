@@ -36,14 +36,36 @@ pub fn validate_http_url(input: &str) -> Result<Url, CoreError> {
 
 #[must_use]
 pub fn sanitize_title(input: &str) -> String {
-    let collapsed = input
-        .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    collapsed.chars().take(MAX_TITLE_CHARS).collect()
+    // Provider titles are untrusted. Collapse whitespace as we consume input
+    // instead of materializing the entire title and a vector of all its words.
+    let mut collapsed = String::new();
+    let mut chars_written = 0;
+    let mut pending_space = false;
+    for character in input.chars() {
+        let character = if character.is_control() {
+            ' '
+        } else {
+            character
+        };
+        if character.is_whitespace() {
+            pending_space = chars_written > 0;
+            continue;
+        }
+        if pending_space {
+            collapsed.push(' ');
+            chars_written += 1;
+            pending_space = false;
+            if chars_written == MAX_TITLE_CHARS {
+                break;
+            }
+        }
+        collapsed.push(character);
+        chars_written += 1;
+        if chars_written == MAX_TITLE_CHARS {
+            break;
+        }
+    }
+    collapsed
 }
 
 #[must_use]
@@ -253,6 +275,24 @@ mod tests {
         let title = sanitize_title(&dirty);
         assert!(!title.contains('\n'));
         assert!(title.chars().count() <= MAX_TITLE_CHARS);
+    }
+
+    #[test]
+    fn title_sanitization_streams_untrusted_long_input_with_original_spacing() {
+        let oversized = format!("  alpha\t\nbeta  {}  ", "z".repeat(1_000_000));
+        let sanitized = sanitize_title(&oversized);
+        assert_eq!(sanitized, format!("alpha beta {}", "z".repeat(169)));
+        assert_eq!(sanitized.chars().count(), MAX_TITLE_CHARS);
+
+        // A space at the character limit is retained, as in the original
+        // whitespace-collapse-then-truncate behavior.
+        let boundary = format!("{}\nlast", "x".repeat(MAX_TITLE_CHARS - 1));
+        assert_eq!(
+            sanitize_title(&boundary),
+            format!("{} ", "x".repeat(MAX_TITLE_CHARS - 1))
+        );
+        assert_eq!(sanitize_title(" \t\n "), "");
+        assert_eq!(sanitize_title("  a \t b\n c  "), "a b c");
     }
 
     #[test]
