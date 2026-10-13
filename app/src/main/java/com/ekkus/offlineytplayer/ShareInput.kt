@@ -7,8 +7,8 @@ internal object ShareInput {
 
     fun parse(action: String?, mimeType: String?, sharedText: String?): String? {
         if (action != SendAction || mimeType != PlainText) return null
-        val text = sharedText?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        if (text.length > MaxSharedTextLength) return null
+        if (sharedText == null || sharedText.length > MaxSharedTextLength) return null
+        val text = sharedText.trim().takeIf { it.isNotEmpty() } ?: return null
         return SupportedUrlPolicy.singleSupportedUrlFromText(text)
     }
 }
