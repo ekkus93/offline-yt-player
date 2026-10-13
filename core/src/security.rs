@@ -137,14 +137,6 @@ pub fn redact_sensitive(input: &str) -> String {
         // RFC-style folded header values and multiline diagnostics may put
         // credentials on indented lines after the header name. Do not echo
         // those lines merely because they contain no repeated field name.
-        if redacting_folded_header && (line.starts_with(' ') || line.starts_with('\t')) {
-            if !output.is_empty() {
-                output.push('\n');
-            }
-            output.push_str("[REDACTED_HEADER_CONTINUATION]");
-            continue;
-        }
-        redacting_folded_header = false;
         // Diagnostic renderers may indent header lines. Never treat indentation as a
         // reason to leave a credential-bearing header unredacted.
         // Loggers commonly prefix header text with a timestamp, level, or
@@ -155,6 +147,19 @@ pub fn redact_sensitive(input: &str) -> String {
             .iter()
             .filter_map(|name| lower.find(name.as_str()).map(|offset| (offset, name.len())))
             .min_by_key(|(offset, _)| *offset);
+        // A new indented header is a separate field, not continuation data.
+        // Recognize it first so both fields retain their redacted names.
+        if redacting_folded_header
+            && header.is_none()
+            && (line.starts_with(' ') || line.starts_with('\t'))
+        {
+            if !output.is_empty() {
+                output.push('\n');
+            }
+            output.push_str("[REDACTED_HEADER_CONTINUATION]");
+            continue;
+        }
+        redacting_folded_header = false;
         let redacted = if let Some((offset, length)) = header {
             redacting_folded_header = true;
             // The prefix may itself contain a signed URL. Sanitize it before
