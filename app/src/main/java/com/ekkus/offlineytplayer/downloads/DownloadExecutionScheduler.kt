@@ -212,6 +212,25 @@ internal fun runAndSettleDownloadJob(work: () -> Unit, settle: () -> Unit) {
 }
 
 /**
+ * The JobService's native worker runs on a plain Thread. An exception escaping
+ * that thread would invoke Android's uncaught-exception handler and terminate
+ * the app, even though runAndSettleDownloadJob already released job ownership.
+ * Report a bounded failure without emitting potentially sensitive diagnostics.
+ * Durable startup reconciliation handles an interrupted queue snapshot.
+ */
+internal fun runAndSettleDownloadJobSafely(
+    work: () -> Unit,
+    settle: () -> Unit,
+    onUnexpectedFailure: () -> Unit,
+): Boolean = try {
+    runAndSettleDownloadJob(work, settle)
+    true
+} catch (_: Exception) {
+    onUnexpectedFailure()
+    false
+}
+
+/**
  * JobScheduler ownership is per attempt, not per durable queue item. The
  * framework can revoke an attempt before its worker returns; a late worker
  * must never call jobFinished on already-stopped parameters.
@@ -350,13 +369,19 @@ class DownloadUserInitiatedJobService : JobService() {
             }
             Thread {
                 try {
-                    runAndSettleDownloadJob(
+                    runAndSettleDownloadJobSafely(
                         work = {
                             if (attempt.awaitPredecessor(predecessor)) {
                                 execution.execute(this, queueItemId)
                             }
                         },
                         settle = { attempt.finishIfRunning { jobFinished(params, false) } },
+                        onUnexpectedFailure = {
+                            android.util.Log.w(
+                                "OfflineYTDownload",
+                                "UIDT worker failed unexpectedly; durable startup recovery required",
+                            )
+                        },
                     )
                 } finally {
                     attempt.markWorkerExited()

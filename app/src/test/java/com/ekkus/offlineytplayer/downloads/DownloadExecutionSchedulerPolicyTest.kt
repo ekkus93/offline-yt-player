@@ -153,6 +153,29 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
+    fun unexpectedUidtWorkerExceptionDoesNotEscapeAfterDurableJobSettlement() {
+        var settlements = 0
+        var boundedFailureReports = 0
+        val failureResult = runAndSettleDownloadJobSafely(
+            work = { throw IllegalStateException("private signed provider URL") },
+            settle = { settlements++ },
+            onUnexpectedFailure = { boundedFailureReports++ },
+        )
+        assertFalse(failureResult)
+        assertEquals(1, settlements)
+        assertEquals(1, boundedFailureReports)
+
+        val successResult = runAndSettleDownloadJobSafely(
+            work = {},
+            settle = { settlements++ },
+            onUnexpectedFailure = { boundedFailureReports++ },
+        )
+        assertTrue(successResult)
+        assertEquals(2, settlements)
+        assertEquals(1, boundedFailureReports)
+    }
+
+    @Test
     fun platformStopSignalsNativeOnceAndSuppressesLateJobSettlement() {
         var stopSignals = 0
         var settlements = 0
