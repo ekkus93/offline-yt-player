@@ -1,5 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
+import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
+
 internal data class ClipboardPasteDecision(
     val acceptedText: String?,
     val statusMessage: String,
@@ -36,6 +38,20 @@ internal object AddWorkflowPolicy {
             .takeIf { it.isNotEmpty() }
             ?.joinToString(" · ")
             ?: fallback
+
+    /**
+     * Sanitize only UI presentation: resolved provider labels are still kept verbatim
+     * as selection-map keys so that multiple provider formats remain selectable.
+     */
+    fun displayLabel(value: String): String =
+        SourceMetadataPolicy.qualityLabel(SourceMetadataPolicy.diagnostic(value))
+
+    fun displaySummary(options: List<String>, fallback: String): String {
+        val shown = options.take(8).map(::displayLabel)
+        val more = if (options.size > 8) " · … ${options.size - 8} more" else ""
+        return (optionSummary(shown, displayLabel(fallback)) + more)
+            .take(SourceMetadataPolicy.MaxDiagnosticChars)
+    }
 
     fun downloadSettingsSummary(wifiOnlyDownloads: Boolean, maxConcurrentDownloads: Int): String =
         "${if (wifiOnlyDownloads) "Wi-Fi only" else "Any network"} · $maxConcurrentDownloads concurrent"

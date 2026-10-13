@@ -1,5 +1,6 @@
 package com.ekkus.offlineytplayer.ui
 
+import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -47,6 +48,24 @@ class AddWorkflowPolicyTest {
     fun optionSummaryDeduplicatesAndFallsBack() {
         assertEquals("English · Spanish", AddWorkflowPolicy.optionSummary(listOf("English", "English", " Spanish "), "None"))
         assertEquals("None", AddWorkflowPolicy.optionSummary(listOf(" "), "None"))
+    }
+
+    @Test
+    fun displayFormattingRedactsSignedUrlsAndBoundsUntrustedLabelsWithoutChangingMapping() {
+        val privateValue = "private-value-marker"
+        val label = "720p https://example.test/stream?token=$privateValue"
+        assertEquals(
+            "720p https://example.test/stream?REDACTED",
+            AddWorkflowPolicy.displayLabel(label),
+        )
+        assertTrue(privateValue !in AddWorkflowPolicy.displaySummary(listOf(label), "None"))
+        assertEquals(
+            SourceMetadataPolicy.MaxQualityLabelChars,
+            AddWorkflowPolicy.displayLabel("X".repeat(900)).length,
+        )
+        val summary = AddWorkflowPolicy.displaySummary((1..50).map { "Choice $it" }, "None")
+        assertTrue(summary.contains("42 more"))
+        assertTrue(summary.length <= SourceMetadataPolicy.MaxDiagnosticChars)
     }
 
     @Test

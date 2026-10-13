@@ -344,7 +344,7 @@ private fun AddScreen(
                 }
                 scheduling = true
                 status =
-                    "Scheduling ${setupState.qualityLabel} download with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}…"
+                    "Scheduling ${AddWorkflowPolicy.displayLabel(setupState.qualityLabel)} download with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}…"
                 val jobId = setupState.sourceUrl
                 scope.launch {
                     val result = try {
@@ -371,7 +371,7 @@ private fun AddScreen(
                         return@launch
                     }
                     status = if (result.value == true) {
-                        "Download scheduled for ${setupState.qualityLabel} with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}."
+                        "Download scheduled for ${AddWorkflowPolicy.displayLabel(setupState.qualityLabel)} with ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}."
                     } else {
                         "Download was not queued."
                     }
@@ -416,8 +416,8 @@ private fun ColumnScope.DownloadSetupPreview(
             Text("Source: ${SourceMetadataPolicy.diagnostic(sourceIdentity ?: setup.sourceUrl)}")
             Text("Canonical URL: ${SourceMetadataPolicy.diagnostic(setup.sourceUrl)}")
             setup.thumbnailUrl?.let { SetupThumbnailPreview(it) }
-            Text("Quality options: ${AddWorkflowPolicy.optionSummary(setup.qualityOptions, setup.qualityLabel)}")
-            Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}")
+            Text("Quality options: ${AddWorkflowPolicy.displaySummary(setup.qualityOptions, setup.qualityLabel)}")
+            Text("${setup.durationLabel} · ${AddWorkflowPolicy.displayLabel(setup.qualityLabel)} · ${setup.estimatedSizeLabel}")
         }
         Row(
             Modifier.fillMaxWidth(),
@@ -460,7 +460,7 @@ private fun AdvancedDownloadOptions(
                 modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("Back") }
         }
-        SettingValue("Quality choices", AddWorkflowPolicy.optionSummary(edited.qualityOptions, edited.qualityLabel))
+        SettingValue("Quality choices", AddWorkflowPolicy.displaySummary(edited.qualityOptions, edited.qualityLabel))
         edited.qualityOptions.forEach { quality ->
             OutlinedButton(
                 onClick = {
@@ -473,13 +473,13 @@ private fun AdvancedDownloadOptions(
                     )
                 },
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
-            ) { Text("Select $quality") }
+            ) { Text("Select ${AddWorkflowPolicy.displayLabel(quality)}") }
         }
 
         SettingValue(
             "Audio choices",
             if (requiresSeparateAudio) {
-                AddWorkflowPolicy.optionSummary(edited.audioOptions, "Automatic compatible audio")
+                AddWorkflowPolicy.displaySummary(edited.audioOptions, "Automatic compatible audio")
             } else {
                 "Embedded in selected format"
             },
@@ -497,13 +497,13 @@ private fun AdvancedDownloadOptions(
                         )
                     },
                     modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
-                ) { Text("Select $label") }
+                ) { Text("Select ${AddWorkflowPolicy.displayLabel(label)}") }
             }
         }
 
         SettingValue(
             "Subtitle tracks",
-            AddWorkflowPolicy.optionSummary(edited.subtitleOptions, "None reported by source"),
+            AddWorkflowPolicy.displaySummary(edited.subtitleOptions, "None reported by source"),
         )
         OutlinedButton(
             onClick = { edited = edited.copy(selectedSubtitleTrackId = null) },
@@ -517,12 +517,12 @@ private fun AdvancedDownloadOptions(
                     )
                 },
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
-            ) { Text("Select $label") }
+            ) { Text("Select ${AddWorkflowPolicy.displayLabel(label)}") }
         }
 
         SettingValue(
             "Container paths",
-            AddWorkflowPolicy.optionSummary(edited.containerOptions, "No compatible container"),
+            AddWorkflowPolicy.displaySummary(edited.containerOptions, "No compatible container"),
         )
         Text("Container follows the selected source quality; conversion and mux-only paths are not offered.")
         Button(
