@@ -137,20 +137,62 @@ class LibraryIdentityMappingTest {
 
     @Test fun validNestedPlaybackPathStaysWithinLibraryRoot() {
         val root = java.nio.file.Files.createTempDirectory("playback-root").toFile()
+        val media = File(root, "items/one/video.mp4")
         try {
+            assertTrue(media.parentFile!!.mkdirs())
+            media.writeBytes(byteArrayOf(1, 2, 3))
             val path = "items/one/video.mp4"
             val result = CoreGatewayResult(value = listOf(item("one")), error = null)
                 .toLibraryScreenState(root, CoreGatewayResult(value = listOf(
                     CoreLibraryPlaybackAsset("one", path, null, true, null),
                 ), error = null))
             assertTrue(result is LibraryScreenState.Ready)
-            assertTrue(safeLocalPlaybackPath(root, path) == File(root, path).canonicalPath)
+            assertTrue(safeLocalPlaybackPath(root, path) == media.canonicalPath)
         } finally {
+            media.delete()
+            media.parentFile?.delete()
             root.delete()
         }
     }
 
     @Test fun validDistinctIdsRemainReady() {
-        assertTrue(map(listOf(item("one")), listOf(asset("one"))) is LibraryScreenState.Ready)
+        val root = java.nio.file.Files.createTempDirectory("playback-valid-file").toFile()
+        val media = File(root, "fixture.mp4")
+        try {
+            media.writeBytes(byteArrayOf(1, 2, 3))
+            val mapped = CoreGatewayResult(value = listOf(item("one")), error = null)
+                .toLibraryScreenState(root, CoreGatewayResult(value = listOf(asset("one")), error = null))
+            assertTrue(mapped is LibraryScreenState.Ready)
+        } finally {
+            media.delete()
+            root.delete()
+        }
+    }
+
+    @Test fun missingPersistedPlaybackFileFailsClosed() {
+        val root = java.nio.file.Files.createTempDirectory("playback-missing-file").toFile()
+        try {
+            assertTrue(safeLocalPlaybackPath(root, "fixture.mp4") == null)
+            val mapped = CoreGatewayResult(value = listOf(item("one")), error = null)
+                .toLibraryScreenState(root, CoreGatewayResult(value = listOf(asset("one")), error = null))
+            assertTrue(mapped is LibraryScreenState.Failed)
+        } finally {
+            root.delete()
+        }
+    }
+
+    @Test fun directoryCannotBePresentedAsPlayableMedia() {
+        val root = java.nio.file.Files.createTempDirectory("playback-directory-media").toFile()
+        val directory = File(root, "fixture.mp4")
+        try {
+            assertTrue(directory.mkdir())
+            assertTrue(safeLocalPlaybackPath(root, "fixture.mp4") == null)
+            val mapped = CoreGatewayResult(value = listOf(item("one")), error = null)
+                .toLibraryScreenState(root, CoreGatewayResult(value = listOf(asset("one")), error = null))
+            assertTrue(mapped is LibraryScreenState.Failed)
+        } finally {
+            directory.delete()
+            root.delete()
+        }
     }
 }

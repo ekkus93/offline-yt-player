@@ -358,6 +358,11 @@ internal fun safeLocalPlaybackPath(libraryRoot: File, relativePath: String): Str
             current = current.resolve(component)
             if (java.nio.file.Files.isSymbolicLink(current)) return@runCatching null
         }
+        // Persisted Library rows can outlive externally deleted media. A path that
+        // is contained but missing (or a directory) is not a playable local asset.
+        if (!java.nio.file.Files.isRegularFile(current, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            return@runCatching null
+        }
         val candidate = current.toFile().canonicalFile
         candidate.takeIf { it != root && it.toPath().startsWith(root.toPath()) }?.absolutePath
     }.getOrNull()
