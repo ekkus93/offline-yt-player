@@ -271,13 +271,13 @@ internal fun LibraryScreen(
         }
         when (state) {
             LibraryScreenState.Loading -> RepositoryStatus("Loading library repository state…")
-            is LibraryScreenState.Unavailable -> RepositoryStatus(state.reason)
+            is LibraryScreenState.Unavailable -> RepositoryStatus(SourceMetadataPolicy.diagnostic(state.reason))
             is LibraryScreenState.Failed -> {
                 val recovery = CorruptionRecoveryPolicy.uiState("startup", state.message)
                 if (recovery == null) {
-                    RepositoryStatus("Library repository failed: ${state.message}")
+                    RepositoryStatus("Library repository failed: ${SourceMetadataPolicy.diagnostic(state.message)}")
                 } else {
-                    RecoveryStatus(recovery, state.message)
+                    RecoveryStatus(recovery, SourceMetadataPolicy.diagnostic(state.message))
                 }
             }
             is LibraryScreenState.Ready -> {
@@ -380,7 +380,7 @@ private fun LibraryRowModel.matchesLibraryQuery(query: String): Boolean {
                     onClick = {
                         when (action) {
                             RecoveryUiAction.RetryStartup -> (context as? Activity)?.recreate()
-                            RecoveryUiAction.ExportDiagnostics -> context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, "Offline YT Player recovery diagnostics"); putExtra(Intent.EXTRA_TEXT, diagnostic.take(2048)) }, "Export diagnostics"))
+                            RecoveryUiAction.ExportDiagnostics -> context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, "Offline YT Player recovery diagnostics"); putExtra(Intent.EXTRA_TEXT, SourceMetadataPolicy.diagnostic(diagnostic)) }, "Export diagnostics"))
                             RecoveryUiAction.OpenSupport -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ekkus93/offline-yt-player/issues")))
                             RecoveryUiAction.ResetLocalData -> confirmReset = true
                             RecoveryUiAction.UpgradeApplication -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ekkus93/offline-yt-player/releases")))
@@ -482,8 +482,8 @@ internal fun DownloadsScreen(
         message?.let { Text(it) }
         when (state) {
             DownloadsScreenState.Loading -> RepositoryStatus("Loading download queue state…")
-            is DownloadsScreenState.Unavailable -> RepositoryStatus(state.reason)
-            is DownloadsScreenState.Failed -> RepositoryStatus("Downloads repository failed: ${state.message}")
+            is DownloadsScreenState.Unavailable -> RepositoryStatus(SourceMetadataPolicy.diagnostic(state.reason))
+            is DownloadsScreenState.Failed -> RepositoryStatus("Downloads repository failed: ${SourceMetadataPolicy.diagnostic(state.message)}")
             is DownloadsScreenState.Ready -> {
                 if (visibleRows.isEmpty()) {
                     Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -528,7 +528,7 @@ internal fun DownloadsScreen(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
         Text(row.title)
         Text(DownloadScreenPolicy.detail(row))
-        row.error?.let { Text("Error: $it") }
+        row.error?.let { Text("Error: ${SourceMetadataPolicy.diagnostic(it)}") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             DownloadScreenPolicy.legalActions(row).forEach { action ->
                 OutlinedButton(onClick = { onAction(action) }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(action.name) }

@@ -5,6 +5,11 @@ import android.content.ClipboardManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
+import android.content.ContextWrapper
+import android.content.Intent
+import org.junit.Assert.assertTrue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -408,6 +413,78 @@ class ProductionComposeBehaviorTest {
         compose.onNodeWithText(
             "Asset: video · https://example.test/asset?REDACTED · 1234 bytes · video/mp4 · SHA-256 recorded",
         ).assertExists()
+        compose.onNodeWithText(secret, substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun recoveryExportUsesRedactedDiagnosticInsteadOfRawGatewayText() {
+        val secret = "RMD1802_PRIVATE_RECOVERY_CREDENTIAL"
+        var shareChooser: Intent? = null
+        val interceptingContext = object : ContextWrapper(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+        ) {
+            override fun startActivity(intent: Intent) {
+                shareChooser = intent
+            }
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalContext provides interceptingContext) {
+                LibraryScreen(
+                    onAdd = {},
+                    onPlay = {},
+                    state = LibraryScreenState.Failed("database corrupt. Authorization: Bearer $secret"),
+                    onUpdateSettings = {},
+                    onQueryChanged = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Export diagnostics").performClick()
+        compose.runOnIdle {
+            val chooser = checkNotNull(shareChooser)
+            assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+            val send = chooser.getParcelableExtra(Intent.EXTRA_INTENT) as? Intent
+            val shared = checkNotNull(send)
+            assertEquals(Intent.ACTION_SEND, shared.action)
+            val payload = shared.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+            assertTrue("Recovery export must redact credentials: $payload", "Authorization: [REDACTED]" in payload)
+            assertTrue("Recovery export must not contain raw credentials", secret !in payload)
+        }
+    }
+
+    @Test
+    fun downloadsAndLibraryUnavailableDiagnosticsAreRedactedInRenderedUi() {
+        val secret = "RMD1802_PRIVATE_UI_CREDENTIAL"
+        compose.setContent {
+            DownloadsScreen(state = DownloadsScreenState.Failed("Authorization: Bearer $secret"))
+        }
+        compose.onNodeWithText("Downloads repository failed: Authorization: [REDACTED]").assertIsDisplayed()
+        compose.onNodeWithText(secret, substring = true).assertDoesNotExist()
+
+        compose.setContent {
+            DownloadsScreen(state = DownloadsScreenState.Ready(listOf(
+                DownloadRowModel(
+                    id = "failed",
+                    title = "Fixture failed download",
+                    state = DownloadUiState.Failed,
+                    percent = 25,
+                    size = "25 / 100 bytes",
+                    error = "Authorization: Bearer $secret",
+                ),
+            )))
+        }
+        compose.onNodeWithText("Error: Authorization: [REDACTED]").assertIsDisplayed()
+        compose.onNodeWithText(secret, substring = true).assertDoesNotExist()
+
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Unavailable("Authorization: Bearer $secret"),
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Authorization: [REDACTED]").assertIsDisplayed()
         compose.onNodeWithText(secret, substring = true).assertDoesNotExist()
     }
 
