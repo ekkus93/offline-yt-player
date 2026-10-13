@@ -396,7 +396,7 @@ internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenStat
             title = SourceMetadataPolicy.title(checkNotNull(titlesByJobId[snapshot.jobId])),
             state = snapshot.state.toUiState(),
             percent = percent,
-            size = if (total == null) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes",
+            size = if (total == null || total <= 0L) "${snapshot.bytesDownloaded} bytes" else "${snapshot.bytesDownloaded} / $total bytes",
             error = snapshot.lastError?.message?.let(SourceMetadataPolicy::diagnostic),
             speedLabel = formatDownloadSpeed(liveMetrics[snapshot.jobId]),
             etaLabel = formatDownloadEta(liveMetrics[snapshot.jobId]),
