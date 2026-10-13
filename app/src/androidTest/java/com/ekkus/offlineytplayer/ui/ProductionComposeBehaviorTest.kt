@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -39,6 +40,8 @@ import com.ekkus.offlineytplayer.playback.LocalSubtitleTrack
 import com.ekkus.offlineytplayer.settings.AppSettingsMutation
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import org.junit.Assert.assertEquals
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Rule
 import org.junit.Test
@@ -190,6 +193,69 @@ class ProductionComposeBehaviorTest {
         compose.onNodeWithText("Different private video").assertDoesNotExist()
         compose.onNodeWithText("Library details").assertDoesNotExist()
         compose.runOnIdle { assertEquals(listOf("item-1"), gateway.requestedIds) }
+    }
+
+
+    @Test
+    fun libraryDetailsDoesNotPublishSupersededGatewayResponse() {
+        val firstStarted = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val firstReturned = CountDownLatch(1)
+        val gateway = object : AppLibraryDetailsGateway {
+            override fun getDetails(itemId: String): CoreGatewayResult<CoreLibraryDetails?> {
+                if (itemId == "item-1") {
+                    firstStarted.countDown()
+                    check(releaseFirst.await(10, TimeUnit.SECONDS)) { "First details request was not released" }
+                }
+                val details = CoreLibraryDetails(
+                    itemId = itemId,
+                    provider = "fixture",
+                    mediaId = itemId,
+                    canonicalUrl = null,
+                    displayTitle = if (itemId == "item-1") "Stale gateway metadata" else "Current gateway metadata",
+                    durationMs = 42_000,
+                    qualityLabel = "720p",
+                    completed = true,
+                    playbackPositionMs = 0,
+                    totalBytes = 1_234,
+                    assets = emptyList(),
+                )
+                if (itemId == "item-1") firstReturned.countDown()
+                return CoreGatewayResult(value = details, error = null)
+            }
+
+            override fun close() = Unit
+        }
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(
+                        LibraryRowModel("item-1", "First row", "first fixture"),
+                        LibraryRowModel("item-2", "Second row", "second fixture"),
+                    ),
+                ),
+                detailsGatewayProvider = { gateway },
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        try {
+            compose.onAllNodesWithText("Details")[0].performClick()
+            assertTrue("First details call never started", firstStarted.await(5, TimeUnit.SECONDS))
+            compose.onAllNodesWithText("Details")[1].performClick()
+            compose.waitUntil(5_000) {
+                runCatching { compose.onNodeWithText("Current gateway metadata").assertIsDisplayed() }.isSuccess
+            }
+            releaseFirst.countDown()
+            assertTrue("First details call never returned", firstReturned.await(5, TimeUnit.SECONDS))
+            compose.waitForIdle()
+            compose.onNodeWithText("Current gateway metadata").assertIsDisplayed()
+            compose.onNodeWithText("Stale gateway metadata").assertDoesNotExist()
+        } finally {
+            releaseFirst.countDown()
+        }
     }
 
     @Test
@@ -398,6 +464,7 @@ class ProductionComposeBehaviorTest {
                 sourceUrl = "https://youtu.be/dQw4w9WgXcQ",
                 title = "Sensitive provider options",
                 durationMs = 42_000L,
+
                 thumbnailUrl = null,
                 qualityLabel = quality,
                 estimatedBytes = 10L,
@@ -798,6 +865,7 @@ class ProductionComposeBehaviorTest {
     @Test
     fun settings_interactions_update_runtime_snapshot() {
         compose.setContent {
+
             var settings by remember { mutableStateOf(AppSettingsSnapshot()) }
             OfflineYTPlayerApp(
                 settingsSnapshot = settings,
