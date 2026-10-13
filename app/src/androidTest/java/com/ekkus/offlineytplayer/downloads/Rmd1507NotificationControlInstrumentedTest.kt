@@ -77,19 +77,19 @@ class Rmd1507NotificationControlInstrumentedTest {
             compose.onNodeWithText("Downloads").performClick()
             compose.waitUntil(15_000) {
                 runCatching { compose.onNodeWithText(title).assertIsDisplayed() }.isSuccess &&
-                    runCatching { compose.onNodeWithText("Paused · 0%", substring = true).assertIsDisplayed() }.isSuccess
+                    runCatching { compose.onNodeWithText("Paused · Progress unknown", substring = true).assertIsDisplayed() }.isSuccess
             }
 
             actions.getValue("Resume").actionIntent.send()
             waitForState(jobId, CoreDownloadState.QUEUED)
             compose.waitUntil(15_000) {
-                runCatching { compose.onNodeWithText("Active · 0%", substring = true).assertIsDisplayed() }.isSuccess
+                runCatching { compose.onNodeWithText("Active · Progress unknown", substring = true).assertIsDisplayed() }.isSuccess
             }
 
             actions.getValue("Cancel").actionIntent.send()
             waitForState(jobId, CoreDownloadState.CANCELED)
             compose.waitUntil(15_000) {
-                runCatching { compose.onNodeWithText("Canceled · 0%", substring = true).assertIsDisplayed() }.isSuccess
+                runCatching { compose.onNodeWithText("Canceled · Progress unknown", substring = true).assertIsDisplayed() }.isSuccess
             }
         }
     }
