@@ -252,6 +252,10 @@ fn redact_url_token(token: &str) -> String {
                 || path.contains("https://")
                 || path.contains('@')
                 || path.contains("%40")
+                // An encoded query/fragment delimiter can hide signed URL
+                // credentials inside a path that would otherwise be echoed.
+                || path.contains("%3f")
+                || path.contains("%23")
             {
                 return format!("{prefix}[REDACTED_URL]{suffix}");
             }
@@ -398,6 +402,7 @@ mod tests {
     }
 
     #[test]
+
     fn folded_sensitive_header_values_never_leak_from_diagnostics() {
         let marker = "RMD1802_FOLDED_HEADER_SECRET";
         let input = format!(
@@ -489,6 +494,20 @@ mod tests {
             redact_sensitive("GET //cdn.example/video/segment")
                 .contains("//cdn.example/video/segment")
         );
+    }
+
+    #[test]
+    fn encoded_query_and_fragment_delimiters_in_url_paths_fail_closed() {
+        let marker = "RMD1802_ENCODED_PATH_TOKEN_SECRET";
+        let inputs = [
+            format!("GET https://cdn.example/video%3Fsignature%3D{marker}"),
+            format!("GET https://cdn.example/video%23credential-{marker}"),
+        ];
+        for input in inputs {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("[REDACTED_URL]"), "{output}");
+        }
     }
 
     #[test]
