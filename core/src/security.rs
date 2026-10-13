@@ -3,6 +3,8 @@ use std::path::{Component, Path};
 use url::Url;
 
 const MAX_TITLE_CHARS: usize = 180;
+// Avoid unbounded string copies and tokenization of untrusted gateway/provider errors.
+const MAX_RAW_DIAGNOSTIC_BYTES: usize = 65_536;
 
 pub fn validate_http_url(input: &str) -> Result<Url, CoreError> {
     let trimmed = input.trim();
@@ -94,6 +96,10 @@ pub fn validate_relative_library_path(path: &str) -> Result<(), CoreError> {
 /// output. The result is intentionally lossy but retains the failing URL host/path.
 #[must_use]
 pub fn redact_sensitive(input: &str) -> String {
+    // Reject the full oversized message rather than truncating through credentials.
+    if input.len() > MAX_RAW_DIAGNOSTIC_BYTES {
+        return "[REDACTED_OVERSIZE]".into();
+    }
     let sensitive_names = [
         format!("{}{}:", "author", "ization"),
         format!("{}{}:", "proxy-author", "ization"),
@@ -390,6 +396,19 @@ mod tests {
             redact_sensitive("GET //cdn.example/video/segment")
                 .contains("//cdn.example/video/segment")
         );
+    }
+
+    #[test]
+    fn oversized_untrusted_diagnostics_fail_closed_before_tokenization() {
+        let marker = "RMD1802_RUST_RAW_OVERFLOW_SECRET";
+        let oversized = format!(
+            "GET https://user:{marker}@cdn.example/video?sig={marker}{}",
+            "x".repeat(100_000)
+        );
+        assert_eq!(redact_sensitive(&oversized), "[REDACTED_OVERSIZE]");
+        let ordinary = redact_sensitive(&format!("GET https://cdn.example/video?sig={marker}"));
+        assert!(!ordinary.contains(marker));
+        assert!(ordinary.contains("REDACTED"));
     }
 
     #[test]
