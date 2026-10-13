@@ -187,8 +187,14 @@ internal object LocalPlaybackPolicy {
     }
 
     fun completedByPosition(positionMs: Long, durationMs: Long): Boolean {
-        if (durationMs <= 0) return false
-        return durationMs - positionMs.coerceAtMost(durationMs) <= NearEndCompletedThresholdMs
+        if (durationMs <= 0L) return false
+        // A fixed 30-second completion window would classify the *start* of
+        // every short clip as completed and erase its resumable position.
+        // Cap the window to the last quarter of short recordings, while
+        // retaining the established 30-second window on longer media.
+        val completionWindowMs = minOf(NearEndCompletedThresholdMs, durationMs / 4L)
+        val boundedPosition = positionMs.coerceIn(0L, durationMs)
+        return boundedPosition > 0L && durationMs - boundedPosition <= completionWindowMs
     }
 
     private fun normalizedPositionSnapshot(positionMs: Long, durationMs: Long): PlaybackPositionSnapshot {

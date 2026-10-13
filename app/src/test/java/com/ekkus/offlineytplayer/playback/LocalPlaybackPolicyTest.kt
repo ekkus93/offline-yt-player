@@ -139,6 +139,28 @@ class LocalPlaybackPolicyTest {
     }
 
     @Test
+    fun shortVideosDoNotResetResumePositionAtStartOrMidPlayback() {
+        assertFalse(LocalPlaybackPolicy.completedByPosition(0L, 20_000L))
+        assertFalse(LocalPlaybackPolicy.completedByPosition(1_000L, 20_000L))
+        assertFalse(LocalPlaybackPolicy.completedByPosition(10_000L, 20_000L))
+        assertEquals(10_000L, LocalPlaybackPolicy.persistedPositionForStop(10_000L, 20_000L))
+        assertTrue(LocalPlaybackPolicy.completedByPosition(15_000L, 20_000L))
+        assertEquals(0L, LocalPlaybackPolicy.persistedPositionForStop(15_000L, 20_000L))
+        assertEquals(0L, LocalPlaybackPolicy.persistedPositionForStop(20_000L, 20_000L))
+    }
+
+    @Test
+    fun shortAndTinyDurationsRespectNearEndBoundary() {
+        assertFalse(LocalPlaybackPolicy.completedByPosition(2_999L, 4_000L))
+        assertTrue(LocalPlaybackPolicy.completedByPosition(3_000L, 4_000L))
+        assertFalse(LocalPlaybackPolicy.completedByPosition(0L, 1L))
+        assertTrue(LocalPlaybackPolicy.completedByPosition(1L, 1L))
+        assertFalse(LocalPlaybackPolicy.completedByPosition(500L, 0L))
+        assertFalse(LocalPlaybackPolicy.completedByPosition(-1L, 20_000L))
+        assertTrue(LocalPlaybackPolicy.completedByPosition(95_000L, 120_000L))
+    }
+
+    @Test
     fun persistedPlaybackAssetsCarryLibraryIdentityWhenAvailable() {
         val asset = LocalPlaybackAsset(
             videoPath = "/library/video-1080p.mp4",
