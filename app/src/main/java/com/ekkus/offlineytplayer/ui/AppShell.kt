@@ -414,7 +414,7 @@ private fun ColumnScope.DownloadSetupPreview(
                 .takeIf { it.isNotEmpty() }
                 ?.joinToString(" / ")
             Text("Source: ${sourceIdentity ?: setup.sourceUrl}")
-            Text("Canonical URL: ${setup.sourceUrl}")
+            Text("Canonical URL: ${SourceMetadataPolicy.diagnostic(setup.sourceUrl)}")
             setup.thumbnailUrl?.let { SetupThumbnailPreview(it) }
             Text("Quality options: ${AddWorkflowPolicy.optionSummary(setup.qualityOptions, setup.qualityLabel)}")
             Text("${setup.durationLabel} · ${setup.qualityLabel} · ${setup.estimatedSizeLabel}")
