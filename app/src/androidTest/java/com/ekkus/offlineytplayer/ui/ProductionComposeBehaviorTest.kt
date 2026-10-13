@@ -154,6 +154,41 @@ class ProductionComposeBehaviorTest {
         compose.onNodeWithText(credential, substring = true).assertDoesNotExist()
     }
 
+
+    @Test
+    fun libraryRemovalClearsExpandedDetailsAndInvalidatesStaleSelection() {
+        val details = RecordingLibraryDetailsGateway()
+        val mutations = RecordingLibraryMutationGateway()
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
+                ),
+                detailsGatewayProvider = { details },
+                mutationGatewayProvider = { mutations },
+                libraryRootPath = "/tmp/fixture-library",
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Details").performClick()
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithText("Library details").assertIsDisplayed() }.isSuccess
+        }
+        compose.onNodeWithText("Remove").performClick()
+        compose.onNodeWithText("Confirm remove").performClick()
+        compose.waitUntil(5_000) {
+            mutations.removedIds.contains("item-1") &&
+                runCatching { compose.onNodeWithText("Library details").assertDoesNotExist() }.isSuccess
+        }
+        compose.runOnIdle {
+            assertEquals(listOf("item-1"), mutations.removedIds)
+            assertEquals(listOf(true), mutations.removeConfirmations)
+        }
+    }
+
     @Test
     fun libraryDetailsRejectsGatewayRecordForDifferentItem() {
         val gateway = RecordingLibraryDetailsGateway(

@@ -266,7 +266,13 @@ internal fun LibraryScreen(
                                 }
                                 message = result.error?.let { "Remove failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
                                     ?: if (result.value == true) "Removed ${SourceMetadataPolicy.title(row.title)} and its owned local assets." else "Remove did not change the item."
-                                if (result.error == null && result.value == true) pendingRemove = null
+                                if (result.error == null && result.value == true) {
+                                    // The deleted row must not leave a stale expanded Details panel,
+                                    // nor may an earlier in-flight lookup resurrect removed metadata.
+                                    detailsRequestGeneration += 1
+                                    selectedDetails = null
+                                    pendingRemove = null
+                                }
                             }
                         }
                     },
