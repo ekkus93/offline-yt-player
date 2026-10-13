@@ -309,11 +309,17 @@ mod tests {
     #[test]
     fn filename_sanitization_bounds_untrusted_input_without_changing_trim_semantics() {
         assert_eq!(sanitize_filename(&"x".repeat(1_000_000)), "x".repeat(180));
-        assert_eq!(sanitize_filename(&format!("{}video.mp4", ".".repeat(1_000_000))), "video.mp4");
+        assert_eq!(
+            sanitize_filename(&format!("{}video.mp4", ".".repeat(1_000_000))),
+            "video.mp4"
+        );
         assert_eq!(sanitize_filename("   ...  "), "untitled");
-        assert_eq!(sanitize_filename("\\t name \\n"), "_ name _");
+        assert_eq!(sanitize_filename(&format!("{} name {}", char::from(9), char::from(10))), "_ name _");
         assert_eq!(sanitize_filename("  video.mp4  "), "video.mp4");
-        assert_eq!(sanitize_filename(&format!("{}  ", "x".repeat(180))), "x".repeat(180));
+        assert_eq!(
+            sanitize_filename(&format!("{}  ", "x".repeat(180))),
+            "x".repeat(180)
+        );
     }
 
     #[test]
