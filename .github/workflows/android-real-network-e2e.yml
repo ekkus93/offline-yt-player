@@ -3,6 +3,7 @@ name: Android real network E2E
 on:
   push:
     branches: [master]
+    tags: ['**']
   workflow_dispatch:
 
 permissions:
@@ -55,7 +56,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
           script: bash scripts/run_android_os_network_e2e.sh
       - name: Upload host OS-network evidence
-        if: always()
+        if: always() && github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: android-real-network-evidence-${{ github.run_id }}

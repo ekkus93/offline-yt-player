@@ -3,6 +3,7 @@ name: Supply chain
 on:
   push:
     branches: [master, "ralph/**"]
+    tags: ['**']
   pull_request:
     branches: [master]
 
@@ -74,7 +75,7 @@ jobs:
       - name: Verify third-party notices are reconciled
         run: python3 scripts/generate_third_party_notices.py --check
       - name: Upload supply-chain evidence
-        if: always()
+        if: always() && github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: supply-chain-evidence-${{ github.run_id }}

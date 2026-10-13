@@ -3,6 +3,7 @@ name: Android cold start
 on:
   push:
     branches: [master, "ralph/**"]
+    tags: ['**']
   pull_request:
     branches: [master]
 
@@ -103,7 +104,7 @@ jobs:
             sleep 3;
             run_phase "com.ekkus.offlineytplayer.downloads.Rmd1503SubtitleOfflineInstrumentedTest#coldStartVerificationReopensPersistedSubtitleOffline" verify true app/build/reports/androidColdStart/rmd1503-verify.log'
       - name: Upload cold-start evidence
-        if: always()
+        if: always() && github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: android-cold-start-evidence-${{ github.run_id }}
