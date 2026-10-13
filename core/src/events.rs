@@ -38,6 +38,10 @@ struct ProgressSample {
     bytes_downloaded: u64,
 }
 
+// Hard-bound callback samples as well as their age. Very fast chunk streams can
+// deliver many callbacks inside one timestamp/window without an age-only cap.
+const MAX_TRANSFER_METRIC_SAMPLES: usize = 256;
+
 /// Calculates speed from a bounded recent sample window and only reports ETA when total length is
 /// known and enough progress has been observed. Unknown-length transfers never receive fabricated
 /// ETA/progress values.
@@ -77,6 +81,10 @@ impl TransferMetricEstimator {
                 .front()
                 .is_some_and(|sample| now_epoch_ms.saturating_sub(sample.epoch_ms) > self.window_ms)
         {
+            self.samples.pop_front();
+        }
+        // Elapsed-time trimming alone cannot cap callbacks with equal timestamps.
+        while self.samples.len() > MAX_TRANSFER_METRIC_SAMPLES {
             self.samples.pop_front();
         }
     }
@@ -224,6 +232,23 @@ mod tests {
 
         assert_eq!(metrics.bytes_per_second, Some(1_000));
         assert_eq!(metrics.eta_seconds, None);
+    }
+
+    #[test]
+    fn high_rate_chunk_callbacks_cannot_grow_metric_history_without_bound() {
+        let mut estimator = TransferMetricEstimator::new(5_000);
+        // Model a very fast chunk stream where the monotonic clock has not
+        // advanced; an age-only cap would retain every one of these samples.
+        for bytes in 0..10_000_u64 {
+            let metrics = estimator.observe(1_000, bytes, None);
+            assert!(estimator.samples.len() <= MAX_TRANSFER_METRIC_SAMPLES);
+            assert!(metrics.eta_seconds.is_none());
+        }
+        assert_eq!(estimator.samples.len(), MAX_TRANSFER_METRIC_SAMPLES);
+        let later = estimator.observe(2_000, 10_000, None);
+        assert!(later.bytes_per_second.is_some());
+        assert_eq!(later.eta_seconds, None);
+        assert_eq!(estimator.samples.len(), MAX_TRANSFER_METRIC_SAMPLES);
     }
 
     #[test]
