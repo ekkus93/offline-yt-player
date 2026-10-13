@@ -19,7 +19,24 @@ internal object SourceMetadataPolicy {
 
     fun qualityLabel(value: String): String = sanitize(value, MaxQualityLabelChars, "Unknown quality")
 
-    fun diagnostic(value: String): String = sanitize(redactDiagnosticUrls(value), MaxDiagnosticChars, "Unknown error")
+    fun diagnostic(value: String): String =
+        sanitize(redactDiagnosticHeaders(value), MaxDiagnosticChars, "Unknown error")
+
+    /** Preserve useful context, but never allow FFI/provider HTTP header values into Compose. */
+    private val sensitiveHeaderPattern =
+        Regex("(?i)(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key)\\s*:")
+
+    private fun redactDiagnosticHeaders(value: String): String =
+        value.lineSequence().joinToString("\n") { line ->
+            val header = sensitiveHeaderPattern.find(line)
+            if (header == null) {
+                redactDiagnosticUrls(line)
+            } else {
+                // The suffix may include other credentials; fail closed after the first header.
+                val prefix = redactDiagnosticUrls(line.substring(0, header.range.first))
+                "$prefix${header.value} [REDACTED]"
+            }
+        }
 
     private fun redactDiagnosticUrls(value: String): String = urlPattern.replace(value) { match ->
         runCatching {

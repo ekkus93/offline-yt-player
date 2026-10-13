@@ -41,6 +41,33 @@ class SourceMetadataPolicyTest {
         assertTrue(output.contains("cdn.example/video"))
     }
 
+    @Test fun diagnosticRedactsCredentialHeadersEvenWhenPrefixedOrIndented() {
+        val marker = "SECRET_HEADER_1802"
+        val input = listOf(
+            "2026-10-12 ERROR Authorization: Bearer $marker",
+            "  Cookie: session=$marker",
+            "\tProxy-Authorization: Basic $marker",
+            "request failed: X-Api-Key: $marker",
+            "Set-Cookie: session=$marker",
+        ).joinToString("\n")
+        val output = SourceMetadataPolicy.diagnostic(input)
+        assertFalse(output.contains(marker))
+        assertTrue(output.contains("Authorization: [REDACTED]"))
+        assertTrue(output.contains("Cookie: [REDACTED]"))
+        assertTrue(output.contains("X-Api-Key: [REDACTED]"))
+        assertTrue(output.length <= SourceMetadataPolicy.MaxDiagnosticChars)
+    }
+
+    @Test fun diagnosticRedactsSignedUrlBeforeSensitiveHeaderOnSameLine() {
+        val marker = "SECRET_MIXED_1802"
+        val output = SourceMetadataPolicy.diagnostic(
+            "GET https://cdn.example/video?sig=$marker#fragment-$marker Authorization: Bearer $marker",
+        )
+        assertFalse(output.contains(marker))
+        assertTrue(output.contains("cdn.example/video"))
+        assertTrue(output.contains("Authorization: [REDACTED]"))
+    }
+
     @Test fun ordinaryDiagnosticTextIsPreserved() {
         assertEquals("download failed: connection reset", SourceMetadataPolicy.diagnostic("download failed: connection reset"))
     }
