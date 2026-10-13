@@ -26,14 +26,17 @@ internal object AddWorkflowPolicy {
 
     fun qualityLabels(resolvedLabels: List<String>, fallbackLabel: String): List<String> =
         resolvedLabels
-            .map { it.trim() }
+            // The original label is the key in the production format-choice map.
+            // Trimming it here would silently disconnect the UI from its choice ID.
             .filter { it.isNotBlank() }
             .distinct()
             .ifEmpty { listOf(fallbackLabel).filter { it.isNotBlank() } }
 
     fun preferredQualityLabel(options: List<String>, configured: String, fallback: String): String =
-        options.firstOrNull { it.equals(configured, ignoreCase = true) }
-            ?: configured.takeIf { it.isNotBlank() && options.isEmpty() }
+        options.firstOrNull { it.trim().equals(configured.trim(), ignoreCase = true) }
+            ?: options.firstOrNull { it.trim().equals(fallback.trim(), ignoreCase = true) }
+            ?: options.firstOrNull()
+            ?: configured.takeIf { it.isNotBlank() }
             ?: fallback
 
     fun optionSummary(options: List<String>, fallback: String): String =

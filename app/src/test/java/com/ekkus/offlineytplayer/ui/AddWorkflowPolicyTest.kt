@@ -63,6 +63,17 @@ class AddWorkflowPolicyTest {
     }
 
     @Test
+    fun providerQualityLabelsPreserveExecutableChoiceKeys() {
+        val labels = AddWorkflowPolicy.qualityLabels(listOf(" 720p ", "Audio only"), "Best")
+        assertEquals(listOf(" 720p ", "Audio only"), labels)
+        val choiceIds = mapOf(" 720p " to "format-720", "Audio only" to "audio")
+        val selected = AddWorkflowPolicy.preferredQualityLabel(labels, "720P", "Best")
+        assertEquals(" 720p ", selected)
+        assertEquals("format-720", choiceIds[selected])
+        assertEquals(" 720p ", AddWorkflowPolicy.preferredQualityLabel(labels, "Missing", "Best"))
+    }
+
+    @Test
     fun optionSummaryDeduplicatesAndFallsBack() {
         assertEquals("English · Spanish", AddWorkflowPolicy.optionSummary(listOf("English", "English", " Spanish "), "None"))
         assertEquals("None", AddWorkflowPolicy.optionSummary(listOf(" "), "None"))
