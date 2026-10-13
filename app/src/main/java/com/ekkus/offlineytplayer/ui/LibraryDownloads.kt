@@ -157,6 +157,7 @@ internal fun LibraryScreen(
     val layout = if (settings.libraryLayout == LibraryLayoutSetting.Grid) LibraryLayout.Grid else LibraryLayout.List
     var message by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDetails by remember { mutableStateOf<CoreLibraryDetails?>(null) }
+    var detailsRequestGeneration by remember { mutableStateOf(0L) }
     var renameRow by remember { mutableStateOf<LibraryRowModel?>(null) }
     var renameTitle by rememberSaveable { mutableStateOf("") }
     var pendingRemove by remember { mutableStateOf<LibraryRowModel?>(null) }
@@ -300,6 +301,8 @@ internal fun LibraryScreen(
                         visibleItems,
                         onPlay,
                         { row ->
+                            detailsRequestGeneration += 1
+                            val requestGeneration = detailsRequestGeneration
                             // Discard expanded metadata from any previously selected row.
                             selectedDetails = null
                             val gateway = detailsGatewayProvider()
@@ -316,9 +319,12 @@ internal fun LibraryScreen(
                                     } catch (cancelled: CancellationException) {
                                         throw cancelled
                                     } catch (_: Exception) {
-                                        message = "Library details are unavailable for ${row.title}."
+                                        if (requestGeneration == detailsRequestGeneration) {
+                                            message = "Library details are unavailable for ${row.title}."
+                                        }
                                         return@launch
                                     }
+                                    if (requestGeneration != detailsRequestGeneration) return@launch
                                     message = when {
                                         result.error != null -> "Library details failed: ${SourceMetadataPolicy.diagnostic(result.error.message)}"
                                         result.value == null -> "Library details are unavailable for ${row.title}."
@@ -398,6 +404,7 @@ private fun LibraryRowModel.matchesLibraryQuery(query: String): Boolean {
                     },
                     modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
                 ) { Text(action.label()) }
+
             }
         }
     }
