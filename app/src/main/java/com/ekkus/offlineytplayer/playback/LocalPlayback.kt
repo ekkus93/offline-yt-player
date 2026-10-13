@@ -1,6 +1,7 @@
 package com.ekkus.offlineytplayer.playback
 
 import android.net.Uri
+import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -111,11 +112,18 @@ internal object LocalPlaybackPolicy {
      */
     private const val SplitAudioMediaIdPrefix = "offline-yt-player/split-audio/"
 
+    /** Strip credential-bearing provider metadata before playback UI or MediaSession exposes it. */
+    private fun displayTrackLabel(label: String): String =
+        SourceMetadataPolicy.qualityLabel(SourceMetadataPolicy.diagnostic(label))
+
+    private fun displayTitle(title: String): String =
+        SourceMetadataPolicy.title(SourceMetadataPolicy.diagnostic(title))
+
     fun mediaItemFor(asset: LocalPlaybackAsset): MediaItem {
         val request = playbackRequestFor(asset)
         val subtitleConfigurations = request.subtitleTracks.map(::subtitleConfigurationFor)
         val builder = mediaItemBuilderFor(request.videoPath)
-            .setMediaMetadata(MediaMetadata.Builder().setTitle(asset.title).build())
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(displayTitle(asset.title)).build())
             .setSubtitleConfigurations(subtitleConfigurations)
             .setTag(request.audioPath)
         request.audioPath?.let { path ->
@@ -142,13 +150,15 @@ internal object LocalPlaybackPolicy {
     }
 
     fun availableSubtitleLabels(asset: LocalPlaybackAsset): List<String> = validate(asset).subtitleTracks.map { track ->
-        track.label?.takeIf(String::isNotBlank) ?: track.language
+        displayTrackLabel(track.label?.takeIf(String::isNotBlank) ?: track.language)
     }
 
     fun availableAudioLabels(asset: LocalPlaybackAsset): List<String> = validate(asset).audioTracks.mapIndexed { index, track ->
-        track.label?.takeIf(String::isNotBlank)
-            ?: track.language?.takeIf(String::isNotBlank)
-            ?: "Track ${index + 1}"
+        displayTrackLabel(
+            track.label?.takeIf(String::isNotBlank)
+                ?: track.language?.takeIf(String::isNotBlank)
+                ?: "Track ${index + 1}",
+        )
     }
 
     fun shouldEnableAudioSelection(asset: LocalPlaybackAsset): Boolean = availableAudioLabels(asset).size > 1
@@ -223,7 +233,7 @@ internal object LocalPlaybackPolicy {
         SubtitleConfiguration.Builder(Uri.fromFile(File(track.path)))
             .setMimeType(track.mimeType)
             .setLanguage(track.language)
-            .setLabel(track.label)
+            .setLabel(track.label?.let(::displayTrackLabel))
             .build()
 
     private fun mediaItemBuilderFor(path: String): MediaItem.Builder {

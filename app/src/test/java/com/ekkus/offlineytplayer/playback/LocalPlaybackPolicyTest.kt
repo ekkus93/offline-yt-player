@@ -91,6 +91,49 @@ class LocalPlaybackPolicyTest {
     }
 
     @Test
+    fun mediaSessionAndTrackPresentationRedactProviderControlledLabels() {
+        val secret = "RMD1802_PRIVATE_PLAYBACK_LABEL"
+        val asset = LocalPlaybackAsset(
+            videoPath = "/library/video.mp4",
+            title = "Video https://example.test/title?token=$secret",
+            subtitleTracks = listOf(
+                LocalSubtitleTrack(
+                    path = "/library/en.vtt",
+                    language = "en",
+                    label = "English https://example.test/sub?token=$secret",
+                    mimeType = MimeTypes.TEXT_VTT,
+                ),
+            ),
+            audioTracks = listOf(
+                LocalAudioTrack(
+                    path = "/library/audio.m4a",
+                    label = "Audio https://example.test/audio?token=$secret",
+                ),
+            ),
+        )
+        val item = LocalPlaybackPolicy.mediaItemFor(asset)
+        assertEquals(
+            "Video https://example.test/title?REDACTED",
+            item.mediaMetadata.title.toString(),
+        )
+        assertEquals(
+            listOf("English https://example.test/sub?REDACTED"),
+            LocalPlaybackPolicy.availableSubtitleLabels(asset),
+        )
+        assertEquals(
+            listOf("Audio https://example.test/audio?REDACTED"),
+            LocalPlaybackPolicy.availableAudioLabels(asset),
+        )
+        val subtitles = item.localConfiguration?.subtitleConfigurations.orEmpty()
+        assertEquals(
+            "English https://example.test/sub?REDACTED",
+            subtitles.single().label,
+        )
+        assertTrue(secret !in item.mediaMetadata.title.toString())
+        assertTrue(secret !in subtitles.single().label.orEmpty())
+    }
+
+    @Test
     fun playbackRequestNormalizesRestoredStartPosition() {
         val request = LocalPlaybackPolicy.playbackRequestFor(
             LocalPlaybackAsset(
