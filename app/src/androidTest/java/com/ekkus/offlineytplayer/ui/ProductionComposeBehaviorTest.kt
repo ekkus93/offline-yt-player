@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -254,6 +255,38 @@ class ProductionComposeBehaviorTest {
             assertEquals(listOf("audio-only"), controls.enqueuedChoiceIds)
             assertEquals(listOf("subtitle-en"), controls.enqueuedSelections.map { it.subtitleTrackId })
         }
+    }
+
+    @Test
+    fun sourceWithNoExecutableQualityDoesNotOfferEnabledDownload() {
+        val controls = FakeDownloadControlGateway()
+        val source = FakeSourceAnalysisGateway(
+            analysis = CoreSourceAnalysis(
+                sourceUrl = "https://youtu.be/dQw4w9WgXcQ",
+                title = "No compatible format fixture",
+                durationMs = 4_000L,
+                thumbnailUrl = null,
+                qualityLabel = "No compatible format",
+                estimatedBytes = null,
+                qualityOptions = emptyList(),
+            ),
+        )
+        compose.setContent {
+            OfflineYTPlayerApp(
+                initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ",
+                sourceAnalysisGateway = source,
+                downloadControlGateway = controls,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
+        }
+        compose.onNodeWithText("Analyze").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching { compose.onNodeWithText("No compatible format fixture").assertIsDisplayed() }.isSuccess
+        }
+        compose.onNodeWithText("Download setup").assertIsDisplayed()
+        compose.onNodeWithText("Download").assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(emptyList<String>(), controls.enqueuedJobIds) }
     }
 
     @Test

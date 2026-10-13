@@ -306,7 +306,9 @@ private fun AddScreen(
                             qualityLabel = preferredQualityLabel,
                             estimatedSizeLabel = qualityEstimatedBytesByLabel[preferredQualityLabel]
                                 ?.let(::formatSetupBytes) ?: "Size unavailable",
-                            readyForDownload = true,
+                            // A resolver with no executable quality/format choice
+                            // must not expose an enabled action that only fails on enqueue.
+                            readyForDownload = !qualityChoiceIdsByLabel[preferredQualityLabel].isNullOrBlank(),
                             thumbnailUrl = analysis.thumbnailUrl,
                             sourceProvider = analysis.sourceProvider,
                             sourceMediaId = analysis.sourceMediaId,
@@ -426,7 +428,7 @@ private fun ColumnScope.DownloadSetupPreview(
             ) { Text("Options") }
             Button(
                 onClick = onDownload,
-                enabled = setup.readyForDownload,
+                enabled = setup.readyForDownload && !setup.selectedQualityChoiceId.isNullOrBlank(),
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("Download") }
         }
