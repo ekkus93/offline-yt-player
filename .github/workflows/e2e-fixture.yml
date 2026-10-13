@@ -5,6 +5,12 @@ on:
     branches: [master, "ralph/**"]
   pull_request:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      upload_full_fixture_evidence:
+        description: Upload compiled Rust test binaries for explicit debugging (large)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,15 +42,47 @@ jobs:
             target
           key: e2e-fixture-rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: e2e-fixture-rust-${{ runner.os }}-
-      - name: Run deterministic fixture E2E
-        run: cargo test -p offline-yt-core rmd_1500_e2e_tests -- --nocapture
-      - name: Upload deterministic fixture E2E evidence
+      - name: Run deterministic fixture E2E with bounded evidence
+        shell: bash
+        run: |
+          mkdir -p build/reports/fixture-e2e
+          set +e
+          cargo test -p offline-yt-core rmd_1500_e2e_tests -- --nocapture \
+            > build/reports/fixture-e2e/test.log 2>&1
+          test_status=$?
+          set -e
+          cat build/reports/fixture-e2e/test.log
+          {
+            printf 'Exact HEAD: %s\n' "$GITHUB_SHA"
+            printf 'Test exit status: %s\n' "$test_status"
+            rustc --version
+            cargo --version
+            printf '\nTest results and failures:\n'
+            grep -E '^(test .* \.\.\. (ok|FAILED)|test result:|error:|failures:)' \
+              build/reports/fixture-e2e/test.log | tail -n 120 || true
+            printf '\nFinal 120 lines of test output:\n'
+            tail -n 120 build/reports/fixture-e2e/test.log
+          } > build/reports/fixture-e2e/summary.txt
+          cat build/reports/fixture-e2e/summary.txt >> "$GITHUB_STEP_SUMMARY"
+          exit "$test_status"
+      # A successful run proves the fixture test via its exact-SHA job logs;
+      # compiled deps (600+ MiB) are not appropriate routine CI artifacts.
+      - name: Upload compact deterministic fixture evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: deterministic-e2e-fixture-evidence-${{ github.run_id }}
+          name: deterministic-e2e-fixture-summary-${{ github.run_id }}
+          path: build/reports/fixture-e2e/summary.txt
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Upload full compiled fixture evidence (explicit manual opt-in)
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.upload_full_fixture_evidence }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-e2e-fixture-full-evidence-${{ github.run_id }}
           path: |
             target/debug/deps
             target/debug/.fingerprint/offline-yt-core-*
-          if-no-files-found: ignore
-          retention-days: 7
+          if-no-files-found: error
+          retention-days: 3
