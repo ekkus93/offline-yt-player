@@ -36,6 +36,36 @@ class PlaybackSessionBehaviorInstrumentedTest {
     private val context = instrumentation.targetContext
 
     @Test
+    fun media3ItemSanitizesProviderTitleAndSubtitleLabelsBeforeSessionExposure() {
+        val secret = "RMD1802_MEDIA3_PRIVATE_LABEL"
+        val item = LocalPlaybackPolicy.mediaItemFor(
+            LocalPlaybackAsset(
+                videoPath = File(context.cacheDir, "metadata-fixture.mp4").absolutePath,
+                title = "Video https://example.test/title?token=$secret",
+                subtitleTracks = listOf(
+                    LocalSubtitleTrack(
+                        path = File(context.cacheDir, "metadata-fixture.vtt").absolutePath,
+                        language = "en",
+                        label = "English https://example.test/sub?token=$secret",
+                        mimeType = androidx.media3.common.MimeTypes.TEXT_VTT,
+                    ),
+                ),
+            ),
+        )
+        assertEquals(
+            "Video https://example.test/title?REDACTED",
+            item.mediaMetadata.title.toString(),
+        )
+        val subtitles = item.localConfiguration?.subtitleConfigurations.orEmpty()
+        assertEquals(
+            "English https://example.test/sub?REDACTED",
+            subtitles.single().label,
+        )
+        assertTrue(secret !in item.mediaMetadata.title.toString())
+        assertTrue(secret !in subtitles.single().label.orEmpty())
+    }
+
+    @Test
     fun composeSpeedControlManipulatesTheCanonicalSessionPlayer() {
         val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
         val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)

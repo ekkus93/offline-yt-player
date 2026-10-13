@@ -116,7 +116,7 @@ internal object LocalPlaybackPolicy {
     private fun displayTrackLabel(label: String): String =
         SourceMetadataPolicy.qualityLabel(SourceMetadataPolicy.diagnostic(label))
 
-    private fun displayTitle(title: String): String =
+    internal fun displayTitle(title: String): String =
         SourceMetadataPolicy.title(SourceMetadataPolicy.diagnostic(title))
 
     fun mediaItemFor(asset: LocalPlaybackAsset): MediaItem {

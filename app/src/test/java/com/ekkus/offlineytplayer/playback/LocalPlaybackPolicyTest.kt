@@ -111,10 +111,9 @@ class LocalPlaybackPolicyTest {
                 ),
             ),
         )
-        val item = LocalPlaybackPolicy.mediaItemFor(asset)
         assertEquals(
             "Video https://example.test/title?REDACTED",
-            item.mediaMetadata.title.toString(),
+            LocalPlaybackPolicy.displayTitle(asset.title),
         )
         assertEquals(
             listOf("English https://example.test/sub?REDACTED"),
@@ -124,13 +123,9 @@ class LocalPlaybackPolicyTest {
             listOf("Audio https://example.test/audio?REDACTED"),
             LocalPlaybackPolicy.availableAudioLabels(asset),
         )
-        val subtitles = item.localConfiguration?.subtitleConfigurations.orEmpty()
-        assertEquals(
-            "English https://example.test/sub?REDACTED",
-            subtitles.single().label,
-        )
-        assertTrue(secret !in item.mediaMetadata.title.toString())
-        assertTrue(secret !in subtitles.single().label.orEmpty())
+        assertTrue(secret !in LocalPlaybackPolicy.displayTitle(asset.title))
+        assertTrue(secret !in LocalPlaybackPolicy.availableSubtitleLabels(asset).single())
+        assertTrue(secret !in LocalPlaybackPolicy.availableAudioLabels(asset).single())
     }
 
     @Test
