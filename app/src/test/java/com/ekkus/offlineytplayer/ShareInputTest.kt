@@ -26,9 +26,11 @@ class ShareInputTest {
     }
 
     @Test
-    fun rejectsOversizedUntrustedShareText() {
+    fun rejectsOversizedUntrustedShareTextBeforeTrimming() {
         val text = "x".repeat(8_193) + " https://example.com"
         assertNull(ShareInput.parse("android.intent.action.SEND", "text/plain", text))
+        val paddedValidUrl = " ".repeat(1_000_000) + "https://youtu.be/dQw4w9WgXcQ"
+        assertNull(ShareInput.parse("android.intent.action.SEND", "text/plain", paddedValidUrl))
     }
 
     @Test
