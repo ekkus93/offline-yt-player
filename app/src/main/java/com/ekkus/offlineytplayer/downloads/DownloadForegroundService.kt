@@ -132,7 +132,14 @@ internal fun runForegroundServiceTaskSafely(
 
 class DownloadForegroundService : Service() {
     private val workerRunning = AtomicBoolean(false)
-    private val workerOwnership = ForegroundWorkerOwnership()
+    private val workerOwnership = ForegroundWorkerOwnership(
+        onStopFailure = {
+            android.util.Log.w(
+                "OfflineYTDownload",
+                "Foreground native stop signal failed; durable recovery required",
+            )
+        },
+    )
     private val controlExecutor: ExecutorService = Executors.newSingleThreadExecutor { task ->
         Thread(task, "offline-yt-notification-controls").apply { isDaemon = true }
     }

@@ -25,6 +25,70 @@ class ForegroundWorkerOwnershipTest {
     }
 
     @Test
+    fun nativeStopGatewayExceptionCannotEscapeForegroundServiceCallback() {
+        var stopSignals = 0
+        var boundedWarnings = 0
+        val owner = ForegroundWorkerOwnership(onStopFailure = { boundedWarnings++ })
+        val stopWorker: () -> Unit = {
+            stopSignals++
+            throw IllegalStateException("synthetic signed gateway error")
+        }
+
+        assertTrue(owner.tryBegin(stopWorker))
+        owner.stop()
+        owner.stop()
+        owner.finish(stopWorker)
+        assertTrue(owner.isStopped)
+        assertFalse(owner.tryBegin(stopWorker))
+        assertEquals(1, stopSignals)
+        assertEquals(1, boundedWarnings)
+    }
+
+    @Test
+    fun throwingStopDuringBeginStopRaceIsContainedAndAtMostOnce() {
+        repeat(100) {
+            val owner = ForegroundWorkerOwnership()
+            val start = CountDownLatch(1)
+            val done = CountDownLatch(2)
+            val signals = AtomicInteger()
+            val failures = AtomicInteger()
+            val callback: () -> Unit = {
+                signals.incrementAndGet()
+                throw IllegalStateException("synthetic native stop failure")
+            }
+            val launcher = Thread {
+                try {
+                    start.await()
+                    if (owner.tryBegin(callback)) owner.finish(callback)
+                } catch (_: Exception) {
+                    failures.incrementAndGet()
+                } finally {
+                    done.countDown()
+                }
+            }
+            val stopper = Thread {
+                try {
+                    start.await()
+                    owner.stop()
+                } catch (_: Exception) {
+                    failures.incrementAndGet()
+                } finally {
+                    done.countDown()
+                }
+            }
+            launcher.start()
+            stopper.start()
+            start.countDown()
+            assertTrue(done.await(5, TimeUnit.SECONDS))
+            assertEquals(0, failures.get())
+            assertTrue(signals.get() in 0..1)
+            assertTrue(owner.isStopped)
+            launcher.join(1_000)
+            stopper.join(1_000)
+        }
+    }
+
+    @Test
     fun stopBeforeLaunchCannotStartNativeWriter() {
         val owner = ForegroundWorkerOwnership()
         val stops = AtomicInteger()

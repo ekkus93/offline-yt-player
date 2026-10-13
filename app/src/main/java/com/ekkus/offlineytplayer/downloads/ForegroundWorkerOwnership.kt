@@ -9,7 +9,9 @@ import java.util.concurrent.atomic.AtomicReference
  * current UniFFI transfer. Stop and begin racing invoke the stop callback at
  * most once; the native worker performs durable retryable settlement.
  */
-internal class ForegroundWorkerOwnership {
+internal class ForegroundWorkerOwnership(
+    private val onStopFailure: () -> Unit = {},
+) {
     private val stopped = AtomicBoolean(false)
     private val activeStop = AtomicReference<(() -> Unit)?>(null)
 
@@ -20,7 +22,7 @@ internal class ForegroundWorkerOwnership {
         if (stopped.get()) return false
         if (!activeStop.compareAndSet(null, stopWorker)) return false
         if (stopped.get()) {
-            activeStop.getAndSet(null)?.invoke()
+            activeStop.getAndSet(null)?.let(::signalStop)
             return false
         }
         return true
@@ -32,6 +34,17 @@ internal class ForegroundWorkerOwnership {
 
     fun stop() {
         stopped.set(true)
-        activeStop.getAndSet(null)?.invoke()
+        activeStop.getAndSet(null)?.let(::signalStop)
+    }
+
+    private fun signalStop(stopWorker: () -> Unit) {
+        // Service timeout, teardown, and stop commands run on Android callbacks.
+        // A generated native-gateway failure must not escape and crash the app.
+        // The callback is already removed, so no stop signal is duplicated.
+        try {
+            stopWorker()
+        } catch (_: Exception) {
+            onStopFailure()
+        }
     }
 }
