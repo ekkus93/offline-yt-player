@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
@@ -429,8 +433,10 @@ private fun LibraryItemRow(
 
 @Composable
 private fun LibraryDetailsPanel(details: CoreLibraryDetails, onClose: () -> Unit) {
+    // Bound the non-weighted panel height so a large asset list cannot
+    // consume the whole Library screen and strand its Close action.
     Column(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
     ) {
         Text("Library details")
@@ -444,9 +450,12 @@ private fun LibraryDetailsPanel(details: CoreLibraryDetails, onClose: () -> Unit
         if (details.assets.isEmpty()) {
             Text("No managed local assets are recorded.")
         } else {
-            details.assets.forEach { asset ->
+            details.assets.take(64).forEach { asset ->
                 val integrity = if (asset.hasSha256) "SHA-256 recorded" else "size/path validation"
                 Text("Asset: ${SourceMetadataPolicy.diagnostic("${asset.kind} · ${asset.relativePath} · ${asset.bytes} bytes · ${asset.mimeType ?: "unknown MIME"} · $integrity")}")
+            }
+            if (details.assets.size > 64) {
+                Text("Showing the first 64 of ${details.assets.size} recorded assets.")
             }
         }
         OutlinedButton(

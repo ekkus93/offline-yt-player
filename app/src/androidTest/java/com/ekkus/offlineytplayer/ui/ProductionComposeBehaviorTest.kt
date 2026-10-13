@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.media3.common.MimeTypes
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway
@@ -486,6 +487,54 @@ class ProductionComposeBehaviorTest {
         }
         compose.onNodeWithText("Authorization: [REDACTED]").assertIsDisplayed()
         compose.onNodeWithText(secret, substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun libraryDetailsWithManyAssetsKeepsCloseActionScrollableAndReachable() {
+        val details = RecordingLibraryDetailsGateway(
+            overriddenDetails = CoreLibraryDetails(
+                itemId = "item-1",
+                provider = "fixture",
+                mediaId = "large-asset-list",
+                canonicalUrl = null,
+                displayTitle = "Fixture video",
+                durationMs = 42_000,
+                qualityLabel = "720p",
+                completed = true,
+                playbackPositionMs = 0,
+                totalBytes = 100_000,
+                assets = (0 until 80).map { index ->
+                    CoreLibraryDetailAsset(
+                        assetId = "asset-$index",
+                        kind = "video",
+                        relativePath = "media/fixture-$index.mp4",
+                        bytes = 1_000,
+                        mimeType = "video/mp4",
+                        hasSha256 = true,
+                    )
+                },
+            ),
+        )
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
+                ),
+                detailsGatewayProvider = { details },
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Details").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching { compose.onNodeWithText("Library details").assertExists() }.isSuccess
+        }
+        compose.onNodeWithText("Showing the first 64 of 80 recorded assets.").assertExists()
+        compose.onNodeWithText("Close details").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Close details").performClick()
+        compose.onNodeWithText("Library details").assertDoesNotExist()
     }
 
     @Test
