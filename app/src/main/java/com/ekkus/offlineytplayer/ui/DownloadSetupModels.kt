@@ -1,5 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
+import java.net.URI
+
 internal data class DownloadSetupState(
     val sourceUrl: String,
     val title: String,
