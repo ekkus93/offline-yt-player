@@ -8,6 +8,8 @@ internal object SourceMetadataPolicy {
     const val MaxDescriptionChars = 4096
     const val MaxQualityLabelChars = 128
     const val MaxDiagnosticChars = 512
+    // Bound CPU and allocation before running URL/header regexes over provider-controlled text.
+    private const val MaxRawPresentationChars = 65_536
 
     // Protocol-relative and fully percent-encoded HTTP(S) URLs may carry signed tokens.
     private val urlPattern = Regex("(?:https?://|(?<![\\w:])//|https?%3a%2f%2f)[^\\s]+", RegexOption.IGNORE_CASE)
@@ -15,16 +17,20 @@ internal object SourceMetadataPolicy {
     // Reject credential-looking or nested-URL paths instead of echoing them to UI/export.
     private val unsafeUrlPathPattern = Regex("(?i)(?:https?(?:://|%3a)|@|%40)")
 
-    fun title(value: String): String = sanitize(redactDiagnosticHeaders(value), MaxTitleChars, "Untitled video")
+    fun title(value: String): String = present(value, MaxTitleChars, "Untitled video")
 
-    fun channel(value: String): String = sanitize(redactDiagnosticHeaders(value), MaxChannelChars, "Unknown channel")
+    fun channel(value: String): String = present(value, MaxChannelChars, "Unknown channel")
 
-    fun description(value: String): String = sanitize(redactDiagnosticHeaders(value), MaxDescriptionChars, "No description")
+    fun description(value: String): String = present(value, MaxDescriptionChars, "No description")
 
-    fun qualityLabel(value: String): String = sanitize(redactDiagnosticHeaders(value), MaxQualityLabelChars, "Unknown quality")
+    fun qualityLabel(value: String): String = present(value, MaxQualityLabelChars, "Unknown quality")
 
-    fun diagnostic(value: String): String =
-        sanitize(redactDiagnosticHeaders(value), MaxDiagnosticChars, "Unknown error")
+    fun diagnostic(value: String): String = present(value, MaxDiagnosticChars, "Unknown error")
+
+    /** Oversized untrusted strings fail closed before expensive regex scans or line copies. */
+    private fun present(value: String, maxChars: Int, fallback: String): String =
+        if (value.length > MaxRawPresentationChars) fallback
+        else sanitize(redactDiagnosticHeaders(value), maxChars, fallback)
 
     /** Preserve useful context, but never allow FFI/provider HTTP header values into Compose. */
     private val sensitiveHeaderPattern =

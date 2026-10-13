@@ -130,6 +130,21 @@ class SourceMetadataPolicyTest {
         )
     }
 
+    @Test fun oversizedUntrustedTextFailsClosedBeforePresentationRedaction() {
+        val marker = "PRIVATE_RAW_OVERFLOW_1802"
+        val oversized = "https://user:$marker@cdn.example/video?sig=$marker" +
+            "x".repeat(100_000)
+        assertEquals("Untitled video", SourceMetadataPolicy.title(oversized))
+        assertEquals("Unknown channel", SourceMetadataPolicy.channel(oversized))
+        assertEquals("No description", SourceMetadataPolicy.description(oversized))
+        assertEquals("Unknown quality", SourceMetadataPolicy.qualityLabel(oversized))
+        assertEquals("Unknown error", SourceMetadataPolicy.diagnostic(oversized))
+        // Normal-size signed metadata must still be redacted, not blanket-rejected.
+        val ordinary = SourceMetadataPolicy.title("Preview https://cdn.example/video?sig=$marker")
+        assertTrue(ordinary.contains("video?REDACTED"))
+        assertFalse(ordinary.contains(marker))
+    }
+
     @Test fun ordinaryDiagnosticTextIsPreserved() {
         assertEquals("download failed: connection reset", SourceMetadataPolicy.diagnostic("download failed: connection reset"))
     }
