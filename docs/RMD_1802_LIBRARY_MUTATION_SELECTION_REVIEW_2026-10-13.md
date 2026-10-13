@@ -1,0 +1,3 @@
+# RMD-1802 Library mutation selection race
+
+Independent review of `ui/LibraryDownloads.kt` found that an asynchronous Rename or Remove completion checks repository identity but not whether the user has selected a different row while the gateway call is pending. A late completion may dismiss the newer rename form or remove confirmation. Required remediation: guard mutation callbacks with a per-selection generation, add packaged Compose tests for delayed rename and remove gateway results, and qualify the exact implementation head with the full required CI matrix. This finding does not close RMD-1802, RMD-1803, or engineering closeout.
