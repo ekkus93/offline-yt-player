@@ -164,8 +164,7 @@ fn redact_url_token(token: &str) -> String {
     ]
     .into_iter()
     .flatten()
-    .min()
-    else {
+    .min() else {
         return token.to_string();
     };
     let (prefix, url_and_suffix) = token.split_at(start);
@@ -219,7 +218,9 @@ fn redact_url_token(token: &str) -> String {
                 url.set_fragment(Some("REDACTED"));
             }
             let display = if scheme_relative {
-                url.as_str().strip_prefix("https:").unwrap_or("[REDACTED_URL]")
+                url.as_str()
+                    .strip_prefix("https:")
+                    .unwrap_or("[REDACTED_URL]")
             } else {
                 url.as_str()
             };
