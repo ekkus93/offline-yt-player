@@ -747,6 +747,56 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun libraryAndDownloadRowsRedactPersistedProviderMetadataInRealCompose() {
+        val marker = "RMD1802_ROW_PRIVATE_TOKEN"
+        val signedUrl = "https://cdn.example/media?sig=$marker"
+        val sanitizedUrl = "https://cdn.example/media?REDACTED"
+
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Library $signedUrl", "Details $signedUrl")),
+                ),
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Library $sanitizedUrl").assertIsDisplayed()
+        compose.onNodeWithText("Details $sanitizedUrl").assertIsDisplayed()
+        compose.onNodeWithText(marker, substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Remove").performClick()
+        compose.onNodeWithText(marker, substring = true).assertDoesNotExist()
+
+        val controls = FakeDownloadControlGateway()
+        compose.setContent {
+            DownloadsScreen(
+                state = DownloadsScreenState.Ready(
+                    listOf(
+                        DownloadRowModel(
+                            id = "job-1",
+                            title = "Download $signedUrl",
+                            state = DownloadUiState.Active,
+                            percent = 25,
+                            size = "Size $signedUrl",
+                            stateLabel = "Status $signedUrl",
+                            speedLabel = "Speed $signedUrl",
+                            etaLabel = "ETA $signedUrl",
+                        ),
+                    ),
+                ),
+                controlGateway = controls,
+            )
+        }
+        compose.onNodeWithText("Download $sanitizedUrl").assertIsDisplayed()
+        compose.onNodeWithText(marker, substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Pause").performClick()
+        compose.runOnIdle { assertEquals(listOf("job-1"), controls.pausedJobIds) }
+        compose.onNodeWithText(marker, substring = true).assertDoesNotExist()
+    }
+
+    @Test
     fun libraryDetailsWithManyAssetsKeepsCloseActionScrollableAndReachable() {
         val details = RecordingLibraryDetailsGateway(
             overriddenDetails = CoreLibraryDetails(

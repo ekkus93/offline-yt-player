@@ -132,11 +132,11 @@ internal object DownloadScreenPolicy {
         -> emptyList()
     }
     fun detail(row: DownloadRowModel) = listOf(
-        row.stateLabel,
+        SourceMetadataPolicy.diagnostic(row.stateLabel),
         "${row.percent.coerceIn(0, 100)}%",
-        row.size,
-        row.speedLabel,
-        row.etaLabel,
+        SourceMetadataPolicy.diagnostic(row.size),
+        SourceMetadataPolicy.diagnostic(row.speedLabel),
+        SourceMetadataPolicy.diagnostic(row.etaLabel),
     ).joinToString(" · ")
 }
 
@@ -240,7 +240,7 @@ internal fun LibraryScreen(
             }
         }
         pendingRemove?.let { row ->
-            Text("Remove ${row.title} and its owned local assets? This cannot be undone.")
+            Text("Remove ${SourceMetadataPolicy.title(row.title)} and its owned local assets? This cannot be undone.")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
                 OutlinedButton(
                     onClick = { pendingRemove = null },
@@ -265,7 +265,7 @@ internal fun LibraryScreen(
                                     return@launch
                                 }
                                 message = result.error?.let { "Remove failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
-                                    ?: if (result.value == true) "Removed ${row.title} and its owned local assets." else "Remove did not change the item."
+                                    ?: if (result.value == true) "Removed ${SourceMetadataPolicy.title(row.title)} and its owned local assets." else "Remove did not change the item."
                                 if (result.error == null && result.value == true) pendingRemove = null
                             }
                         }
@@ -310,9 +310,9 @@ internal fun LibraryScreen(
                                 // A summary row is not authoritative repository details.
                                 // Never present cached preview text as successful detail retrieval.
                                 selectedDetails = null
-                                message = "Library details are unavailable for ${row.title}."
+                                message = "Library details are unavailable for ${SourceMetadataPolicy.title(row.title)}."
                             } else {
-                                message = "Loading details for ${row.title}…"
+                                message = "Loading details for ${SourceMetadataPolicy.title(row.title)}…"
                                 scope.launch {
                                     val result = try {
                                         withContext(Dispatchers.IO) { gateway.getDetails(row.id) }
@@ -320,21 +320,21 @@ internal fun LibraryScreen(
                                         throw cancelled
                                     } catch (_: Exception) {
                                         if (requestGeneration == detailsRequestGeneration) {
-                                            message = "Library details are unavailable for ${row.title}."
+                                            message = "Library details are unavailable for ${SourceMetadataPolicy.title(row.title)}."
                                         }
                                         return@launch
                                     }
                                     if (requestGeneration != detailsRequestGeneration) return@launch
                                     message = when {
                                         result.error != null -> "Library details failed: ${SourceMetadataPolicy.diagnostic(result.error.message)}"
-                                        result.value == null -> "Library details are unavailable for ${row.title}."
-                                        result.value.itemId != row.id -> "Library details are unavailable for ${row.title}."
+                                        result.value == null -> "Library details are unavailable for ${SourceMetadataPolicy.title(row.title)}."
+                                        result.value.itemId != row.id -> "Library details are unavailable for ${SourceMetadataPolicy.title(row.title)}."
                                         else -> libraryDetailsSummary(result.value).also { selectedDetails = result.value }
                                     }
                                 }
                             }
                         },
-                        { row -> renameRow = row; renameTitle = row.title; pendingRemove = null },
+                        { row -> renameRow = row; renameTitle = SourceMetadataPolicy.title(row.title); pendingRemove = null },
                         { row -> pendingRemove = row; renameRow = null },
                     )
                 }
@@ -430,8 +430,8 @@ private fun LibraryItemRow(
     val asset = LibraryPlaybackRoute.assetFor(item)
     val unavailableReason = LibraryPlaybackRoute.unavailableReason(item)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-        Text(item.title)
-        Text(item.detail)
+        Text(SourceMetadataPolicy.title(item.title))
+        Text(SourceMetadataPolicy.diagnostic(item.detail))
         unavailableReason?.let { Text(it) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             Button(onClick = { asset?.let(onPlay) }, enabled = asset != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Play") }
@@ -519,7 +519,7 @@ internal fun DownloadsScreen(
                                 { action ->
                                     val gateway = controlGateway
                                     if (gateway == null) {
-                                        message = "Download control gateway is not connected for ${row.title}."
+                                        message = "Download control gateway is not connected for ${SourceMetadataPolicy.title(row.title)}."
                                     } else {
                                         // UniFFI download controls reject Android main-thread calls.
                                         // Only publish the result back to Compose after the IO dispatch.
@@ -530,14 +530,14 @@ internal fun DownloadsScreen(
                                                 }.getOrDefault(false)
                                             }
                                             message = if (updated) {
-                                                "${action.name} requested for ${row.title}."
+                                                "${action.name} requested for ${SourceMetadataPolicy.title(row.title)}."
                                             } else {
-                                                "${action.name} failed for ${row.title}."
+                                                "${action.name} failed for ${SourceMetadataPolicy.title(row.title)}."
                                             }
                                         }
                                     }
                                 },
-                                { selected -> message = "${selected.title}: ${DownloadScreenPolicy.detail(selected)}" },
+                                { selected -> message = "${SourceMetadataPolicy.title(selected.title)}: ${DownloadScreenPolicy.detail(selected)}" },
                             )
                         }
                     }
@@ -548,7 +548,7 @@ internal fun DownloadsScreen(
 }
 @Composable private fun DownloadRow(row: DownloadRowModel, onAction: (DownloadRowAction) -> Unit, onDetails: (DownloadRowModel) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
-        Text(row.title)
+        Text(SourceMetadataPolicy.title(row.title))
         Text(DownloadScreenPolicy.detail(row))
         row.error?.let { Text("Error: ${SourceMetadataPolicy.diagnostic(it)}") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
