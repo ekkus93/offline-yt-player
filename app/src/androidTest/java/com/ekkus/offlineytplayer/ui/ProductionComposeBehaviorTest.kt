@@ -294,6 +294,80 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun libraryRepositoryChangeDropsDelayedDetailsAndRenameControls() {
+        val requested = CountDownLatch(1)
+        val unblock = CountDownLatch(1)
+        val returned = CountDownLatch(1)
+        val gateway = object : AppLibraryDetailsGateway {
+            override fun getDetails(itemId: String): CoreGatewayResult<CoreLibraryDetails?> {
+                requested.countDown()
+                check(unblock.await(30, TimeUnit.SECONDS))
+                returned.countDown()
+                return CoreGatewayResult(CoreLibraryDetails(
+                    itemId = itemId, provider = "fixture", mediaId = itemId,
+                    canonicalUrl = null, displayTitle = "Private stale metadata",
+                    durationMs = 42_000, qualityLabel = "720p", completed = true,
+                    playbackPositionMs = 0, totalBytes = 1234, assets = emptyList(),
+                ), null)
+            }
+            override fun close() = Unit
+        }
+        var repository by mutableStateOf<LibraryScreenState>(LibraryScreenState.Ready(
+            listOf(LibraryRowModel("old", "Old video", "720p")),
+        ))
+        compose.setContent {
+            LibraryScreen(onAdd = {}, onPlay = {}, state = repository,
+                detailsGatewayProvider = { gateway }, onUpdateSettings = {}, onQueryChanged = {})
+        }
+        try {
+            compose.onNodeWithText("Details").performClick()
+            assertTrue(requested.await(5, TimeUnit.SECONDS))
+            compose.onNodeWithText("Rename").performClick()
+            compose.onNodeWithText("Cancel rename").assertIsDisplayed()
+            compose.runOnIdle { repository = LibraryScreenState.Unavailable("Repository disconnected") }
+            compose.onNodeWithText("Repository disconnected").assertIsDisplayed()
+            compose.onNodeWithText("Cancel rename").assertDoesNotExist()
+            compose.onNodeWithText("Save rename").assertDoesNotExist()
+            compose.onNodeWithText("Library details").assertDoesNotExist()
+            compose.runOnIdle { repository = LibraryScreenState.Ready(
+                listOf(LibraryRowModel("new", "New video", "1080p")),
+            ) }
+            compose.onNodeWithText("New video").assertIsDisplayed()
+            unblock.countDown()
+            assertTrue(returned.await(5, TimeUnit.SECONDS))
+            compose.waitForIdle()
+            compose.onNodeWithText("Private stale metadata").assertDoesNotExist()
+            compose.onNodeWithText("Library details").assertDoesNotExist()
+            compose.onNodeWithText("Loading details for Old video…").assertDoesNotExist()
+        } finally { unblock.countDown() }
+    }
+
+    @Test
+    fun libraryRowRemovalFromReadyClearsOpenDetailsAndRemoveControls() {
+        var repository by mutableStateOf<LibraryScreenState>(LibraryScreenState.Ready(
+            listOf(LibraryRowModel("old", "Old video", "720p")),
+        ))
+        val gateway = RecordingLibraryDetailsGateway()
+        compose.setContent {
+            LibraryScreen(onAdd = {}, onPlay = {}, state = repository,
+                detailsGatewayProvider = { gateway }, onUpdateSettings = {}, onQueryChanged = {})
+        }
+        compose.onNodeWithText("Details").performClick()
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithText("Library details").assertIsDisplayed() }.isSuccess
+        }
+        compose.onNodeWithText("Remove").performClick()
+        compose.onNodeWithText("Confirm remove").assertIsDisplayed()
+        compose.runOnIdle { repository = LibraryScreenState.Ready(
+            listOf(LibraryRowModel("new", "New video", "1080p")),
+        ) }
+        compose.onNodeWithText("New video").assertIsDisplayed()
+        compose.onNodeWithText("Library details").assertDoesNotExist()
+        compose.onNodeWithText("Confirm remove").assertDoesNotExist()
+        compose.onNodeWithText("Cancel remove").assertDoesNotExist()
+    }
+
+    @Test
     fun library_rename_and_remove_actions_use_repository_mutations_after_confirmation() {
         val mutations = RecordingLibraryMutationGateway()
         compose.setContent {

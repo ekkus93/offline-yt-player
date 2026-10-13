@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -162,7 +163,20 @@ internal fun LibraryScreen(
     var renameTitle by rememberSaveable { mutableStateOf("") }
     var pendingRemove by remember { mutableStateOf<LibraryRowModel?>(null) }
     LaunchedEffect(query) { onQueryChanged(query) }
+    val isReady = state is LibraryScreenState.Ready
     val readyRows = (state as? LibraryScreenState.Ready)?.rows.orEmpty()
+    val readyIds = readyRows.mapTo(mutableSetOf()) { it.id }
+    // Readiness and row-membership transitions invalidate older gateway callbacks.
+    val repositoryToken = remember(isReady, readyIds) { Any() }
+    val currentRepositoryToken by rememberUpdatedState(repositoryToken)
+    LaunchedEffect(repositoryToken) {
+        detailsRequestGeneration += 1
+        selectedDetails = null
+        renameRow = null
+        renameTitle = ""
+        pendingRemove = null
+        message = null
+    }
     val visibleItems = readyRows.filter { it.matchesLibraryQuery(query) }
     Column(
         Modifier.fillMaxSize().padding(MidnightTransit.ScreenSpacing),
@@ -193,10 +207,10 @@ internal fun LibraryScreen(
         }
         Text("Filter: All · ${layout.name}")
         message?.let { Text(it) }
-        selectedDetails?.let { details ->
+        selectedDetails?.takeIf { isReady && it.itemId in readyIds }?.let { details ->
             LibraryDetailsPanel(details) { selectedDetails = null }
         }
-        renameRow?.let { row ->
+        renameRow?.takeIf { isReady && it.id in readyIds }?.let { row ->
             OutlinedTextField(
                 value = renameTitle,
                 onValueChange = { renameTitle = it },
@@ -224,6 +238,7 @@ internal fun LibraryScreen(
                                     message = "Library rename is unavailable."
                                     return@launch
                                 }
+                                if (repositoryToken !== currentRepositoryToken) return@launch
                                 message = result.error?.let { "Rename failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
                                     ?: result.value?.let { "Renamed to ${SourceMetadataPolicy.title(it)}." }
                                     ?: "Rename did not change the item."
@@ -239,7 +254,7 @@ internal fun LibraryScreen(
                 ) { Text("Save rename") }
             }
         }
-        pendingRemove?.let { row ->
+        pendingRemove?.takeIf { isReady && it.id in readyIds }?.let { row ->
             Text("Remove ${SourceMetadataPolicy.title(row.title)} and its owned local assets? This cannot be undone.")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
                 OutlinedButton(
@@ -264,6 +279,7 @@ internal fun LibraryScreen(
                                     message = "Library removal is unavailable."
                                     return@launch
                                 }
+                                if (repositoryToken !== currentRepositoryToken) return@launch
                                 message = result.error?.let { "Remove failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
                                     ?: if (result.value == true) "Removed ${SourceMetadataPolicy.title(row.title)} and its owned local assets." else "Remove did not change the item."
                                 if (result.error == null && result.value == true) {
@@ -325,12 +341,14 @@ internal fun LibraryScreen(
                                     } catch (cancelled: CancellationException) {
                                         throw cancelled
                                     } catch (_: Exception) {
-                                        if (requestGeneration == detailsRequestGeneration) {
+                                        if (requestGeneration == detailsRequestGeneration &&
+                                            repositoryToken === currentRepositoryToken) {
                                             message = "Library details are unavailable for ${SourceMetadataPolicy.title(row.title)}."
                                         }
                                         return@launch
                                     }
-                                    if (requestGeneration != detailsRequestGeneration) return@launch
+                                    if (requestGeneration != detailsRequestGeneration ||
+                                        repositoryToken !== currentRepositoryToken) return@launch
                                     message = when {
                                         result.error != null -> "Library details failed: ${SourceMetadataPolicy.diagnostic(result.error.message)}"
                                         result.value == null -> "Library details are unavailable for ${SourceMetadataPolicy.title(row.title)}."
