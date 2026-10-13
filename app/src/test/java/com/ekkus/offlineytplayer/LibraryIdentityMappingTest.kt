@@ -103,6 +103,38 @@ class LibraryIdentityMappingTest {
         }
     }
 
+    @Test fun symlinkedLibraryRootCannotResolveExternalPlaybackAssets() {
+        val container = java.nio.file.Files.createTempDirectory("playback-root-container").toFile()
+        val externalRoot = java.nio.file.Files.createTempDirectory("playback-external-root").toFile()
+        val linkedRoot = File(container, "library-link")
+        val externalAsset = File(externalRoot, "video.mp4")
+        try {
+            externalAsset.writeBytes(byteArrayOf(10, 20, 30))
+            java.nio.file.Files.createSymbolicLink(linkedRoot.toPath(), externalRoot.toPath())
+            val mapped = CoreGatewayResult(value = listOf(item("one")), error = null)
+                .toLibraryScreenState(linkedRoot, CoreGatewayResult(value = listOf(
+                    CoreLibraryPlaybackAsset("one", "video.mp4", null, true, null),
+                ), error = null))
+            assertTrue(mapped is LibraryScreenState.Failed)
+            assertTrue(safeLocalPlaybackPath(linkedRoot, "video.mp4") == null)
+            assertTrue(externalAsset.readBytes().contentEquals(byteArrayOf(10, 20, 30)))
+        } finally {
+            linkedRoot.delete()
+            externalAsset.delete()
+            externalRoot.delete()
+            container.delete()
+        }
+    }
+
+    @Test fun regularFileCannotServeAsPlaybackLibraryRoot() {
+        val root = java.nio.file.Files.createTempFile("playback-root-file", ".tmp").toFile()
+        try {
+            assertTrue(safeLocalPlaybackPath(root, "video.mp4") == null)
+        } finally {
+            root.delete()
+        }
+    }
+
     @Test fun validNestedPlaybackPathStaysWithinLibraryRoot() {
         val root = java.nio.file.Files.createTempDirectory("playback-root").toFile()
         try {

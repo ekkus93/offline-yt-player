@@ -342,6 +342,12 @@ internal fun CoreGatewayResult<List<CoreLibraryItem>>.toLibraryScreenState(
 internal fun safeLocalPlaybackPath(libraryRoot: File, relativePath: String): String? {
     if (relativePath.isBlank() || relativePath.contains(Char(0)) || File(relativePath).isAbsolute) return null
     return runCatching {
+        // canonicalFile follows a linked library root into arbitrary external storage.
+        // Reject the supplied root itself before canonicalization, just as transfer
+        // and deletion paths must fail closed for an unowned library root.
+        if (java.nio.file.Files.isSymbolicLink(libraryRoot.toPath()) ||
+            !java.nio.file.Files.isDirectory(libraryRoot.toPath())
+        ) return@runCatching null
         val root = libraryRoot.canonicalFile
         val relative = File(relativePath).toPath()
         // Canonical containment alone permits symlinks to another library item
