@@ -314,7 +314,10 @@ mod tests {
             "video.mp4"
         );
         assert_eq!(sanitize_filename("   ...  "), "untitled");
-        assert_eq!(sanitize_filename(&format!("{} name {}", char::from(9), char::from(10))), "_ name _");
+        assert_eq!(
+            sanitize_filename(&format!("{} name {}", char::from(9), char::from(10))),
+            "_ name _"
+        );
         assert_eq!(sanitize_filename("  video.mp4  "), "video.mp4");
         assert_eq!(
             sanitize_filename(&format!("{}  ", "x".repeat(180))),
