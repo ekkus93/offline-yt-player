@@ -190,6 +190,36 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
+    fun uidtStopNativeFailureCannotCrashJobServiceOrSettleRevokedAttempt() {
+        var stopSignals = 0
+        var boundedFailureReports = 0
+        var settlements = 0
+        val attempt = UidtJobAttempt(
+            stopNative = {
+                stopSignals++
+                throw IllegalStateException("synthetic sensitive gateway failure")
+            },
+            onStopFailure = { boundedFailureReports++ },
+        )
+
+        assertTrue(attempt.stop())
+        assertFalse(attempt.stop())
+        assertFalse(attempt.finishIfRunning { settlements++ })
+        assertEquals(1, stopSignals)
+        assertEquals(1, boundedFailureReports)
+        assertEquals(0, settlements)
+
+        var successfulStopFailures = 0
+        val successfulAttempt = UidtJobAttempt(
+            stopNative = { stopSignals++ },
+            onStopFailure = { successfulStopFailures++ },
+        )
+        assertTrue(successfulAttempt.stop())
+        assertEquals(2, stopSignals)
+        assertEquals(0, successfulStopFailures)
+    }
+
+    @Test
     fun completedAttemptCannotBeStoppedOrSettledAgain() {
         var stopSignals = 0
         var settlements = 0

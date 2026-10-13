@@ -235,7 +235,10 @@ internal fun runAndSettleDownloadJobSafely(
  * framework can revoke an attempt before its worker returns; a late worker
  * must never call jobFinished on already-stopped parameters.
  */
-internal class UidtJobAttempt(private val stopNative: () -> Unit = {}) {
+internal class UidtJobAttempt(
+    private val stopNative: () -> Unit = {},
+    private val onStopFailure: () -> Unit = {},
+) {
     private enum class State { Running, Stopped, Finished }
     private var state = State.Running
     private val workerExited = CountDownLatch(1)
@@ -261,7 +264,14 @@ internal class UidtJobAttempt(private val stopNative: () -> Unit = {}) {
         // The platform callback must not hold attempt ownership while
         // signaling a synchronous native worker. A racing completion observes
         // Stopped immediately, even if the native stop call is delayed.
-        stopNative()
+        // A UniFFI/SQLite failure while signaling a stop must not escape an
+        // Android JobService callback and crash the process. Ownership is
+        // already Stopped, so a late worker cannot settle a revoked job.
+        try {
+            stopNative()
+        } catch (_: Exception) {
+            onStopFailure()
+        }
         return true
     }
 
@@ -352,7 +362,15 @@ class DownloadUserInitiatedJobService : JobService() {
             return false
         }
         val execution = DownloadWorkerExecution()
-        val attempt = UidtJobAttempt { execution.requestStop() }
+        val attempt = UidtJobAttempt(
+            stopNative = { execution.requestStop() },
+            onStopFailure = {
+                android.util.Log.w(
+                    "OfflineYTDownload",
+                    "UIDT stop signal failed unexpectedly; durable startup recovery required",
+                )
+            },
+        )
         // JobScheduler may reschedule while a stopped UniFFI call is unwinding.
         // Chain attempts rather than discarding the replacement or overlapping
         // writers against the same durable queue and partial asset.
