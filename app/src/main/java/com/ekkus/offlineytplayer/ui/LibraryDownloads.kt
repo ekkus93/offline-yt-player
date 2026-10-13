@@ -302,7 +302,10 @@ internal fun LibraryScreen(
                         { row ->
                             val gateway = detailsGatewayProvider()
                             if (gateway == null) {
-                                message = "${row.title}: ${row.detail}"
+                                // A summary row is not authoritative repository details.
+                                // Never present cached preview text as successful detail retrieval.
+                                selectedDetails = null
+                                message = "Library details are unavailable for ${row.title}."
                             } else {
                                 message = "Loading details for ${row.title}…"
                                 scope.launch {

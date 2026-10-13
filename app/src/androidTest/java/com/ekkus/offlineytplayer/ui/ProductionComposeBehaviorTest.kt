@@ -76,7 +76,9 @@ class ProductionComposeBehaviorTest {
         }
         compose.onNodeWithText("Fixture video").assertIsDisplayed()
         compose.onNodeWithText("Details").performClick()
-        compose.onNodeWithText("Fixture video: 720p · 0:42").assertIsDisplayed()
+        compose.onNodeWithText("Library details are unavailable for Fixture video.").assertIsDisplayed()
+        compose.onNodeWithText("Fixture video: 720p · 0:42").assertDoesNotExist()
+        compose.onNodeWithText("Library details").assertDoesNotExist()
     }
 
 
