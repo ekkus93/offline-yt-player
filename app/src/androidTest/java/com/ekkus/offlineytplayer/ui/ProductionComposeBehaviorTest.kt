@@ -268,6 +268,40 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun downloadSetupDoesNotRenderSignedResolvedSourceUrlsOrIdentityTokens() {
+        val marker = "RMD1802_SETUP_PRIVATE_MARKER"
+        val source = FakeSourceAnalysisGateway(
+            analysis = CoreSourceAnalysis(
+                sourceUrl = "https://youtu.be/dQw4w9WgXcQ?token=$marker",
+                title = "Sensitive source",
+                durationMs = 4_000L,
+                thumbnailUrl = null,
+                qualityLabel = "720p",
+                estimatedBytes = 10L,
+                qualityOptions = listOf(CoreSourceQualityChoice("720p", 10L, "video-720p")),
+                sourceProvider = "fixture",
+                sourceMediaId = "https://example.test/id?token=$marker",
+            ),
+        )
+        compose.setContent {
+            OfflineYTPlayerApp(
+                initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ",
+                sourceAnalysisGateway = source,
+                downloadControlGateway = FakeDownloadControlGateway(),
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
+        }
+        compose.onNodeWithText("Analyze").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching { compose.onNodeWithText("Sensitive source").assertIsDisplayed() }.isSuccess
+        }
+        compose.onNodeWithText("Canonical URL: https://youtu.be/dQw4w9WgXcQ?REDACTED").assertIsDisplayed()
+        compose.onNodeWithText("Source: fixture / https://example.test/id?REDACTED").assertIsDisplayed()
+        compose.onNodeWithText(marker, substring = true).assertDoesNotExist()
+    }
+
+    @Test
     fun sourceWithNoExecutableQualityDoesNotOfferEnabledDownload() {
         val controls = FakeDownloadControlGateway()
         val source = FakeSourceAnalysisGateway(
