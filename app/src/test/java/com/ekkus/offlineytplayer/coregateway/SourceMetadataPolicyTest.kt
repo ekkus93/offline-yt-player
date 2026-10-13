@@ -151,6 +151,27 @@ class SourceMetadataPolicyTest {
         )
     }
 
+    @Test fun encodedQueryAndFragmentDelimitersInUrlPathsAreRedacted() {
+        val marker = "ENCODED_PATH_PRIVATE_VALUE_1802"
+        val inputs = listOf(
+            "https://cdn.example/video%3Fsignature%3D$marker",
+            "https://cdn.example/video%23private-$marker",
+        )
+        inputs.forEach { input ->
+            val projected = listOf(
+                SourceMetadataPolicy.title("Title $input"),
+                SourceMetadataPolicy.channel("Channel $input"),
+                SourceMetadataPolicy.description("Description $input"),
+                SourceMetadataPolicy.qualityLabel("1080p $input"),
+                SourceMetadataPolicy.diagnostic("GET $input"),
+            )
+            projected.forEach { value ->
+                assertFalse(value.contains(marker))
+                assertTrue(value.contains("[REDACTED_URL]"))
+            }
+        }
+    }
+
     @Test fun oversizedUntrustedTextFailsClosedBeforePresentationRedaction() {
         val marker = "PRIVATE_RAW_OVERFLOW_1802"
         val oversized = "https://user:$marker@cdn.example/video?sig=$marker" +
