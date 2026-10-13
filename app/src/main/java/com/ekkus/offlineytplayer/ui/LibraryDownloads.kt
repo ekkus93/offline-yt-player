@@ -300,6 +300,8 @@ internal fun LibraryScreen(
                         visibleItems,
                         onPlay,
                         { row ->
+                            // Discard expanded metadata from any previously selected row.
+                            selectedDetails = null
                             val gateway = detailsGatewayProvider()
                             if (gateway == null) {
                                 // A summary row is not authoritative repository details.
@@ -320,6 +322,7 @@ internal fun LibraryScreen(
                                     message = when {
                                         result.error != null -> "Library details failed: ${SourceMetadataPolicy.diagnostic(result.error.message)}"
                                         result.value == null -> "Library details are unavailable for ${row.title}."
+                                        result.value.itemId != row.id -> "Library details are unavailable for ${row.title}."
                                         else -> libraryDetailsSummary(result.value).also { selectedDetails = result.value }
                                     }
                                 }

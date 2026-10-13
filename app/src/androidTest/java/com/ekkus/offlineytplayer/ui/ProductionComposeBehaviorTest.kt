@@ -152,6 +152,47 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun libraryDetailsRejectsGatewayRecordForDifferentItem() {
+        val gateway = RecordingLibraryDetailsGateway(
+            overriddenDetails = CoreLibraryDetails(
+                itemId = "another-private-item",
+                provider = "fixture",
+                mediaId = "other-id",
+                canonicalUrl = null,
+                displayTitle = "Different private video",
+                durationMs = 999_000,
+                qualityLabel = "4K",
+                completed = true,
+                playbackPositionMs = 0,
+                totalBytes = 654_321,
+                assets = emptyList(),
+            ),
+        )
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
+                ),
+                detailsGatewayProvider = { gateway },
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Details").performClick()
+        compose.waitUntil(5_000) {
+            runCatching {
+                compose.onNodeWithText("Library details are unavailable for Fixture video.")
+                    .assertIsDisplayed()
+            }.isSuccess
+        }
+        compose.onNodeWithText("Different private video").assertDoesNotExist()
+        compose.onNodeWithText("Library details").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(listOf("item-1"), gateway.requestedIds) }
+    }
+
+    @Test
     fun library_rename_and_remove_actions_use_repository_mutations_after_confirmation() {
         val mutations = RecordingLibraryMutationGateway()
         compose.setContent {
