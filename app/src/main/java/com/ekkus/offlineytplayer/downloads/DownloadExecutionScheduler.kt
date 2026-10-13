@@ -236,8 +236,8 @@ internal fun runAndSettleDownloadJobSafely(
  * must never call jobFinished on already-stopped parameters.
  */
 internal class UidtJobAttempt(
-    private val stopNative: () -> Unit = {},
     private val onStopFailure: () -> Unit = {},
+    private val stopNative: () -> Unit = {},
 ) {
     private enum class State { Running, Stopped, Finished }
     private var state = State.Running
