@@ -400,6 +400,7 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-702 — Make Analyze use the production source pipeline
 
 
+
 - [x] Remove fabricated preview metadata from production path.
 - [x] Validate via shared hardened policy.
 - [x] Call production source-analysis gateway.
@@ -798,6 +799,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Capture Settings hub.
 - [x] Capture at least one smallest-supported portrait case.
 
+
 - [x] Capture representative large-font cases.
 - [x] Fail tests on unintended golden changes.
 
@@ -1158,6 +1160,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 Library Details mismatched identity rejection (2026-10-13; qualification pending):** independent Android gateway integrity review found `LibraryScreen` displayed any successful `getDetails(row.id)` result without confirming that `CoreLibraryDetails.itemId` matched the selected row. An inconsistent/malformed gateway reply could expose details from another Library item and falsely represent its identity. The production callback now clears previously expanded details and fails closed with the existing unavailable message when the returned ID differs (including blank IDs); the normal success and error branches remain unchanged. Packaged `ProductionComposeBehaviorTest.libraryDetailsRejectsGatewayRecordForDifferentItem` opens Details for one rendered row, injects a record for another ID through the actual gateway path, and asserts that no foreign title or panel is rendered while the requested ID remains correct. See `docs/RMD_1802_LIBRARY_DETAILS_IDENTITY_VALIDATION_2026-10-13.md`. Source/test changes alone are not RMD-1802/1803/1805 or global closeout; full exact-head qualification and independent review remain mandatory.
 
+**RMD-1802 superseded Library Details request review (2026-10-13; exact-head qualification pending):** `LibraryScreen` previously accepted late `AppLibraryDetailsGateway.getDetails` completions without checking whether the user had selected a different Library row. A slow earlier request could overwrite newer details even when its returned ID matched its own originally requested row. The production callback now ignores stale success and error results using a selection generation. Packaged `ProductionComposeBehaviorTest.libraryDetailsDoesNotPublishSupersededGatewayResponse` holds the first real gateway call until a second selection is displayed, releases the first response, and asserts the newer detail remains authoritative. See `docs/RMD_1802_LIBRARY_DETAILS_SUPERSEDED_REQUEST_REVIEW_2026-10-13.md`. This is implementation/test evidence only, not RMD-1802/1803/1805 closeout until the new exact head passes all eight workflows and the independent review is complete.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.
@@ -1197,6 +1201,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Verify the merge contains the qualified implementation.
 - [ ] Run/observe required `master` CI.
 - [ ] Record final `master` SHA and run IDs.
+
 
 ### RMD-1805 — Engineering definition of done
 
