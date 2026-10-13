@@ -70,14 +70,14 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         val choicesResult = callTwoArg(sourceService, "listChoices", normalized, token)
         readSourceError(choicesResult)?.let { return CoreGatewayResult(null, it) }
         val choices = readSourceList(choicesResult, "choices")
-        val qualityOptions = choices.map { choice ->
+        val qualityOptions = disambiguateSourceQualityLabels(choices.map { choice ->
             CoreSourceQualityChoice(
                 label = SourceMetadataPolicy.qualityLabel(readSourceString(choice, "label")),
                 estimatedBytes = readSourceNullable(choice, "estimatedBytes", "estimated_bytes")?.let(::generatedNumericAsLong),
                 choiceId = readSourceString(choice, "choiceId", "choice_id"),
                 separateAudio = readSourceRequired(choice, "separateAudio", "separate_audio") as Boolean,
             )
-        }.distinctBy { it.label }
+        })
         val sourceIdentity = readSourceRequired(media, "source")
         val subtitleOptions = readSourceList(media, "subtitleOptions", "subtitle_options").map { option ->
             CoreSourceSubtitleChoice(
@@ -123,6 +123,31 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
         fun open(): GeneratedUniffiSourceAnalysisGateway = GeneratedUniffiSourceAnalysisGateway(
             newGeneratedObject("com.ekkus.offlineytplayer.core.FfiYouTubeSourceService", "new"),
         )
+    }
+}
+
+/** Keep every distinct provider choice selectable even when human labels collide. */
+internal fun disambiguateSourceQualityLabels(
+    choices: List<CoreSourceQualityChoice>,
+): List<CoreSourceQualityChoice> {
+    // Reserve original labels first, so a generated suffix never steals the
+    // genuine label of a later provider format (e.g. \"720p (2)\").
+    val reserved = choices.map { it.label }.toSet()
+    val used = mutableSetOf<String>()
+    return choices.map { choice ->
+        val label = choice.label
+        if (used.add(label)) {
+            choice
+        } else {
+            var suffix = 2
+            var disambiguated: String
+            do {
+                disambiguated = "$label ($suffix)"
+                suffix++
+            } while (disambiguated in reserved || disambiguated in used)
+            used.add(disambiguated)
+            choice.copy(label = disambiguated)
+        }
     }
 }
 
