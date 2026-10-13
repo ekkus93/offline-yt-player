@@ -360,6 +360,58 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun libraryDetailsPanelRedactsPersistedUrlsAndAssetPaths() {
+        val secret = "RMD1802_PRIVATE_LIBRARY_DETAILS_TOKEN"
+        val details = RecordingLibraryDetailsGateway(
+            overriddenDetails = CoreLibraryDetails(
+                itemId = "item-1",
+                provider = "fixture",
+                mediaId = "provider-1",
+                canonicalUrl = "https://example.test/watch?v=42&token=$secret",
+                displayTitle = "Fixture video",
+                durationMs = 42_000,
+                qualityLabel = "720p",
+                completed = true,
+                playbackPositionMs = 0,
+                totalBytes = 1_234,
+                assets = listOf(
+                    CoreLibraryDetailAsset(
+                        assetId = "video",
+                        kind = "video",
+                        relativePath = "https://example.test/asset?token=$secret",
+                        bytes = 1_234,
+                        mimeType = "video/mp4",
+                        hasSha256 = true,
+                    ),
+                ),
+            ),
+        )
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
+                ),
+                detailsGatewayProvider = { details },
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Details").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                compose.onNodeWithText("Canonical source: https://example.test/watch?REDACTED")
+                    .assertExists()
+            }.isSuccess
+        }
+        compose.onNodeWithText(
+            "Asset: video · https://example.test/asset?REDACTED · 1234 bytes · video/mp4 · SHA-256 recorded",
+        ).assertExists()
+        compose.onNodeWithText(secret, substring = true).assertDoesNotExist()
+    }
+
+    @Test
     fun player_entry_exposes_transport_and_track_controls() {
         compose.setContent {
             OfflineYTPlayerApp(
@@ -516,13 +568,14 @@ private class FakeSourceAnalysisGateway(
 
 private class RecordingLibraryDetailsGateway(
     private val qualityLabel: String = "720p",
+    private val overriddenDetails: CoreLibraryDetails? = null,
 ) : AppLibraryDetailsGateway {
     val requestedIds = mutableListOf<String>()
 
     override fun getDetails(itemId: String): CoreGatewayResult<CoreLibraryDetails?> {
         requestedIds += itemId
         return CoreGatewayResult(
-            value = CoreLibraryDetails(
+            value = overriddenDetails ?: CoreLibraryDetails(
                 itemId = itemId,
                 provider = "fixture",
                 mediaId = "fixture-1",

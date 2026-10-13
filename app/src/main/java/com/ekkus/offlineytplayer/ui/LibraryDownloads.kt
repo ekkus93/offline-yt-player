@@ -435,8 +435,8 @@ private fun LibraryDetailsPanel(details: CoreLibraryDetails, onClose: () -> Unit
     ) {
         Text("Library details")
         Text(SourceMetadataPolicy.title(details.displayTitle))
-        Text("Source: ${details.provider} / ${details.mediaId}")
-        details.canonicalUrl?.takeIf { it.isNotBlank() }?.let { Text("Canonical source: $it") }
+        Text("Source: ${SourceMetadataPolicy.diagnostic("${details.provider} / ${details.mediaId}")}")
+        details.canonicalUrl?.takeIf { it.isNotBlank() }?.let { Text("Canonical source: ${SourceMetadataPolicy.diagnostic(it)}") }
         Text("Quality: ${SourceMetadataPolicy.qualityLabel(details.qualityLabel)}")
         Text("Duration: ${details.durationMs?.let(::formatLibraryDuration) ?: "Unknown"}")
         Text("Managed size: ${details.totalBytes} bytes")
@@ -446,7 +446,7 @@ private fun LibraryDetailsPanel(details: CoreLibraryDetails, onClose: () -> Unit
         } else {
             details.assets.forEach { asset ->
                 val integrity = if (asset.hasSha256) "SHA-256 recorded" else "size/path validation"
-                Text("Asset: ${asset.kind} · ${asset.relativePath} · ${asset.bytes} bytes · ${asset.mimeType ?: "unknown MIME"} · $integrity")
+                Text("Asset: ${SourceMetadataPolicy.diagnostic("${asset.kind} · ${asset.relativePath} · ${asset.bytes} bytes · ${asset.mimeType ?: "unknown MIME"} · $integrity")}")
             }
         }
         OutlinedButton(
