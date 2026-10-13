@@ -1131,6 +1131,8 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 library error HTTP-header leakage (2026-10-12; qualification pending):** `SourceMetadataPolicy.diagnostic`, used in real library rename/remove/details error paths, redacted signed URLs but still displayed raw Authorization/Proxy-Authorization/Cookie/Set-Cookie/X-Api-Key header values. The formatter now redacts these headers and all trailing content after sanitizing any signed URL prefix, including timestamp-prefixed diagnostics, with two new host-JVM regression tests. See `docs/RMD_1802_LIBRARY_ERROR_HEADER_REDACTION_REVIEW_2026-10-12.md`. This fix does not close RMD-1802/1803/1805; require all eight workflows on the new exact `master` and completion of independent audit before checking closeout boxes.
 
+**RMD-1802 Add/Download Setup error-presentation finding (2026-10-12; OPEN):** `OfflineYTPlayerApp` publishes a raw `AppDownloadControlGateway.enqueue` error message directly into rendered Compose status instead of passing it through `SourceMetadataPolicy.diagnostic`. The independent review documents the required production-path correction and packaged Compose regression in `docs/RMD_1802_DOWNLOAD_SETUP_ERROR_DISCLOSURE_REVIEW_2026-10-12.md`. This is an unresolved disclosure path, not a completed fix; keep RMD-1802/1803/1805 and global closeout checkboxes open until remediation, exact-head CI, and independent review are complete.
+
 - [ ] Perform a new independent code review of Rust and Android production paths.
 - [ ] Search for remaining production no-op callbacks.
 - [ ] Search for hard-coded empty/fabricated production data.
