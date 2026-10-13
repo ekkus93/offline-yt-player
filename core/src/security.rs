@@ -146,11 +146,27 @@ fn redact_urls(line: &str) -> String {
 
 fn redact_url_token(token: &str) -> String {
     let lower = token.to_ascii_lowercase();
-    let start = match (lower.find("http://"), lower.find("https://")) {
-        (Some(http), Some(https)) => http.min(https),
-        (Some(http), None) => http,
-        (None, Some(https)) => https,
-        (None, None) => return token.to_string(),
+    // A scheme-relative URL is still able to carry credentials and a signed query.
+    // Do not interpret the "//" inside an existing scheme or path as a second URL.
+    let scheme_relative_start = lower.match_indices("//").find_map(|(offset, _)| {
+        let preceded_by_scheme_or_path = offset > 0 && {
+            let preceding = lower.as_bytes()[offset - 1];
+            preceding == b':' || preceding == b'/' || preceding.is_ascii_alphanumeric()
+        };
+        (!preceded_by_scheme_or_path).then_some(offset)
+    });
+    let Some(start) = [
+        lower.find("http://"),
+        lower.find("https://"),
+        lower.find("http%3a%2f%2f"),
+        lower.find("https%3a%2f%2f"),
+        scheme_relative_start,
+    ]
+    .into_iter()
+    .flatten()
+    .min()
+    else {
+        return token.to_string();
     };
     let (prefix, url_and_suffix) = token.split_at(start);
     let url_text = url_and_suffix.trim_end_matches([')', ']', '}', ',', ';', '\'', '"', '>']);
@@ -166,7 +182,18 @@ fn redact_url_token(token: &str) -> String {
         return format!("{prefix}[REDACTED_URL]{suffix}");
     }
 
-    Url::parse(url_text).map_or_else(
+    // Fully encoded URL strings must never pass through as ordinary text.
+    let lower_url = url_text.to_ascii_lowercase();
+    if lower_url.starts_with("http%3a%2f%2f") || lower_url.starts_with("https%3a%2f%2f") {
+        return format!("{prefix}[REDACTED_URL]{suffix}");
+    }
+    let scheme_relative = url_text.starts_with("//");
+    let parsed = if scheme_relative {
+        Url::parse(&format!("https:{url_text}"))
+    } else {
+        Url::parse(url_text)
+    };
+    parsed.map_or_else(
         |_| format!("{prefix}[REDACTED_URL]{suffix}"),
         |mut url| {
             // Percent-encoded nested URL schemes and path credentials are not
@@ -191,7 +218,12 @@ fn redact_url_token(token: &str) -> String {
             if url.fragment().is_some() {
                 url.set_fragment(Some("REDACTED"));
             }
-            format!("{prefix}{}{suffix}", url.as_str())
+            let display = if scheme_relative {
+                url.as_str().strip_prefix("https:").unwrap_or("[REDACTED_URL]")
+            } else {
+                url.as_str()
+            };
+            format!("{prefix}{display}{suffix}")
         },
     )
 }
@@ -337,6 +369,25 @@ mod tests {
         assert!(
             redact_sensitive("GET https://cdn.example/video/segment")
                 .contains("cdn.example/video/segment")
+        );
+    }
+
+    #[test]
+    fn protocol_relative_and_encoded_signed_urls_never_leak_credentials() {
+        let marker = "RMD1802_RUST_SCHEMELESS_SECRET";
+        let inputs = [
+            format!("GET //user:{marker}@cdn.example/video?sig={marker}"),
+            format!("GET (//cdn.example/video?sig={marker})"),
+            format!("url=https%3A%2F%2Fcdn.example%2Fvideo%3Fsig%3D{marker}"),
+        ];
+        for input in inputs {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("REDACTED"), "{output}");
+        }
+        assert!(
+            redact_sensitive("GET //cdn.example/video/segment")
+                .contains("//cdn.example/video/segment")
         );
     }
 
