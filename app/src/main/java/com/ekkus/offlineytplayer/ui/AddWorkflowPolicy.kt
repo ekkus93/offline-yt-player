@@ -13,9 +13,15 @@ internal object AddWorkflowPolicy {
     const val PastedClipboardMessage: String = "Pasted clipboard text. Choose Analyze to validate it."
 
     fun boundedClipboardText(rawText: CharSequence?): ClipboardPasteDecision {
-        val value = rawText?.toString()?.takeIf { it.isNotBlank() }
-            ?: return ClipboardPasteDecision(null, MissingClipboardMessage)
-        return ClipboardPasteDecision(value.take(MaxClipboardChars), PastedClipboardMessage)
+        val source = rawText ?: return ClipboardPasteDecision(null, MissingClipboardMessage)
+        // Clipboard text is untrusted and may be arbitrarily large. Bound reads and
+        // allocations before materializing it; never call toString on the full source.
+        val limit = source.length.coerceAtMost(MaxClipboardChars)
+        val bounded = buildString(limit) {
+            for (index in 0 until limit) append(source[index])
+        }
+        if (bounded.isBlank()) return ClipboardPasteDecision(null, MissingClipboardMessage)
+        return ClipboardPasteDecision(bounded, PastedClipboardMessage)
     }
 
     fun qualityLabels(resolvedLabels: List<String>, fallbackLabel: String): List<String> =

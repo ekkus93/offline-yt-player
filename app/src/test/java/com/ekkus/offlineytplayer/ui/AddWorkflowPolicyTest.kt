@@ -24,6 +24,24 @@ class AddWorkflowPolicyTest {
     }
 
     @Test
+    fun clipboardCharSequenceIsReadOnlyUpToTheLimit() {
+        val source = object : CharSequence {
+            override val length: Int = 1_000_000
+            override fun get(index: Int): Char {
+                check(index < AddWorkflowPolicy.MaxClipboardChars) { "read exceeded bound" }
+                return 'x'
+            }
+            override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
+                error("unbounded clipboard subsequence must not be requested")
+            override fun toString(): String =
+                error("whole clipboard must not be materialized")
+        }
+        val accepted = AddWorkflowPolicy.boundedClipboardText(source)
+        assertEquals(AddWorkflowPolicy.MaxClipboardChars, accepted.acceptedText!!.length)
+        assertEquals(AddWorkflowPolicy.PastedClipboardMessage, accepted.statusMessage)
+    }
+
+    @Test
     fun qualityLabelsUseResolvedOptionsBeforeFallback() {
         assertEquals(
             listOf("720p", "Audio only"),
