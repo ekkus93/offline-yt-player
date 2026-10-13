@@ -113,6 +113,23 @@ internal object ForegroundWorkerRelaunchPolicy {
     ): Boolean = claimed && state == CoreDownloadState.QUEUED && decision == DownloadNetworkDecision.Allow
 }
 
+/**
+ * Foreground-service network callbacks and worker settlement execute on plain
+ * threads. An uncaught gateway/SQLite exception on those threads would crash
+ * the entire Android process. Keep the durable queue authoritative and report
+ * only a fixed, non-sensitive warning; startup reconciliation owns recovery.
+ */
+internal fun runForegroundServiceTaskSafely(
+    action: () -> Unit,
+    onFailure: () -> Unit,
+): Boolean = try {
+    action()
+    true
+} catch (_: Exception) {
+    onFailure()
+    false
+}
+
 class DownloadForegroundService : Service() {
     private val workerRunning = AtomicBoolean(false)
     private val workerOwnership = ForegroundWorkerOwnership()
@@ -216,20 +233,32 @@ class DownloadForegroundService : Service() {
             ?: DownloadNetworkPreference.AnyNetwork
     }
 
+    private fun launchGuardedServiceTask(action: () -> Unit) {
+        Thread({
+            runForegroundServiceTaskSafely(
+                action = action,
+                onFailure = {
+                    android.util.Log.w(
+                        "OfflineYTDownload",
+                        "Foreground download callback failed; durable recovery required",
+                    )
+                },
+            )
+        }, "offline-yt-foreground-worker").start()
+    }
+
     private fun ensureConnectivityObserver() {
         if (workerOwnership.isStopped || serviceDestroyed) return
         if (connectivityObserver != null) {
             // A registered callback does not replay its current network state for a new
             // schedule/resume intent. Kick durable work using the last observed state.
-            Thread { handleConnectivityChange(lastConnectivity) }.start()
+            launchGuardedServiceTask { handleConnectivityChange(lastConnectivity) }
             return
         }
         val handleChange: (DownloadConnectivity) -> Unit = { connectivity ->
             lastConnectivity = connectivity
             lastNetworkDecision = DownloadNetworkPolicy.decision(activeNetworkPreference, connectivity)
-            Thread {
-                handleConnectivityChange(connectivity)
-            }.start()
+            launchGuardedServiceTask { handleConnectivityChange(connectivity) }
         }
         connectivityObserver = connectivityObserverFactoryForTesting?.invoke(this, handleChange)
             ?: AndroidDownloadConnectivityObserver(
@@ -286,7 +315,7 @@ class DownloadForegroundService : Service() {
             workerRunning.set(false)
             return
         }
-        Thread {
+        launchGuardedServiceTask {
             var claimed = false
             try {
                 if (!workerOwnership.isStopped) {
@@ -299,7 +328,7 @@ class DownloadForegroundService : Service() {
                     settleWorkerAfterExecution(queueItemId, claimed)
                 }
             }
-        }.start()
+        }
     }
 
     @Synchronized
