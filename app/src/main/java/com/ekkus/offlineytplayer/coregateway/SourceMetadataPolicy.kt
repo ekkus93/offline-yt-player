@@ -36,17 +36,27 @@ internal object SourceMetadataPolicy {
     private val sensitiveHeaderPattern =
         Regex("(?i)(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key)\\s*:")
 
-    private fun redactDiagnosticHeaders(value: String): String =
-        value.lineSequence().joinToString("\n") { line ->
+    private fun redactDiagnosticHeaders(value: String): String {
+        var redactingFoldedHeader = false
+        return value.lineSequence().joinToString("\n") { line ->
             val header = sensitiveHeaderPattern.find(line)
-            if (header == null) {
-                redactDiagnosticUrls(line)
+            if (redactingFoldedHeader && header == null &&
+                (line.startsWith(' ') || line.startsWith('\t'))
+            ) {
+                // Indented follow-on header values must not reappear without the field name.
+                "[REDACTED_HEADER_CONTINUATION]"
             } else {
-                // The suffix may include other credentials; fail closed after the first header.
-                val prefix = redactDiagnosticUrls(line.substring(0, header.range.first))
-                "$prefix${header.value} [REDACTED]"
+                redactingFoldedHeader = header != null
+                if (header == null) {
+                    redactDiagnosticUrls(line)
+                } else {
+                    // A new indented named header still retains its redacted field label.
+                    val prefix = redactDiagnosticUrls(line.substring(0, header.range.first))
+                    "$prefix${header.value} [REDACTED]"
+                }
             }
         }
+    }
 
     private fun redactDiagnosticUrls(value: String): String = urlPattern.replace(value) { match ->
         runCatching {

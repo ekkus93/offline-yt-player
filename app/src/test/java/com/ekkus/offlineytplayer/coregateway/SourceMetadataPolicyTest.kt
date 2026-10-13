@@ -78,6 +78,27 @@ class SourceMetadataPolicyTest {
         assertTrue(output.length <= SourceMetadataPolicy.MaxDiagnosticChars)
     }
 
+    @Test fun foldedSensitiveHeaderLinesNeverDiscloseRawValues() {
+        val marker = "FOLDED_ANDROID_SECRET_1802"
+        val input = "Authorization: Bearer\n  $marker\nsafe: context\nCookie: session=\n\t$marker"
+        val outputs = listOf(
+            SourceMetadataPolicy.title(input),
+            SourceMetadataPolicy.channel(input),
+            SourceMetadataPolicy.description(input),
+            SourceMetadataPolicy.qualityLabel(input),
+            SourceMetadataPolicy.diagnostic(input),
+        )
+        outputs.forEach { projected ->
+            assertFalse(projected.contains(marker))
+            assertTrue(projected.contains("[REDACTED_HEADER_CONTINUATION]"))
+        }
+        assertTrue(SourceMetadataPolicy.diagnostic(input).contains("safe: context"))
+        // A second, explicitly named indented header must still expose its safe name.
+        val named = SourceMetadataPolicy.diagnostic("Authorization: Bearer\n  Cookie: secret")
+        assertTrue(named.contains("Cookie: [REDACTED]"))
+        assertFalse(named.contains("secret"))
+    }
+
     @Test fun diagnosticRedactsSignedUrlBeforeSensitiveHeaderOnSameLine() {
         val marker = "SECRET_MIXED_1802"
         val output = SourceMetadataPolicy.diagnostic(
