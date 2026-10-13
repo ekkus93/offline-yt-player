@@ -390,7 +390,7 @@ internal fun CoreGatewayResult<List<CoreDownloadSnapshot>>.toDownloadsScreenStat
     }
     return DownloadsScreenState.Ready(snapshots.map { snapshot ->
         val total = snapshot.totalBytes
-        val percent = boundedDownloadPercent(snapshot.bytesDownloaded, total)
+        val percent = total?.takeIf { it > 0L }?.let { boundedDownloadPercent(snapshot.bytesDownloaded, it) }
         DownloadRowModel(
             id = snapshot.jobId,
             title = SourceMetadataPolicy.title(checkNotNull(titlesByJobId[snapshot.jobId])),

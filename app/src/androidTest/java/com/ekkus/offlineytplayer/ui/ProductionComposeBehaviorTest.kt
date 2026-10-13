@@ -747,6 +747,29 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun unknownLengthDownloadsRenderActualBytesWithoutInventingZeroPercent() {
+        compose.setContent {
+            DownloadsScreen(
+                state = DownloadsScreenState.Ready(
+                    listOf(
+                        DownloadRowModel(
+                            id = "unknown-length-job",
+                            title = "Unknown-length fixture",
+                            state = DownloadUiState.Active,
+                            percent = null,
+                            size = "2048 bytes",
+                        ),
+                    ),
+                ),
+            )
+        }
+        compose.onNodeWithText("Unknown-length fixture").assertIsDisplayed()
+        compose.onNodeWithText("Progress unknown", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("2048 bytes", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("0%", substring = true).assertDoesNotExist()
+    }
+
+    @Test
     fun libraryAndDownloadRowsRedactPersistedProviderMetadataInRealCompose() {
         val marker = "RMD1802_ROW_PRIVATE_TOKEN"
         val signedUrl = "https://cdn.example/media?sig=$marker"

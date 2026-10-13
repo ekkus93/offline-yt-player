@@ -70,7 +70,7 @@ internal data class DownloadRowModel(
     val id: String,
     val title: String,
     val state: DownloadUiState,
-    val percent: Int,
+    val percent: Int?,
     val size: String,
     val error: String? = null,
     val stateLabel: String = state.name,
@@ -133,7 +133,7 @@ internal object DownloadScreenPolicy {
     }
     fun detail(row: DownloadRowModel) = listOf(
         SourceMetadataPolicy.diagnostic(row.stateLabel),
-        "${row.percent.coerceIn(0, 100)}%",
+        row.percent?.coerceIn(0, 100)?.let { "$it%" } ?: "Progress unknown",
         SourceMetadataPolicy.diagnostic(row.size),
         SourceMetadataPolicy.diagnostic(row.speedLabel),
         SourceMetadataPolicy.diagnostic(row.etaLabel),
