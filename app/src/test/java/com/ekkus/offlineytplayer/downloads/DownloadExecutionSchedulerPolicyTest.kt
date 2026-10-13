@@ -41,6 +41,18 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
+    fun invalidEstimatedBytesBecomeFrameworkUnknownInsteadOfCrashingUidtScheduling() {
+        val unknown = android.app.job.JobInfo.NETWORK_BYTES_UNKNOWN.toLong()
+        assertEquals(unknown, DownloadExecutionSchedulerPolicy.normalizedEstimatedNetworkBytes(null))
+        assertEquals(unknown, DownloadExecutionSchedulerPolicy.normalizedEstimatedNetworkBytes(-1L))
+        assertEquals(unknown, DownloadExecutionSchedulerPolicy.normalizedEstimatedNetworkBytes(-2L))
+        assertEquals(unknown, DownloadExecutionSchedulerPolicy.normalizedEstimatedNetworkBytes(Long.MIN_VALUE))
+        assertEquals(0L, DownloadExecutionSchedulerPolicy.normalizedEstimatedNetworkBytes(0L))
+        assertEquals(123L, DownloadExecutionSchedulerPolicy.normalizedEstimatedNetworkBytes(123L))
+        assertEquals(Long.MAX_VALUE, DownloadExecutionSchedulerPolicy.normalizedEstimatedNetworkBytes(Long.MAX_VALUE))
+    }
+
+    @Test
     fun api26Through33UseForegroundFallbackInsteadOfDuplicatedSchedulerState() {
         assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(26))
         assertTrue(DownloadExecutionSchedulerPolicy.usesForegroundFallback(33))

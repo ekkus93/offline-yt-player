@@ -398,6 +398,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-702 — Make Analyze use the production source pipeline
 
+
 - [x] Remove fabricated preview metadata from production path.
 - [x] Validate via shared hardened policy.
 - [x] Call production source-analysis gateway.
@@ -798,6 +799,7 @@ This checklist repairs the implementation and qualification gaps found during th
 
 - [x] Capture representative large-font cases.
 - [x] Fail tests on unintended golden changes.
+
 - [x] **RMD-1403c — Eliminate CI-local golden-test source mutation.** Pin reviewed Download Setup hashes and the Compose idle barrier in tracked Kotlin source; convert the CI preparation script into a read-only validator; assert the source has no CI worktree diff; add host-side regression tests; verify every expected raster test method executed non-skipped (not merely that the suite started); remove outdated policy flags claiming bitmap goldens are deferred; qualify with exact-head normal CI and Android golden instrumentation before closing. Historical RMD-1403 green runs that patched Kotlin inside CI do not by themselves prove exact-head golden acceptance. **Exact-head acceptance (2026-10-09):** `ProductionComposeGoldenTest.kt` checks in reviewed Download Setup raster hashes and the post-Options `compose.waitForIdle()` barrier; `scripts/register_download_setup_golden_variant.py` is read-only with respect to Kotlin source; `tests/test_register_download_setup_golden_variant.py` guards missing hashes, missing barrier, and source immutability; `.github/workflows/android-smoke.yml` asserts `git diff --exit-code` and requires all 12 named golden raster test methods non-skipped using `scripts/assert_android_smoke_execution.py`. Obsolete bitmap-deferred policy flags are absent from `GoldenCoveragePolicy`/its JVM test. Exact `master` `4d9700bfebd0c572950815f43422916b2eaa110c` passed CI `38008449558` and Android smoke `38008449784`; the smoke job logged `ANDROID_SMOKE_REQUIRED_TESTS_OK count=12`. These are tracked-source, not CI-mutated, goldens.
 
 ### RMD-1404 — No-hidden-controls behavioral gate
@@ -1162,6 +1164,8 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Search for dead/declarative capability flags that disagree with runtime behavior.
 - [ ] Resolve newly found release-blocking issues.
 
+**RMD-1802 additional Android safety findings (2026-10-13; new exact-head CI required):** `SourceMetadataPolicy` previously preserved credentials in nested HTTP(S) URLs embedded in a parsed URL path; it now redacts such URLs entirely (including encoded credential-bearing paths), with host-JVM metadata/diagnostic regressions. `DownloadExecutionSchedulerPolicy` now normalizes negative UIDT estimated-download-byte inputs to `JobInfo.NETWORK_BYTES_UNKNOWN` before building a platform job, with host-JVM boundary regressions. See `docs/RMD_1802_NESTED_URL_AND_UIDT_ESTIMATE_REVIEW_2026-10-13.md`. This is implementation evidence only; leave RMD-1802/1803/1805 and global closeout open until all required exact-head CI and independent review complete.
+
 ### RMD-1803 — Exact-head full qualification
 
 **Interim exact-head evidence and golden-coverage audit (2026-10-12; NOT final candidate freeze):** `docs/RMD_1803_EXACT_HEAD_AND_GOLDEN_COVERAGE_AUDIT_2026-10-12.md` records all eight successful standard workflow runs on exact `master` implementation `03ae38b441cbf14108473efec85edb09b3decdd6`: CI `38316280118`, Android smoke `38316280138`, Android FGS timeout `38316280232`, Supply chain `38316280206`, CI evidence `38316280207`, Deterministic E2E fixture `38316280103`, Android cold start `38316280182`, and Android real-network E2E `38316280067`. The independently enumerated `ProductionComposeGoldenTest` has 12 executable, SHA-256-pinned raster methods; `GoldenCoveragePolicy.RequiredScenarios` is a **22-item target inventory**, not equivalent screenshot proof. Missing explicit per-surface/profile raster combinations and the unproven compact-device viewport of the named compact fixture are documented without inflating qualification. These passing runs qualify that historical exact SHA, not later documentation commits or unreviewed changes; RMD-1802 independent review, RMD-1803 final freeze, RMD-1804/1805, and external service/legal approval remain OPEN. No completion checkbox is changed by this evidence entry.
@@ -1198,6 +1202,7 @@ All items below must be true before engineering closeout:
 - [ ] Durable queue drives Downloads UI and runtime.
 - [ ] Pause/resume/cancel/retry are operational from UI and notification where applicable.
 - [ ] Network policy is operational.
+
 - [ ] Reboot/process-death recovery is platform-compliant.
 - [ ] Library uses real persisted state and all item actions work.
 - [ ] Thumbnail/subtitle/metadata assets work offline as specified.

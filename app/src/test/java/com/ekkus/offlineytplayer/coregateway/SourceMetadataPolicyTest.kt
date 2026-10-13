@@ -88,6 +88,25 @@ class SourceMetadataPolicyTest {
         assertTrue(output.contains("Authorization: [REDACTED]"))
     }
 
+    @Test fun nestedUrlCredentialsInPathNeverReachMetadataOrDiagnostics() {
+        val marker = "NESTED_PRIVATE_RMD1802"
+        val nested = "https://outer.example/archive/https://user:$marker@inner.example/video"
+        val encoded = "https://outer.example/archive/https%3A%2F%2Fuser%3A$marker%40inner.example"
+        val displayed = listOf(
+            SourceMetadataPolicy.title("Title $nested"),
+            SourceMetadataPolicy.channel("Channel $encoded"),
+            SourceMetadataPolicy.description("Description $nested"),
+            SourceMetadataPolicy.qualityLabel("720p $encoded"),
+            SourceMetadataPolicy.diagnostic("GET $nested"),
+            SourceMetadataPolicy.diagnostic("GET $encoded"),
+        )
+        displayed.forEach { value ->
+            assertFalse(value.contains(marker))
+            assertTrue(value.contains("[REDACTED_URL]"))
+        }
+        assertTrue(SourceMetadataPolicy.diagnostic("GET https://cdn.example/video/segment").contains("cdn.example/video/segment"))
+    }
+
     @Test fun ordinaryDiagnosticTextIsPreserved() {
         assertEquals("download failed: connection reset", SourceMetadataPolicy.diagnostic("download failed: connection reset"))
     }

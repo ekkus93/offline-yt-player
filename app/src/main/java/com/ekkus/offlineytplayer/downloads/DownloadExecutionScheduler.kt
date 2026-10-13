@@ -56,6 +56,10 @@ internal object DownloadExecutionSchedulerPolicy {
 
     fun supportsEstimatedNetworkBytes(sdkInt: Int): Boolean = sdkInt >= Build.VERSION_CODES.P
 
+    /** JobInfo accepts only nonnegative byte estimates or NETWORK_BYTES_UNKNOWN (-1). */
+    fun normalizedEstimatedNetworkBytes(estimate: Long?): Long =
+        estimate?.takeIf { it >= 0L } ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong()
+
     fun supportsUserInitiatedJobFlag(sdkInt: Int): Boolean = sdkInt >= UserInitiatedDataTransferMinSdk
 
     /** An unmetered Ethernet/cellular network is not a Wi-Fi connection. */
@@ -158,7 +162,7 @@ internal class AndroidDownloadExecutionScheduler(
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
             ) {
                 builder.setEstimatedNetworkBytes(
-                    request.estimatedDownloadBytes ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
+                    DownloadExecutionSchedulerPolicy.normalizedEstimatedNetworkBytes(request.estimatedDownloadBytes),
                     JobInfo.NETWORK_BYTES_UNKNOWN.toLong(),
                 )
             }
