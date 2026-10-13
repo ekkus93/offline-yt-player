@@ -132,7 +132,19 @@ pub fn redact_sensitive(input: &str) -> String {
         format!("{}{}:", "x-api-", "key"),
     ];
     let mut output = String::with_capacity(input.len());
+    let mut redacting_folded_header = false;
     for line in input.lines() {
+        // RFC-style folded header values and multiline diagnostics may put
+        // credentials on indented lines after the header name. Do not echo
+        // those lines merely because they contain no repeated field name.
+        if redacting_folded_header && (line.starts_with(' ') || line.starts_with('\t')) {
+            if !output.is_empty() {
+                output.push('\n');
+            }
+            output.push_str("[REDACTED_HEADER_CONTINUATION]");
+            continue;
+        }
+        redacting_folded_header = false;
         // Diagnostic renderers may indent header lines. Never treat indentation as a
         // reason to leave a credential-bearing header unredacted.
         // Loggers commonly prefix header text with a timestamp, level, or
@@ -144,6 +156,7 @@ pub fn redact_sensitive(input: &str) -> String {
             .filter_map(|name| lower.find(name.as_str()).map(|offset| (offset, name.len())))
             .min_by_key(|(offset, _)| *offset);
         let redacted = if let Some((offset, length)) = header {
+            redacting_folded_header = true;
             // The prefix may itself contain a signed URL. Sanitize it before
             // dropping the entire header value and remaining line suffix.
             let prefix = redact_urls(&line[..offset]);
@@ -377,6 +390,20 @@ mod tests {
             redact_sensitive("request failed: no authorization header received"),
             "request failed: no authorization header received"
         );
+    }
+
+    #[test]
+    fn folded_sensitive_header_values_never_leak_from_diagnostics() {
+        let marker = "RMD1802_FOLDED_HEADER_SECRET";
+        let input = format!(
+            "request failed: Authorization: Bearer\n  {marker}\n\t{marker}\nnext: safe\nCookie: session=\n  {marker}"
+        );
+        let output = redact_sensitive(&input);
+        assert!(!output.contains(marker), "{output}");
+        assert_eq!(output.matches("[REDACTED_HEADER_CONTINUATION]").count(), 3);
+        assert!(output.contains("next: safe"), "{output}");
+        assert!(output.contains("Authorization: [REDACTED]"), "{output}");
+        assert!(output.contains("Cookie: [REDACTED]"), "{output}");
     }
 
     #[test]
