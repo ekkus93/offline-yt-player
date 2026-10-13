@@ -70,21 +70,23 @@ pub fn sanitize_title(input: &str) -> String {
 
 #[must_use]
 pub fn sanitize_filename(input: &str) -> String {
-    let mut value = input
+    // Trim before mapping so an untrusted filename cannot force a full-size
+    // allocation. Control whitespace maps to '_' and must not be trimmed.
+    let trimmed = input.trim_matches(|c: char| c == '.' || (c.is_whitespace() && !c.is_control()));
+    let bounded: String = trimmed
         .chars()
+        .take(180)
         .map(|c| match c {
             '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
             c if c.is_control() => '_',
             c => c,
         })
-        .collect::<String>();
-    value = value
-        .trim_matches(|c: char| c == '.' || c.is_whitespace())
-        .to_string();
-    if value.is_empty() || value == "." || value == ".." {
-        return "untitled".into();
+        .collect();
+    if bounded.is_empty() {
+        "untitled".into()
+    } else {
+        bounded
     }
-    value.chars().take(180).collect()
 }
 
 pub fn validate_relative_library_path(path: &str) -> Result<(), CoreError> {
@@ -302,6 +304,16 @@ mod tests {
             "_.._my_video_.mp4"
         );
         assert_eq!(sanitize_filename(".."), "untitled");
+    }
+
+    #[test]
+    fn filename_sanitization_bounds_untrusted_input_without_changing_trim_semantics() {
+        assert_eq!(sanitize_filename(&"x".repeat(1_000_000)), "x".repeat(180));
+        assert_eq!(sanitize_filename(&format!("{}video.mp4", ".".repeat(1_000_000))), "video.mp4");
+        assert_eq!(sanitize_filename("   ...  "), "untitled");
+        assert_eq!(sanitize_filename("\\t name \\n"), "_ name _");
+        assert_eq!(sanitize_filename("  video.mp4  "), "video.mp4");
+        assert_eq!(sanitize_filename(&format!("{}  ", "x".repeat(180))), "x".repeat(180));
     }
 
     #[test]
