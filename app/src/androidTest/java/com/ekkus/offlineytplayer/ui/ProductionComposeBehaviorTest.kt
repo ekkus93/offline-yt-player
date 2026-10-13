@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -16,6 +17,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.coregateway.AppLibraryDetailsGateway
 import com.ekkus.offlineytplayer.coregateway.AppLibraryMutationGateway
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
+import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
+import com.ekkus.offlineytplayer.coregateway.DownloadSelectionOptions
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayError
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetailAsset
 import com.ekkus.offlineytplayer.coregateway.CoreLibraryDetails
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
@@ -30,6 +34,7 @@ import com.ekkus.offlineytplayer.playback.LocalSubtitleTrack
 import com.ekkus.offlineytplayer.settings.AppSettingsMutation
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import org.junit.Assert.assertEquals
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Rule
 import org.junit.Test
 
@@ -290,6 +295,72 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun downloadSetupGatewayFailureCannotExposeProviderCredentials() {
+        val secret = "RMD1802_ENQUEUE_PRIVATE_TOKEN"
+        val called = AtomicBoolean(false)
+        val controls = object : AppDownloadControlGateway by FakeDownloadControlGateway() {
+            override fun enqueue(jobId: String, options: DownloadSelectionOptions): CoreGatewayResult<Boolean> {
+                called.set(true)
+                return CoreGatewayResult(
+                    value = false,
+                    error = CoreGatewayError(
+                        kind = "fixture_failure",
+                        message = "Authorization: Bearer $secret",
+                        retryable = false,
+                    ),
+                )
+            }
+        }
+        compose.setContent {
+            OfflineYTPlayerApp(
+                initialSharedUrl = "https://youtu.be/dQw4w9WgXcQ",
+                sourceAnalysisGateway = FakeSourceAnalysisGateway(),
+                downloadControlGateway = controls,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
+        }
+        compose.onNodeWithText("Analyze").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching { compose.onNodeWithText("Fixture source").assertIsDisplayed() }.isSuccess
+        }
+        compose.onNodeWithText("Download").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            called.get() && runCatching {
+                compose.onNodeWithText("Authorization: [REDACTED]").assertIsDisplayed()
+            }.isSuccess
+        }
+        compose.onNodeWithText(secret, substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun libraryDetailsSummaryBoundsUntrustedQualityLabel() {
+        val marker = "X".repeat(400)
+        val details = RecordingLibraryDetailsGateway(qualityLabel = marker)
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
+                ),
+                detailsGatewayProvider = { details },
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Details").performClick()
+        val bounded = "X".repeat(128)
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                compose.onNodeWithText("Fixture video · $bounded · 0:42 · 1234 bytes · 1 asset")
+                    .assertIsDisplayed()
+            }.isSuccess
+        }
+        compose.onNodeWithText(marker, substring = true).assertDoesNotExist()
+    }
+
+    @Test
     fun player_entry_exposes_transport_and_track_controls() {
         compose.setContent {
             OfflineYTPlayerApp(
@@ -444,7 +515,9 @@ private class FakeSourceAnalysisGateway(
     override fun close() = Unit
 }
 
-private class RecordingLibraryDetailsGateway : AppLibraryDetailsGateway {
+private class RecordingLibraryDetailsGateway(
+    private val qualityLabel: String = "720p",
+) : AppLibraryDetailsGateway {
     val requestedIds = mutableListOf<String>()
 
     override fun getDetails(itemId: String): CoreGatewayResult<CoreLibraryDetails?> {
@@ -457,7 +530,7 @@ private class RecordingLibraryDetailsGateway : AppLibraryDetailsGateway {
                 canonicalUrl = null,
                 displayTitle = "Fixture video",
                 durationMs = 42_000,
-                qualityLabel = "720p",
+                qualityLabel = qualityLabel,
                 completed = true,
                 playbackPositionMs = 0,
                 totalBytes = 1_234,

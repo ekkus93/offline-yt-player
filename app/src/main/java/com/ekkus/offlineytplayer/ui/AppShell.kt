@@ -54,6 +54,7 @@ import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.DownloadSelectionOptions
 import com.ekkus.offlineytplayer.coregateway.SourceAnalysisState
 import com.ekkus.offlineytplayer.coregateway.SourceAnalysisUseCase
+import com.ekkus.offlineytplayer.coregateway.SourceMetadataPolicy
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.settings.AppSettingsMutation
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
@@ -366,7 +367,7 @@ private fun AddScreen(
                     }
                     scheduling = false
                     result.error?.let {
-                        status = it.message
+                        status = SourceMetadataPolicy.diagnostic(it.message)
                         return@launch
                     }
                     status = if (result.value == true) {

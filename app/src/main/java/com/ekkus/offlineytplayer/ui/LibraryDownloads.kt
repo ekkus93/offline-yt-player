@@ -545,5 +545,5 @@ private fun libraryDetailsSummary(details: CoreLibraryDetails): String {
         "%d:%02d".format(seconds / 60L, seconds % 60L)
     } ?: "Unknown duration"
     val assetCount = details.assets.size
-    return "$title · ${details.qualityLabel} · $duration · ${details.totalBytes} bytes · $assetCount ${if (assetCount == 1) "asset" else "assets"}"
+    return "$title · ${SourceMetadataPolicy.qualityLabel(details.qualityLabel)} · $duration · ${details.totalBytes} bytes · $assetCount ${if (assetCount == 1) "asset" else "assets"}"
 }
