@@ -44,18 +44,18 @@ adb shell am instrument -w -e rmdHostNetworkTransitions true \
     "$INSTRUMENTATION" > "$LOG" 2>&1 &
 INST_PID=$!
 wait_signal() {
-    local marker="$1" i
+    local marker="$1" failure_log="${2:-$LOG}" i
     for ((i=0;i<180;i++)); do
         if adb shell "test -f '$SIGNAL_DIR/$marker'" >/dev/null 2>&1; then return 0; fi
         if ! kill -0 "$INST_PID" 2>/dev/null; then
             echo "Instrumentation ended before $marker marker"
-            cat "$LOG"
+            cat "$failure_log"
             return 1
         fi
         sleep 0.5
     done
     echo "Timed out waiting for actual Android $marker transition"
-    cat "$LOG"
+    cat "$failure_log"
     return 1
 }
 wait_signal ready
@@ -141,17 +141,17 @@ adb shell am instrument -w -e rmdHostWifiMetered true \
     -e class 'com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest#hostDrivenWifiOnlyMeteredWifiPausesAndUnmeteredWifiResumes' \
     "$INSTRUMENTATION" > "$DIR/rmd1506-wifi-metered.log" 2>&1 &
 INST_PID=$!
-wait_signal wifi-ready
+wait_signal wifi-ready "$DIR/rmd1506-wifi-metered.log"
 android_wifi_metered_set "$METERED_SSID" true "$DIR/wifi-metered-active.log" "$DIR/wifi-networks-metered.txt" || {
     echo "WIFI_ONLY_METERED_FAILED: host could not establish metered policy during active transfer"
     exit 1
 }
-wait_signal wifi-paused
+wait_signal wifi-paused "$DIR/rmd1506-wifi-metered.log"
 android_wifi_metered_set "$METERED_SSID" false "$DIR/wifi-unmetered-active.log" "$DIR/wifi-networks-unmetered.txt" || {
     echo "WIFI_ONLY_METERED_FAILED: host could not restore unmetered policy during active transfer"
     exit 1
 }
-wait_signal wifi-complete
+wait_signal wifi-complete "$DIR/rmd1506-wifi-metered.log"
 wait "$INST_PID"
 INST_PID=""
 cat "$DIR/rmd1506-wifi-metered.log"

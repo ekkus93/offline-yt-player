@@ -1,3 +1,4 @@
+
 # Offline YT Player — Comprehensive Remediation TODO
 
 **Document:** `docs/OFFLINE_YT_PLAYER_REMEDIATION_TODO_2026-09-17.md`  
@@ -1165,6 +1166,8 @@ This checklist repairs the implementation and qualification gaps found during th
 - [ ] Resolve newly found release-blocking issues.
 
 **RMD-1802 additional Android safety findings (2026-10-13; new exact-head CI required):** `SourceMetadataPolicy` previously preserved credentials in nested HTTP(S) URLs embedded in a parsed URL path; it now redacts such URLs entirely (including encoded credential-bearing paths), with host-JVM metadata/diagnostic regressions. `DownloadExecutionSchedulerPolicy` now normalizes negative UIDT estimated-download-byte inputs to `JobInfo.NETWORK_BYTES_UNKNOWN` before building a platform job, with host-JVM boundary regressions. See `docs/RMD_1802_NESTED_URL_AND_UIDT_ESTIMATE_REVIEW_2026-10-13.md`. This is implementation evidence only; leave RMD-1802/1803/1805 and global closeout open until all required exact-head CI and independent review complete.
+
+**RMD-1802 host Wi-Fi metered E2E failure diagnostics (2026-10-13; exact-head qualification pending):** Android real-network E2E run `38387651853` passed its first genuine OS network-loss/resume instrumentation, but the subsequent Wi-Fi metered/unmetered phase ended before the `wifi-ready` marker. The host harness printed the *first* instrumentation log instead of the failing second log, concealing the test's actual assertion/failure. `scripts/run_android_os_network_e2e.sh` now accepts a per-phase failure log in `wait_signal` and prints the Wi-Fi metered instrumentation log on missing markers/timeouts. See `docs/RMD_1802_WIFI_METERED_HOST_FAILURE_DIAGNOSTICS_2026-10-13.md`. This is diagnostic hardening, not evidence of successful metered-network acceptance; keep final exact-head qualification and RMD-1802/1803/1805 open.
 
 ### RMD-1803 — Exact-head full qualification
 
