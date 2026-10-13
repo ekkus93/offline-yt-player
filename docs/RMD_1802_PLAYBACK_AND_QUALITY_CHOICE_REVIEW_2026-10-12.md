@@ -1,0 +1,19 @@
+# RMD-1802 Independent Playback and Quality-Choice Follow-Up — 2026-10-12
+
+**Status:** Implementation and deterministic regression coverage on `master`, **pending an exact-head final eight-lane CI matrix and further independent review**. Neither this report nor passing CI on older commits closes RMD-1802/1803/1805 or approves the separate YouTube/service-policy/legal release gate.
+
+## Finding 1 — short media incorrectly marked completed at the beginning
+
+Before commit `fa8d1823e6da6394a3fc55cb5b8c055a0d427cb3`, `app/src/main/java/com/ekkus/offlineytplayer/playback/LocalPlayback.kt::LocalPlaybackPolicy.completedByPosition` treated any position within 30 seconds of the end as complete. All positions, including zero, therefore counted as completed for a clip shorter than 30 seconds. This flowed into `shouldPersistPosition` and `persistedPositionForStop` and erased meaningful saved playback positions. The production function now uses `minOf(30_000, durationMs / 4)` as the near-end window and requires positive bounded progress, retaining the historical 30-second behavior for sufficiently long recordings. `app/src/test/java/com/ekkus/offlineytplayer/playback/LocalPlaybackPolicyTest.kt` checks 20-second, 4-second, one-millisecond, zero/negative-duration and long-video boundaries.
+
+## Finding 2 — distinct provider quality formats silently discarded
+
+Before `f815fff73b18a8a4258990454a76ee77ac5841e9`, `app/src/main/java/com/ekkus/offlineytplayer/coregateway/AppSourceAnalysisGateway.kt` used `distinctBy { it.label }` on actual provider `listChoices` results. Multiple distinct format/codec choice IDs with the same display label were dropped before reaching the Android Add/Advanced Options flow, which selects by displayed label and maps back to actual `choiceId`. The gateway now calls `disambiguateSourceQualityLabels`, preserving original ordering, IDs, estimated bytes and other fields while assigning unique suffixes. It reserves all original labels before generating new ones, avoiding collisions with real labels such as `720p (2)`. `AppSourceAnalysisGatewayMappingTest.kt` exercises duplicate labels and reserved-label collisions. Actual provider/network proof remains isolated from normal CI.
+
+## Finding 3 — no-format source falsely enabled Download Setup
+
+Before `09ad21f7d26d8348504938c134faffc1e2296f2f`, `app/src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt` constructed `DownloadSetupState(readyForDownload = true)` even if the resolved `qualityOptions` contained no executable format ID. Download was enabled, but the scheduler could only reject the absent selection. The production UI now requires a nonblank selected quality choice ID both when constructing state and when enabling the Download button. `app/src/androidTest/java/com/ekkus/offlineytplayer/ui/ProductionComposeBehaviorTest.kt::sourceWithNoExecutableQualityDoesNotOfferEnabledDownload` renders the actual Add/Analyze/Download Setup Compose path with a deterministic no-format source and verifies Download is disabled and no control enqueue occurs.
+
+## Verification and closeout discipline
+
+For all three findings, the source/test commits above have been written directly to `master`; no new Ralph development branch or PR was created. Their individual CI may be superseded by subsequent newer pushes. Record all eight standard workflow run IDs for the **final inspected current-master exact SHA**, not only the earlier successful eight-lane implementation `03ae38b441cbf14108473efec85edb09b3decdd6` (documented separately in `docs/RMD_1803_EXACT_HEAD_AND_GOLDEN_COVERAGE_AUDIT_2026-10-12.md`). Neither test presence nor this finding report alone is a completed checkbox. Re-evaluate the complete Rust/Android/Compose/real-network/deterministic-E2E/FGS/supply-chain matrix before RMD-1802/1803/1805 or global closeout.
