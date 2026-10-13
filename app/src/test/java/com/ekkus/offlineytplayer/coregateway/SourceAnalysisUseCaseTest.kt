@@ -55,6 +55,38 @@ class SourceAnalysisUseCaseTest {
     }
 
     @Test
+    fun providerErrorsNeverExposeSecretsInPresentationState() {
+        val leaked = "Authorization: Bearer PRIVATE-TOKEN; Cookie: session=PRIVATE-COOKIE; " +
+            "https://cdn.example.invalid/video?signature=PRIVATE-SIGNATURE"
+        val kinds = listOf("UNSUPPORTED_SOURCE", "NETWORK_TIMEOUT", "SOURCE_CHANGED", "PARSER_ERROR", "UNKNOWN_FAILURE")
+        kinds.forEach { kind ->
+            val state = SourceAnalysisUseCase(
+                RecordingSourceGateway(
+                    result = CoreGatewayResult(
+                        value = null,
+                        error = CoreGatewayError(kind, leaked, retryable = true),
+                    ),
+                ),
+            ).analyzeBlocking(supportedWatchUrl())
+            val visible = when (state) {
+                is SourceAnalysisState.Unsupported -> state.message
+                is SourceAnalysisState.NetworkFailure -> state.error.message
+                is SourceAnalysisState.SourceChanged -> state.error.message
+                is SourceAnalysisState.Failed -> state.error.message
+                else -> error("Expected a failed source-analysis state for $kind")
+            }
+            assertTrue(visible.isNotBlank())
+            assertTrue(!visible.contains("PRIVATE-"))
+            assertTrue(!visible.contains("Authorization:"))
+            assertTrue(!visible.contains("Cookie:"))
+            if (state is SourceAnalysisState.NetworkFailure) {
+                assertEquals(kind, state.error.kind)
+                assertTrue(state.error.retryable)
+            }
+        }
+    }
+
+    @Test
     fun thrownSourceGatewayDoesNotCrashAndDoesNotRevealPrivateDiagnostics() {
         val gateway = object : AppSourceAnalysisGateway {
             override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> {

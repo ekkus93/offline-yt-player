@@ -84,12 +84,20 @@ class SourceAnalysisUseCase(
     }
 
     private fun classify(error: CoreGatewayError): SourceAnalysisState {
+        // Provider/FFI diagnostics can contain signed URLs, authorization headers,
+        // cookies or transport internals. Never publish their raw message to
+        // Compose; preserve the machine-readable kind and retryability instead.
         val normalizedKind = error.kind.uppercase()
         return when {
-            normalizedKind.contains("UNSUPPORTED") -> SourceAnalysisState.Unsupported(error.message)
-            normalizedKind.contains("NETWORK") || normalizedKind.contains("TIMEOUT") -> SourceAnalysisState.NetworkFailure(error)
-            normalizedKind.contains("SOURCE_CHANGED") || normalizedKind.contains("SOURCECHANGE") || normalizedKind.contains("PARSER") -> SourceAnalysisState.SourceChanged(error)
-            else -> SourceAnalysisState.Failed(error)
+            normalizedKind.contains("UNSUPPORTED") ->
+                SourceAnalysisState.Unsupported("This source is not supported.")
+            normalizedKind.contains("NETWORK") || normalizedKind.contains("TIMEOUT") ->
+                SourceAnalysisState.NetworkFailure(error.copy(message = "Source network request failed. Try again."))
+            normalizedKind.contains("SOURCE_CHANGED") || normalizedKind.contains("SOURCECHANGE") ||
+                normalizedKind.contains("PARSER") ->
+                SourceAnalysisState.SourceChanged(error.copy(message = "Source metadata changed or could not be parsed. Analyze again."))
+            else ->
+                SourceAnalysisState.Failed(error.copy(message = "Source analysis failed. Check the video and try again."))
         }
     }
 }
