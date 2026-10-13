@@ -11,13 +11,13 @@ internal object SourceMetadataPolicy {
 
     private val urlPattern = Regex("https?://[^\\s]+", RegexOption.IGNORE_CASE)
 
-    fun title(value: String): String = sanitize(value, MaxTitleChars, "Untitled video")
+    fun title(value: String): String = sanitize(redactDiagnosticHeaders(value), MaxTitleChars, "Untitled video")
 
-    fun channel(value: String): String = sanitize(value, MaxChannelChars, "Unknown channel")
+    fun channel(value: String): String = sanitize(redactDiagnosticHeaders(value), MaxChannelChars, "Unknown channel")
 
-    fun description(value: String): String = sanitize(value, MaxDescriptionChars, "No description")
+    fun description(value: String): String = sanitize(redactDiagnosticHeaders(value), MaxDescriptionChars, "No description")
 
-    fun qualityLabel(value: String): String = sanitize(value, MaxQualityLabelChars, "Unknown quality")
+    fun qualityLabel(value: String): String = sanitize(redactDiagnosticHeaders(value), MaxQualityLabelChars, "Unknown quality")
 
     fun diagnostic(value: String): String =
         sanitize(redactDiagnosticHeaders(value), MaxDiagnosticChars, "Unknown error")

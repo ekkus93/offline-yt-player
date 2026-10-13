@@ -31,6 +31,26 @@ class SourceMetadataPolicyTest {
         assertEquals("Unknown error", SourceMetadataPolicy.diagnostic("\u0000"))
     }
 
+    @Test fun providerMetadataPresentationRedactsSyntheticCredentials() {
+        val marker = "RMD1802_PRIVATE_METADATA_VALUE"
+        val signedUrl = "https://cdn.example/video?sig=$marker"
+        val displayed = listOf(
+            SourceMetadataPolicy.title("Title $signedUrl"),
+            SourceMetadataPolicy.channel("Channel $signedUrl"),
+            SourceMetadataPolicy.description("Description Authorization: Bearer $marker"),
+            SourceMetadataPolicy.qualityLabel("720p $signedUrl"),
+        )
+        displayed.forEach { assertFalse(it.contains(marker)) }
+        assertTrue(displayed[0].contains("video?REDACTED"))
+        assertTrue(displayed[1].contains("video?REDACTED"))
+        assertTrue(displayed[2].contains("Authorization: [REDACTED]"))
+        assertTrue(displayed[3].contains("video?REDACTED"))
+        assertTrue(displayed[0].length <= SourceMetadataPolicy.MaxTitleChars)
+        assertTrue(displayed[1].length <= SourceMetadataPolicy.MaxChannelChars)
+        assertTrue(displayed[2].length <= SourceMetadataPolicy.MaxDescriptionChars)
+        assertTrue(displayed[3].length <= SourceMetadataPolicy.MaxQualityLabelChars)
+    }
+
     @Test fun diagnosticRedactsSyntheticSignedUrls() {
         val marker = "RMD1302_MARKER"
         val input = "GET https://user:$marker@cdn.example/video?sig=$marker#frag-$marker"
