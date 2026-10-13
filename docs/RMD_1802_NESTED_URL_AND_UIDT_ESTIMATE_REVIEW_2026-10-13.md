@@ -13,3 +13,7 @@
 ## Qualification and closure
 
 These tests are fast host-JVM proof and do not require Android emulator execution. They are not evidence of successful exact-head CI until the newly committed SHA's CI workflow succeeds. Android smoke and the other required matrix lanes remain independent closeout requirements. Do not mark RMD-1802, RMD-1803, RMD-1805 or global proof checkboxes complete from implementation alone. No external service/legal approval is implied.
+
+## Rust core diagnostic parity addendum
+
+The independent follow-up found the same credential-path risk in `core/src/security.rs::redact_url_token`: its existing raw nested-scheme check did not reject percent-encoded nested HTTP(S) URLs or a credential-like `user:secret@host` segment within an otherwise ordinary URL path. The Rust parser treats both as path data and would preserve those bytes in diagnostic output. The production redactor now fails closed for nested raw/encoded URL schemes and `@`/`%40` credential markers in the parsed path. `security::tests::encoded_nested_urls_and_path_credentials_fail_closed` covers both cases and preserves a benign ordinary URL path. This addition also requires fresh exact-head Rust/core and full CI qualification; the earlier Android commit cannot qualify it.

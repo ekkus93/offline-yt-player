@@ -169,6 +169,18 @@ fn redact_url_token(token: &str) -> String {
     Url::parse(url_text).map_or_else(
         |_| format!("{prefix}[REDACTED_URL]{suffix}"),
         |mut url| {
+            // Percent-encoded nested URL schemes and path credentials are not
+            // recognized as URL userinfo. Never echo these untrusted path bytes.
+            let path = url.path().to_ascii_lowercase();
+            if path.contains("http%3a")
+                || path.contains("https%3a")
+                || path.contains("http://")
+                || path.contains("https://")
+                || path.contains('@')
+                || path.contains("%40")
+            {
+                return format!("{prefix}[REDACTED_URL]{suffix}");
+            }
             if !url.username().is_empty() || url.password().is_some() {
                 let _ = url.set_username("REDACTED");
                 let _ = url.set_password(None);
@@ -306,6 +318,26 @@ mod tests {
             assert!(!output.contains(marker), "{output}");
             assert!(output.contains("[REDACTED_URL]"), "{output}");
         }
+    }
+
+    #[test]
+    fn encoded_nested_urls_and_path_credentials_fail_closed() {
+        let marker = "RMD1802_ENCODED_NESTED_PATH_SECRET";
+        let inputs = [
+            format!(
+                "GET https://cdn.example/archive/https%3A%2F%2Fuser%3A{marker}%40inner.example/video"
+            ),
+            format!("GET https://cdn.example/archive/user:{marker}@inner.example/video"),
+        ];
+        for input in inputs {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("[REDACTED_URL]"), "{output}");
+        }
+        assert!(
+            redact_sensitive("GET https://cdn.example/video/segment")
+                .contains("cdn.example/video/segment")
+        );
     }
 
     #[test]
