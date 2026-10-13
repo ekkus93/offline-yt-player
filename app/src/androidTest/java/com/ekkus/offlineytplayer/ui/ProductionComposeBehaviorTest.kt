@@ -111,6 +111,47 @@ class ProductionComposeBehaviorTest {
 
 
     @Test
+    fun libraryRenameSuccessDoesNotExposeUntrustedReturnedTitle() {
+        val credential = "RMD1802_PRIVATE_RENAME_CREDENTIAL"
+        val mutations = object : AppLibraryMutationGateway {
+            override fun renameDisplayTitle(itemId: String, displayTitle: String): CoreGatewayResult<String?> =
+                CoreGatewayResult(
+                    value = "Renamed https://example.test/title?token=$credential",
+                    error = null,
+                )
+
+            override fun removeLibraryItem(
+                libraryRoot: String,
+                itemId: String,
+                confirmed: Boolean,
+            ): CoreGatewayResult<Boolean> = CoreGatewayResult(false, null)
+
+            override fun close() = Unit
+        }
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("item-1", "Fixture video", "720p · 0:42")),
+                ),
+                mutationGatewayProvider = { mutations },
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Rename").performClick()
+        compose.onNodeWithText("Save rename").performClick()
+        compose.waitUntil(5_000) {
+            runCatching {
+                compose.onNodeWithText("Renamed to Renamed https://example.test/title?REDACTED.")
+                    .assertIsDisplayed()
+            }.isSuccess
+        }
+        compose.onNodeWithText(credential, substring = true).assertDoesNotExist()
+    }
+
+    @Test
     fun library_rename_and_remove_actions_use_repository_mutations_after_confirmation() {
         val mutations = RecordingLibraryMutationGateway()
         compose.setContent {

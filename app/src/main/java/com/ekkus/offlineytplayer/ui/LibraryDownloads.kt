@@ -224,7 +224,7 @@ internal fun LibraryScreen(
                                     return@launch
                                 }
                                 message = result.error?.let { "Rename failed: ${SourceMetadataPolicy.diagnostic(it.message)}" }
-                                    ?: result.value?.let { "Renamed to $it." }
+                                    ?: result.value?.let { "Renamed to ${SourceMetadataPolicy.title(it)}." }
                                     ?: "Rename did not change the item."
                                 if (result.error == null && result.value != null) {
                                     renameRow = null
