@@ -107,6 +107,29 @@ class SourceMetadataPolicyTest {
         assertTrue(SourceMetadataPolicy.diagnostic("GET https://cdn.example/video/segment").contains("cdn.example/video/segment"))
     }
 
+    @Test fun protocolRelativeAndEncodedUrlsNeverExposeCredentials() {
+        val marker = "RELATIVE_URL_SECRET_1802"
+        val protocolRelative = "//user:$marker@cdn.example/media?sig=$marker"
+        val encoded = "https%3A%2F%2Fcdn.example%2Fmedia%3Fsig%3D$marker"
+        val displayed = listOf(
+            SourceMetadataPolicy.title("Title $protocolRelative"),
+            SourceMetadataPolicy.channel("Channel $encoded"),
+            SourceMetadataPolicy.description("Description $protocolRelative"),
+            SourceMetadataPolicy.qualityLabel("1080p $encoded"),
+            SourceMetadataPolicy.diagnostic("GET $protocolRelative"),
+            SourceMetadataPolicy.diagnostic("GET $encoded"),
+        )
+        displayed.forEach { value ->
+            assertFalse(value.contains(marker))
+            assertTrue(value.contains("REDACTED"))
+        }
+        // Non-sensitive protocol-relative media paths remain legible.
+        assertTrue(
+            SourceMetadataPolicy.diagnostic("GET //cdn.example/media/segment")
+                .contains("//cdn.example/media/segment"),
+        )
+    }
+
     @Test fun ordinaryDiagnosticTextIsPreserved() {
         assertEquals("download failed: connection reset", SourceMetadataPolicy.diagnostic("download failed: connection reset"))
     }

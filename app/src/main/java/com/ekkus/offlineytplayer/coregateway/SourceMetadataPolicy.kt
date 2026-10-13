@@ -9,7 +9,8 @@ internal object SourceMetadataPolicy {
     const val MaxQualityLabelChars = 128
     const val MaxDiagnosticChars = 512
 
-    private val urlPattern = Regex("https?://[^\\s]+", RegexOption.IGNORE_CASE)
+    // Protocol-relative and fully percent-encoded HTTP(S) URLs may carry signed tokens.
+    private val urlPattern = Regex("(?:https?://|(?<![\\w:])//|https?%3a%2f%2f)[^\\s]+", RegexOption.IGNORE_CASE)
     // URI treats a nested URL as ordinary path text, including embedded credentials.
     // Reject credential-looking or nested-URL paths instead of echoing them to UI/export.
     private val unsafeUrlPathPattern = Regex("(?i)(?:https?(?:://|%3a)|@|%40)")
