@@ -1,6 +1,8 @@
 package com.ekkus.offlineytplayer.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -28,5 +30,17 @@ class SetupThumbnailPolicyTest {
                 "https://i.ytimg.com/" + "x".repeat(4_096),
             ),
         )
+    }
+    @Test
+    fun decodedThumbnailBoundsRejectZeroNegativeAndExcessiveDimensions() {
+        assertFalse(SetupThumbnailDecodePolicy.acceptsDimensions(0, 720))
+        assertFalse(SetupThumbnailDecodePolicy.acceptsDimensions(-1, 720))
+        assertFalse(SetupThumbnailDecodePolicy.acceptsDimensions(1280, 0))
+        assertFalse(SetupThumbnailDecodePolicy.acceptsDimensions(4_097, 1))
+        assertFalse(SetupThumbnailDecodePolicy.acceptsDimensions(1, 4_097))
+        assertFalse(SetupThumbnailDecodePolicy.acceptsDimensions(4_096, 4_096))
+        assertFalse(SetupThumbnailDecodePolicy.acceptsDimensions(Int.MAX_VALUE, Int.MAX_VALUE))
+        assertTrue(SetupThumbnailDecodePolicy.acceptsDimensions(1_280, 720))
+        assertTrue(SetupThumbnailDecodePolicy.acceptsDimensions(2_048, 2_048))
     }
 }
