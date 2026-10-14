@@ -68,13 +68,15 @@ if name != '__OMITTED__':
     def test_all_required_classes_run_individually_and_keep_evidence(self):
         result, calls, reports = self.run_driver()
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        self.assertEqual(9, len(calls))
-        self.assertEqual(9, len(set(calls)))
+        self.assertEqual(10, len(calls))
+        self.assertEqual(10, len(set(calls)))
         self.assertTrue(any("GeneratedUniffiCoreGatewaySmokeTest" in c for c in calls))
         self.assertTrue(any("Rmd1504ShareE2EInstrumentedTest" in c for c in calls))
         self.assertTrue(any("Rmd1506ConnectivityE2EInstrumentedTest" in c for c in calls))
         self.assertTrue(any("StorageSettingsRecoveryInstrumentedTest" in c for c in calls))
-        self.assertEqual(9, len(reports))
+        self.assertTrue(any("StorageSettingsRecoveryInstrumentedTest#initialScanFailureCanRetryWithoutLeavingSettings" in c for c in calls))
+        self.assertTrue(any("StorageSettingsRecoveryInstrumentedTest#cleanupRefreshFailureInvalidatesStaleSummaryAndCanRetry" in c for c in calls))
+        self.assertEqual(10, len(reports))
 
     def test_missing_executed_class_fails_instead_of_false_green(self):
         omitted = "com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest"
@@ -92,6 +94,16 @@ if name != '__OMITTED__':
         self.assertNotEqual(0, result.returncode)
         self.assertIn("ANDROID_SMOKE_MISSING_REQUIRED_TEST " + selector, result.stdout)
         self.assertEqual(8, len(calls))
+
+    def test_missing_storage_cleanup_recovery_method_fails_closed(self):
+        selector = (
+            "com.ekkus.offlineytplayer.ui.StorageSettingsRecoveryInstrumentedTest"
+            "#cleanupRefreshFailureInvalidatesStaleSummaryAndCanRetry"
+        )
+        result, calls, _ = self.run_driver(omit_method=selector)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("ANDROID_SMOKE_MISSING_REQUIRED_TEST " + selector, result.stdout)
+        self.assertEqual(10, len(calls))
 
     def test_missing_required_method_fails_even_when_class_executed(self):
         isolated = "com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest"
