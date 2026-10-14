@@ -65,6 +65,15 @@ class AddWorkflowPolicyTest {
     }
 
     @Test
+    fun repeatedProviderLabelsDoNotRequireQuadraticSuffixSearch() {
+        val keys = AddWorkflowPolicy.selectionKeys(List(10_000) { "720p" })
+        assertEquals(10_000, keys.size)
+        assertEquals(10_000, keys.toSet().size)
+        assertEquals("720p", keys.first())
+        assertEquals("720p (10000)", keys.last())
+    }
+
+    @Test
     fun preferredQualityHonorsConfiguredValueOnlyWhenAvailable() {
         assertEquals(
             "Audio only",

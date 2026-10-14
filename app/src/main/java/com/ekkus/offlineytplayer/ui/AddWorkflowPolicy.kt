@@ -28,15 +28,19 @@ internal object AddWorkflowPolicy {
     fun selectionKeys(labels: List<String>): List<String> {
         val reserved = labels.filter { it.isNotBlank() }.toSet()
         val used = mutableSetOf<String>()
+        // Never rescan suffixes from 2 for every repeated provider label:
+        // thousands of duplicate options must not become quadratic work.
+        val nextSuffix = mutableMapOf<String, Int>()
         return labels.map { raw ->
             val base = raw.takeIf { it.isNotBlank() } ?: "Unnamed option"
             if (used.add(base)) base else {
-                var suffix = 2
+                var suffix = nextSuffix[base] ?: 2
                 var candidate: String
                 do {
                     candidate = "$base ($suffix)"
                     suffix++
                 } while (candidate in reserved || candidate in used)
+                nextSuffix[base] = suffix
                 used.add(candidate)
                 candidate
             }
