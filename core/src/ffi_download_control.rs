@@ -163,17 +163,29 @@ impl FfiDownloadControlService {
             Some(work) => {
                 DurableDownloadWorkStore::open(&self.database_path)?.enqueue_if_absent(&work)
             }
-            None => self
-                .library
-                .insert_download_snapshot_if_absent(&DurableDownloadSnapshot {
-                    job_id: job_id.into(),
-                    state: DownloadState::Queued,
-                    bytes_downloaded: 0,
-                    total_bytes: None,
-                    attempt: 0,
-                    retry_at_epoch_ms: None,
-                    last_error: None,
-                }),
+            None => {
+                // Opaque legacy job IDs may still be staged by clients that
+                // persist executable work separately. URL-like input without
+                // a supported source must not create an unexecutable Queued
+                // record that the runtime can never complete.
+                if url::Url::parse(job_id).is_ok() || job_id.contains("://") {
+                    return Err(CoreError::new(
+                        ErrorKind::UnsupportedSource,
+                        "Cannot enqueue an unsupported source URL",
+                        false,
+                    ));
+                }
+                self.library
+                    .insert_download_snapshot_if_absent(&DurableDownloadSnapshot {
+                        job_id: job_id.into(),
+                        state: DownloadState::Queued,
+                        bytes_downloaded: 0,
+                        total_bytes: None,
+                        attempt: 0,
+                        retry_at_epoch_ms: None,
+                        last_error: None,
+                    })
+            }
         }
     }
 
@@ -379,6 +391,32 @@ mod stale_control_tests {
         no_plan.job_id = "queue-only".into();
         queue.save_download_snapshot(&no_plan).unwrap();
         assert!(!service.enqueue("queue-only".into()).updated);
+    }
+
+    #[test]
+    fn unsupported_urls_do_not_leave_unexecutable_queued_jobs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("unsupported-url.sqlite3");
+        let service = FfiDownloadControlService::open(path.to_string_lossy().into_owned()).unwrap();
+        let library = LibraryStore::open(&path).unwrap();
+        let plans = DurableDownloadWorkStore::open(&path).unwrap();
+
+        for input in [
+            "https://example.com/video",
+            "ftp://example.com/video",
+            "mailto:example@example.com",
+        ] {
+            let result = service.enqueue(input.into());
+            assert!(!result.updated, "{result:?}");
+            assert!(result.error.is_some(), "{result:?}");
+        }
+        assert!(library.load_download_snapshots().unwrap().is_empty());
+        assert!(plans.load_all().unwrap().is_empty());
+
+        // Do not break existing opaque identifiers used by legacy callers.
+        let opaque = service.enqueue("legacy-job".into());
+        assert!(opaque.updated && opaque.error.is_none(), "{opaque:?}");
+        assert_eq!(library.load_download_snapshots().unwrap()[0].job_id, "legacy-job");
     }
 
     #[test]
