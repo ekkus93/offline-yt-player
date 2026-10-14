@@ -193,7 +193,8 @@ pub fn redact_sensitive(input: &str) -> String {
                             skipped += trimmed.len() - without_padding.len();
                             trimmed = without_padding;
                         }
-                        let separator_len = if trimmed.starts_with(':') || trimmed.starts_with('=') {
+                        let separator_len = if trimmed.starts_with(':') || trimmed.starts_with('=')
+                        {
                             Some(1)
                         } else if let Some(encoded) = trimmed.strip_prefix('%') {
                             let mut index = 0;
