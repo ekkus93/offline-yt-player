@@ -160,9 +160,14 @@ pub fn redact_sensitive(input: &str) -> String {
                     .match_indices(field)
                     .filter_map(move |(offset, _)| {
                         let suffix = &lower_ref[offset + field.len()..];
-                        let separator_len = if suffix.starts_with(':') {
+                        // Diagnostics may separate a field name from a literal or
+                        // encoded colon with spaces/tabs. Consume that whitespace
+                        // before matching, or the credential value can escape.
+                        let trimmed = suffix.trim_start_matches([' ', '\t']);
+                        let skipped = suffix.len() - trimmed.len();
+                        let separator_len = if trimmed.starts_with(':') {
                             Some(1)
-                        } else if let Some(encoded) = suffix.strip_prefix('%') {
+                        } else if let Some(encoded) = trimmed.strip_prefix('%') {
                             let mut index = 0;
                             while encoded[index..].starts_with("25") {
                                 index += 2;
@@ -171,7 +176,7 @@ pub fn redact_sensitive(input: &str) -> String {
                         } else {
                             None
                         };
-                        separator_len.map(|length| (offset, field.len() + length))
+                        separator_len.map(|length| (offset, field.len() + skipped + length))
                     })
             })
             .min_by_key(|(offset, _)| *offset);
@@ -600,6 +605,30 @@ mod tests {
             format!("Cookie%25253A session={marker}"),
             format!("Set-Cookie%3a session={marker}"),
             format!("X-Api-Key%2525253a {marker}"),
+        ];
+        for input in cases {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("[REDACTED]"), "{output}");
+        }
+        assert_eq!(
+            redact_sensitive("request failed: no authorization header received"),
+            "request failed: no authorization header received"
+        );
+    }
+
+    #[test]
+    fn whitespace_before_literal_or_encoded_header_separator_never_leaks() {
+        let marker = "RMD1802_WHITESPACE_HEADER_SECRET";
+        let cases = [
+            format!("Authorization : Bearer {marker}"),
+            format!("Authorization %3A Bearer {marker}"),
+            format!("Proxy-Authorization\t%253A Basic {marker}"),
+            format!("Cookie \t%25253a session={marker}"),
+            format!("Set-Cookie\t: session={marker}"),
+            format!("X-Api-Key \t%2525253a {marker}"),
+            format!("request failed: Authorization \t%3A Bearer {marker}"),
+            format!("Authorization \t%3A Bearer\n  {marker}"),
         ];
         for input in cases {
             let output = redact_sensitive(&input);
