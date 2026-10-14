@@ -323,7 +323,9 @@ class Rmd1504ShareE2EInstrumentedTest {
     private class OneShotFixtureServer(private val body: ByteArray) {
         private val failure = AtomicReference<Throwable?>()
         private val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).apply {
-            soTimeout = 30_000
+            // Software-emulated API 29 can delay foreground-service dispatch under CI load.
+            // Keep a finite deadline and require an actual transfer request.
+            soTimeout = 90_000
         }
         private lateinit var worker: Thread
         val mediaUrl = "http://127.0.0.1:" + server.localPort + "/video.mp4"
@@ -359,7 +361,7 @@ class Rmd1504ShareE2EInstrumentedTest {
         }
 
         fun joinAndRethrow() {
-            worker.join(30_000)
+            worker.join(95_000)
             assertTrue("share fixture server should finish", !worker.isAlive)
             failure.get()?.let { throw AssertionError("share fixture server failed", it) }
         }
