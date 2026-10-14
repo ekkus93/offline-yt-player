@@ -567,7 +567,14 @@ fn visit_partials(
     while let Some(current_directory) = pending.pop() {
         for entry in fs::read_dir(&current_directory).map_err(io_error)? {
             let path = entry.map_err(io_error)?.path();
-            let metadata = fs::symlink_metadata(&path).map_err(io_error)?;
+            // Removing a partial also deletes its sidecar. A directory
+            // iterator may still yield that sidecar's former name; an entry
+            // that has disappeared is not an error or an unsafe path.
+            let metadata = match fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == IoErrorKind::NotFound => continue,
+                Err(error) => return Err(io_error(error)),
+            };
             if metadata.file_type().is_symlink() {
                 return Err(CoreError::new(
                     ErrorKind::InvalidInput,
