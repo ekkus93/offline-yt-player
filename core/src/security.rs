@@ -206,7 +206,7 @@ fn redact_url_token(token: &str) -> String {
         "https:%2f",
     ]
     .iter()
-    .any(|marker| lower.contains(marker))
+    .any(|marker| lower.contains(*marker))
     {
         return "[REDACTED_URL]".to_string();
     }
