@@ -3,6 +3,14 @@ use futures::executor::block_on;
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Distinguish URL-like download requests from opaque legacy queue identifiers.
+///
+/// URLs require provider-approved executable work and must not silently become
+/// queue-only rows. Opaque legacy IDs retain their existing compatibility path.
+pub(crate) fn is_url_like_job_id(job_id: &str) -> bool {
+    url::Url::parse(job_id).is_ok() || job_id.contains("://")
+}
+
 /// Build provider-neutral executable work for supported production source URLs.
 ///
 /// Non-URL queue identifiers and unsupported source URLs remain valid durable queue identifiers for

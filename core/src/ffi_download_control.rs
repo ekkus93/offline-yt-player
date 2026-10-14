@@ -168,7 +168,7 @@ impl FfiDownloadControlService {
                 // persist executable work separately. URL-like input without
                 // a supported source must not create an unexecutable Queued
                 // record that the runtime can never complete.
-                if url::Url::parse(job_id).is_ok() || job_id.contains("://") {
+                if crate::ffi_download_enqueue_work::is_url_like_job_id(job_id) {
                     return Err(CoreError::new(
                         ErrorKind::UnsupportedSource,
                         "Cannot enqueue an unsupported source URL",

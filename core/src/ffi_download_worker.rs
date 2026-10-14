@@ -121,6 +121,20 @@ impl FfiDownloadWorkerService {
         let work = match work_store.load_one(job_id) {
             Ok(Some(work)) => work,
             Ok(None) => {
+                // Older versions could persist URL-like queued entries even
+                // when no executable work plan existed. Settle them durably
+                // instead of leaving an unexecutable queue item stuck.
+                if crate::ffi_download_enqueue_work::is_url_like_job_id(job_id) {
+                    return self.settle_invalid_url_plan(
+                        job_id,
+                        crate::CoreError::new(
+                            crate::ErrorKind::InvalidInput,
+                            "queued source URL has no executable download plan",
+                            false,
+                        ),
+                        now_epoch_ms,
+                    );
+                }
                 return Err(crate::CoreError::new(
                     crate::ErrorKind::InvalidInput,
                     "durable download work item does not exist",
@@ -311,6 +325,36 @@ mod asset_identity_tests {
         let error = durable[0].last_error.as_ref().unwrap();
         assert_eq!(error.kind, ErrorKind::InvalidInput);
         assert!(!error.retryable);
+        assert!(!worker.execute_job(job_id.into(), 20_000, 1).executed);
+        assert!(library.list(None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn legacy_url_queue_without_work_settles_as_durable_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing-plan.sqlite3");
+        let library = LibraryStore::open(&path).unwrap();
+        DurableDownloadWorkStore::open(&path).unwrap();
+        let job_id = "https://example.com/unsupported-video";
+        library
+            .save_download_snapshot(&DurableDownloadSnapshot {
+                job_id: job_id.into(),
+                state: DownloadState::Queued,
+                bytes_downloaded: 0,
+                total_bytes: None,
+                attempt: 0,
+                retry_at_epoch_ms: None,
+                last_error: None,
+            })
+            .unwrap();
+        let worker = FfiDownloadWorkerService::open(path.to_string_lossy().into()).unwrap();
+        let outcome = worker.execute_job(job_id.into(), 10_000, 1);
+        assert!(outcome.executed && outcome.failed, "{outcome:?}");
+        assert!(outcome.error.is_none(), "{outcome:?}");
+        let snapshot = library.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(snapshot.state, DownloadState::Failed);
+        assert_eq!(snapshot.attempt, 1);
+        assert_eq!(snapshot.last_error.unwrap().kind, ErrorKind::InvalidInput);
         assert!(!worker.execute_job(job_id.into(), 20_000, 1).executed);
         assert!(library.list(None).unwrap().is_empty());
     }
