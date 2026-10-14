@@ -4,9 +4,12 @@ import android.content.Context
 import android.os.StatFs
 import java.io.File
 import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.Files
 import java.nio.file.LinkOption
-import java.util.ArrayDeque
 
 internal data class ManagedStorageSummary(
     val mediaBytes: Long,
@@ -94,29 +97,33 @@ internal class StorageSettingsManager private constructor(
 
     private fun deleteManagedEntry(target: File, root: File) {
         val normalizedRoot = root.toPath().toAbsolutePath().normalize()
-        // Explicit post-order stack avoids recursive cleanup stack exhaustion.
-        // Validate every descendant, not only the original cleanup target.
-        val pending = ArrayDeque<Pair<File, Boolean>>()
-        pending.addLast(target to false)
-        while (pending.isNotEmpty()) {
-            val (entry, visited) = pending.removeLast()
-            val normalizedTarget = entry.toPath().toAbsolutePath().normalize()
-            require(normalizedTarget != normalizedRoot && normalizedTarget.startsWith(normalizedRoot)) {
+        fun owned(path: Path): Path {
+            val normalized = path.toAbsolutePath().normalize()
+            require(normalized != normalizedRoot && normalized.startsWith(normalizedRoot)) {
                 "Managed cleanup target is outside its app-private root"
             }
-            if (!visited && !Files.isSymbolicLink(normalizedTarget) &&
-                Files.isDirectory(normalizedTarget, LinkOption.NOFOLLOW_LINKS)
-            ) {
-                pending.addLast(entry to true)
-                Files.newDirectoryStream(normalizedTarget).use { children ->
-                    for (child in children) pending.addLast(child.toFile() to false)
-                }
-            } else {
-                // Files.delete unlinks a symlink, never its external referent.
-                // Failures propagate instead of reporting successful cleanup.
-                Files.delete(normalizedTarget)
-            }
+            return normalized
         }
+        // Files.walkFileTree uses a lazy iterator stack, not eager child arrays.
+        // The default walk does NOT follow symbolic links: visitFile unlinks
+        // owned symlinks rather than entering their external target directories.
+        Files.walkFileTree(owned(target.toPath()), object : SimpleFileVisitor<Path>() {
+            override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
+                owned(dir)
+                return FileVisitResult.CONTINUE
+            }
+
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                Files.delete(owned(file))
+                return FileVisitResult.CONTINUE
+            }
+
+            override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult {
+                if (exc != null) throw exc
+                Files.delete(owned(dir))
+                return FileVisitResult.CONTINUE
+            }
+        })
     }
 
     private fun isDatabaseFile(file: File): Boolean =
@@ -138,18 +145,12 @@ private fun File.isManagedRegularFile(): Boolean =
     Files.isRegularFile(toPath(), LinkOption.NOFOLLOW_LINKS)
 
 private fun File.managedEntries(): Sequence<File> = sequence {
-    // Iterative, no-follow walk: provider/cache trees must not consume one JVM
-    // call frame per nested directory or eagerly retain every traversed entry.
-    val pending = ArrayDeque<File>()
-    pending.addLast(this@managedEntries)
-    while (pending.isNotEmpty()) {
-        val entry = pending.removeLast()
-        yield(entry)
-        if (Files.isSymbolicLink(entry.toPath()) || !entry.exists() || !entry.isDirectory) {
-            continue
-        }
-        Files.newDirectoryStream(entry.toPath()).use { children ->
-            for (child in children) pending.addLast(child.toFile())
+    // Files.walk lazily enumerates each entry without following symlinks.
+    // It avoids retaining every child path of a wide managed directory in
+    // an explicit pending stack; close the stream on completion or failure.
+    Files.walk(this@managedEntries.toPath()).use { paths ->
+        for (path in paths.iterator()) {
+            yield(path.toFile())
         }
     }
 }

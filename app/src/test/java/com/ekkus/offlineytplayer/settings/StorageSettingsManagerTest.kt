@@ -213,4 +213,38 @@ class StorageSettingsManagerTest {
         }
     }
 
+    @Test
+    fun wideDirectoryEnumerationAndCleanupPreserveCompleteMediaAndExternalSymlinks() {
+        val root = Files.createTempDirectory("storage-wider-tree").toFile()
+        val external = Files.createTempDirectory("storage-wider-external").toFile()
+        try {
+            val files = root.resolve("files").apply { mkdirs() }
+            val cache = root.resolve("cache").apply { mkdirs() }
+            val nestedCache = cache.resolve("many").apply { mkdirs() }
+            val nestedFiles = files.resolve("items").apply { mkdirs() }
+            repeat(1_024) { index ->
+                nestedCache.resolve("thumb-$index.bin").writeBytes(byteArrayOf(1))
+                nestedFiles.resolve("item-$index.partial").writeBytes(byteArrayOf(2, 3))
+            }
+            val completed = nestedFiles.resolve("done.mp4").apply { writeBytes(ByteArray(17)) }
+            val outsideFile = external.resolve("private.bin").apply { writeBytes(ByteArray(79)) }
+            Files.createSymbolicLink(nestedCache.resolve("external").toPath(), outsideFile.toPath())
+            val manager = StorageSettingsManager.forTest(files, cache)
+            assertEquals(1_024L, manager.summarize().cacheBytes)
+            assertEquals(2_048L, manager.summarize().partialBytes)
+            assertEquals(1_024L, manager.cleanup(ManagedCleanup.Cache))
+            assertEquals(2_048L, manager.cleanup(ManagedCleanup.Incomplete))
+            assertEquals(0L, manager.summarize().cacheBytes)
+            assertEquals(0L, manager.summarize().partialBytes)
+            assertTrue(completed.isFile)
+            assertEquals(17L, completed.length())
+            assertEquals(79L, outsideFile.length())
+            assertEquals(0L, manager.cleanup(ManagedCleanup.Cache))
+            assertEquals(0L, manager.cleanup(ManagedCleanup.Incomplete))
+        } finally {
+            root.deleteRecursively()
+            external.deleteRecursively()
+        }
+    }
+
 }
