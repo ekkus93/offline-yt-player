@@ -193,14 +193,16 @@ pub fn redact_sensitive(input: &str) -> String {
                             skipped += trimmed.len() - without_padding.len();
                             trimmed = without_padding;
                         }
-                        let separator_len = if trimmed.starts_with(':') {
+                        let separator_len = if trimmed.starts_with(':') || trimmed.starts_with('=') {
                             Some(1)
                         } else if let Some(encoded) = trimmed.strip_prefix('%') {
                             let mut index = 0;
                             while encoded[index..].starts_with("25") {
                                 index += 2;
                             }
-                            encoded[index..].starts_with("3a").then_some(index + 3)
+                            (encoded[index..].starts_with("3a")
+                                || encoded[index..].starts_with("3d"))
+                            .then_some(index + 3)
                         } else {
                             None
                         };
@@ -690,6 +692,23 @@ mod tests {
             redact_sensitive("request failed: no authorization header received"),
             "request failed: no authorization header received"
         );
+    }
+
+    #[test]
+    fn equals_separated_sensitive_headers_never_leak() {
+        let samples = [
+            "Authorization=Bearer auth-equals-secret",
+            "Proxy-Authorization = Basic proxy-equals-secret",
+            "Cookie%3Dcookie-equals-secret",
+            "Set-Cookie%253dset-cookie-equals-secret",
+            "X-Api-Key = api-equals-secret",
+            r#"{"Authorization" = "Bearer json-equals-secret"}"#,
+        ];
+        for sample in samples {
+            let redacted = redact_sensitive(sample);
+            assert!(redacted.contains("[REDACTED]"), "{sample}: {redacted}");
+            assert!(!redacted.contains("-equals-secret"), "{sample}: {redacted}");
+        }
     }
 
     #[test]
