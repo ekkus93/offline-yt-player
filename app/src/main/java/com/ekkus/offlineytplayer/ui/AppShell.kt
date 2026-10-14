@@ -161,11 +161,12 @@ internal fun StorageSettingsPage(operations: ManagedStorageOperations? = null) {
     val scope = rememberCoroutineScope()
     var summary by remember(storage) { mutableStateOf<ManagedStorageSummary?>(null) }
     var loading by remember(storage) { mutableStateOf(true) }
+    var scanAttempt by remember(storage) { mutableStateOf(0) }
     var busy by remember(storage) { mutableStateOf(false) }
     var pendingCleanup by remember(storage) { mutableStateOf<ManagedCleanup?>(null) }
     var cleanupError by remember(storage) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(storage) {
+    LaunchedEffect(storage, scanAttempt) {
         loading = true
         try {
             summary = withContext(Dispatchers.IO) { storage.summarize() }
@@ -173,6 +174,7 @@ internal fun StorageSettingsPage(operations: ManagedStorageOperations? = null) {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
+            summary = null
             cleanupError = "Storage details unavailable."
         } finally {
             loading = false
@@ -189,6 +191,12 @@ internal fun StorageSettingsPage(operations: ManagedStorageOperations? = null) {
             SettingValue("Cache", formatStorageBytes(current.cacheBytes))
             SettingValue("Free", formatStorageBytes(current.freeBytes))
         }
+    }
+    if (!loading && summary == null && !busy) {
+        OutlinedButton(
+            onClick = { scanAttempt += 1 },
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+        ) { Text("Retry storage scan") }
     }
     if (busy) Text("Cleaning storage…")
 
