@@ -15,7 +15,8 @@ for required_class in \
     com.ekkus.offlineytplayer.downloads.Rmd1507NotificationControlInstrumentedTest \
     com.ekkus.offlineytplayer.ui.Rmd1802DownloadsControlThreadingInstrumentedTest#throwingLibraryDetailsGatewayShowsUnavailableWithoutCrashingComposition \
     com.ekkus.offlineytplayer.ui.Rmd1802DownloadsControlThreadingInstrumentedTest#visibleDownloadsPauseInvokesControlOffMainAndReportsDurableUpdate \
-    com.ekkus.offlineytplayer.ui.StorageSettingsRecoveryInstrumentedTest
+    com.ekkus.offlineytplayer.ui.StorageSettingsRecoveryInstrumentedTest#initialScanFailureCanRetryWithoutLeavingSettings \
+    com.ekkus.offlineytplayer.ui.StorageSettingsRecoveryInstrumentedTest#cleanupRefreshFailureInvalidatesStaleSummaryAndCanRetry
 do
     class_ref=${required_class%%#*}
     class_name=${class_ref##*.}
