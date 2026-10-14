@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
@@ -76,9 +77,9 @@ class DuplicateProviderOptionsInstrumentedTest {
             }.isSuccess
         }
         compose.onNodeWithText("Options").performClick()
-        compose.onNodeWithText("Select 128 kbps (3)").performClick()
-        compose.onNodeWithText("Select English (3)").performClick()
-        compose.onNodeWithText("Apply options").performClick()
+        compose.onNodeWithText("Select 128 kbps (3)").performScrollTo().performClick()
+        compose.onNodeWithText("Select English (3)").performScrollTo().performClick()
+        compose.onNodeWithText("Apply options").performScrollTo().performClick()
         compose.onNodeWithText("Download").performClick()
         compose.waitUntil(10_000) { controls.enqueuedSelections.isNotEmpty() }
         compose.runOnIdle {
