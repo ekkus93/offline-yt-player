@@ -163,8 +163,30 @@ pub fn redact_sensitive(input: &str) -> String {
                         // Diagnostics may separate a field name from a literal or
                         // encoded colon with spaces/tabs. Consume that whitespace
                         // before matching, or the credential value can escape.
-                        let trimmed = suffix.trim_start_matches([' ', '\t']);
-                        let skipped = suffix.len() - trimmed.len();
+                        let mut trimmed = suffix.trim_start_matches([' ', '\t']);
+                        let mut skipped = suffix.len() - trimmed.len();
+                        // Header dumps may quote field names (JSON or debug maps).
+                        // They also appear escaped inside stringified JSON. Consume
+                        // the matching closing quote, including its escaped form,
+                        // before recognizing either literal or encoded colons.
+                        let quoted_name = offset > 0
+                            && matches!(lower_ref.as_bytes()[offset - 1], b'"' | b'\'');
+                        let closing_quote_len = if quoted_name && trimmed.starts_with("\\\"") {
+                            2
+                        } else if quoted_name
+                            && (trimmed.starts_with('"') || trimmed.starts_with('\''))
+                        {
+                            1
+                        } else {
+                            0
+                        };
+                        if closing_quote_len > 0 {
+                            trimmed = &trimmed[closing_quote_len..];
+                            skipped += closing_quote_len;
+                            let without_padding = trimmed.trim_start_matches([' ', '\t']);
+                            skipped += trimmed.len() - without_padding.len();
+                            trimmed = without_padding;
+                        }
                         let separator_len = if trimmed.starts_with(':') {
                             Some(1)
                         } else if let Some(encoded) = trimmed.strip_prefix('%') {
@@ -629,6 +651,28 @@ mod tests {
             format!("X-Api-Key \t%2525253a {marker}"),
             format!("request failed: Authorization \t%3A Bearer {marker}"),
             format!("Authorization \t%3A Bearer\n  {marker}"),
+        ];
+        for input in cases {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("[REDACTED]"), "{output}");
+        }
+        assert_eq!(
+            redact_sensitive("request failed: no authorization header received"),
+            "request failed: no authorization header received"
+        );
+    }
+
+    #[test]
+    fn quoted_json_header_names_and_escaped_diagnostic_keys_never_leak() {
+        let marker = "RMD1802_QUOTED_HEADER_SECRET";
+        let cases = [
+            format!(r#"{{"Authorization": "Bearer {marker}"}}"#),
+            format!(r#"{{"Proxy-Authorization" : "Basic {marker}"}}"#),
+            format!(r#"{{"Cookie": "session={marker}"}}"#),
+            format!(r#"{{"Set-Cookie" %3A "session={marker}"}}"#),
+            format!(r#"{{"X-Api-Key" %253A "{marker}"}}"#),
+            format!(r#"logger: {{\\"Authorization\\": \\"Bearer {marker}\\"}}"#),
         ];
         for input in cases {
             let output = redact_sensitive(&input);
