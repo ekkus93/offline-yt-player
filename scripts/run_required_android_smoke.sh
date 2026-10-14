@@ -13,11 +13,17 @@ for required_class in \
     com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest \
     com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest \
     com.ekkus.offlineytplayer.downloads.Rmd1507NotificationControlInstrumentedTest \
-    com.ekkus.offlineytplayer.ui.Rmd1802DownloadsControlThreadingInstrumentedTest
+    com.ekkus.offlineytplayer.ui.Rmd1802DownloadsControlThreadingInstrumentedTest#throwingLibraryDetailsGatewayShowsUnavailableWithoutCrashingComposition \
+    com.ekkus.offlineytplayer.ui.Rmd1802DownloadsControlThreadingInstrumentedTest#visibleDownloadsPauseInvokesControlOffMainAndReportsDurableUpdate
 do
-    class_name=${required_class##*.}
-    report_dir="app/build/reports/androidSmokeLogs/required-${class_name}-results"
-    log="app/build/reports/androidSmokeLogs/required-${class_name}.log"
+    class_ref=${required_class%%#*}
+    class_name=${class_ref##*.}
+    case "$required_class" in
+        *"#"*) explicit_method=${required_class#*#}; report_tag="${class_name}-${explicit_method}" ;;
+        *) explicit_method=""; report_tag="$class_name" ;;
+    esac
+    report_dir="app/build/reports/androidSmokeLogs/required-${report_tag}-results"
+    log="app/build/reports/androidSmokeLogs/required-${report_tag}.log"
 
     # Remove prior reports before executing so a cached/stale XML cannot pass the gate.
     rm -rf app/build/outputs/androidTest-results/connected
@@ -38,12 +44,13 @@ do
             required_method="backgroundStoreUpdatePublishesAppearanceToComposeOnMainThread" ;;
         *) required_method="" ;;
     esac
+    if [ -n "$explicit_method" ]; then required_method=$explicit_method; fi
     if [ -n "$required_method" ]; then
         python3 scripts/assert_android_smoke_execution.py \
-            --results-dir "$report_dir" --required-class "$required_class" \
-            --required-test "$required_class#$required_method"
+            --results-dir "$report_dir" --required-class "$class_ref" \
+            --required-test "$class_ref#$required_method"
     else
         python3 scripts/assert_android_smoke_execution.py \
-            --results-dir "$report_dir" --required-class "$required_class"
+            --results-dir "$report_dir" --required-class "$class_ref"
     fi
 done
