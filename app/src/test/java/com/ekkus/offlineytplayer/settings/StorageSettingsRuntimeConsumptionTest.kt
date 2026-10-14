@@ -9,6 +9,37 @@ import org.junit.Test
 
 class StorageSettingsRuntimeConsumptionTest {
     @Test
+    fun deepManagedTreeIsCountedWithoutRecursiveTraversalOrFollowingSymlinks() {
+        val root = Files.createTempDirectory("storage-settings-deep-tree").toFile()
+        val external = Files.createTempDirectory("storage-settings-deep-external").toFile()
+        val files = root.resolve("files").apply { mkdirs() }
+        val cache = root.resolve("cache").apply { mkdirs() }
+        try {
+            var nested = files
+            repeat(256) {
+                nested = nested.resolve("d").apply { mkdir() }
+            }
+            val deepPartial = nested.resolve("transfer.partial").apply { writeBytes(ByteArray(17)) }
+            val deepMedia = nested.resolve("movie.mp4").apply { writeBytes(ByteArray(31)) }
+            val externalAsset = external.resolve("external.partial").apply { writeBytes(ByteArray(19)) }
+            Files.createSymbolicLink(nested.resolve("linked.partial").toPath(), externalAsset.toPath())
+            val manager = StorageSettingsManager.forTest(files, cache, freeBytes = 1024)
+            assertEquals(
+                ManagedStorageSummary(31, 0, 17, 0, 1024),
+                manager.summarize(),
+            )
+            assertEquals(17L, manager.cleanup(ManagedCleanup.Incomplete))
+            assertFalse(deepPartial.exists())
+            assertTrue(deepMedia.exists())
+            assertTrue("External symlink target must remain intact", externalAsset.exists())
+            assertEquals(0L, manager.summarize().partialBytes)
+        } finally {
+            root.deleteRecursively()
+            external.deleteRecursively()
+        }
+    }
+
+    @Test
     fun storageSummaryRejectsSymlinkedManagedRootsInsteadOfReportingMisleadingZeros() {
         val root = Files.createTempDirectory("storage-settings-root-guard").toFile()
         val external = Files.createTempDirectory("storage-settings-external").toFile()

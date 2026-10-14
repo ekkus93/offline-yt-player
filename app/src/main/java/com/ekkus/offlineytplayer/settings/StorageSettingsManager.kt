@@ -6,6 +6,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.util.ArrayDeque
 
 internal data class ManagedStorageSummary(
     val mediaBytes: Long,
@@ -32,10 +33,20 @@ internal class StorageSettingsManager private constructor(
         requireRealManagedRoot(cacheRoot)
         // File.walkTopDown() follows symbolic-link directories on some runtimes;
         // never read or count contents outside this app-owned tree.
-        val files = filesRoot.managedEntries().filter(File::isManagedRegularFile)
-        val database = files.filter(::isDatabaseFile).sumOf(File::length)
-        val partial = files.filter(::isIncompleteFile).sumOf(File::length)
-        val media = files.filterNot { isDatabaseFile(it) || isIncompleteFile(it) }.sumOf(File::length)
+        var database = 0L
+        var partial = 0L
+        var media = 0L
+        // Stream each app-owned file exactly once; do not materialize and rescan
+        // the entire storage tree while calculating three category totals.
+        filesRoot.managedEntries().forEach { file ->
+            if (!file.isManagedRegularFile()) return@forEach
+            val bytes = file.length()
+            when {
+                isDatabaseFile(file) -> database += bytes
+                isIncompleteFile(file) -> partial += bytes
+                else -> media += bytes
+            }
+        }
         return ManagedStorageSummary(media, database, partial, cacheRoot.managedSize(), freeBytesProvider(filesRoot))
     }
 
@@ -51,7 +62,7 @@ internal class StorageSettingsManager private constructor(
             // Unlink incomplete-asset symlinks rather than following their targets.
             ManagedCleanup.Incomplete -> filesRoot.managedEntries().filter {
                 isIncompleteFile(it) && (it.isManagedRegularFile() || Files.isSymbolicLink(it.toPath()))
-            }
+            }.toList()
         }
         val bytes = targets.sumOf(File::managedSize)
         targets.forEach { deleteManagedEntry(it, root) }
@@ -103,12 +114,20 @@ internal class StorageSettingsManager private constructor(
 private fun File.isManagedRegularFile(): Boolean =
     Files.isRegularFile(toPath(), LinkOption.NOFOLLOW_LINKS)
 
-private fun File.managedEntries(): List<File> {
-    if (Files.isSymbolicLink(toPath())) return listOf(this)
-    if (!exists()) return emptyList()
-    if (!isDirectory) return listOf(this)
-    val children = listFiles() ?: throw IOException("Cannot enumerate managed storage")
-    return listOf(this) + children.flatMap(File::managedEntries)
+private fun File.managedEntries(): Sequence<File> = sequence {
+    // Iterative, no-follow walk: provider/cache trees must not consume one JVM
+    // call frame per nested directory or eagerly retain every traversed entry.
+    val pending = ArrayDeque<File>()
+    pending.addLast(this@managedEntries)
+    while (pending.isNotEmpty()) {
+        val entry = pending.removeLast()
+        yield(entry)
+        if (Files.isSymbolicLink(entry.toPath()) || !entry.exists() || !entry.isDirectory) {
+            continue
+        }
+        val children = entry.listFiles() ?: throw IOException("Cannot enumerate managed storage")
+        children.forEach(pending::addLast)
+    }
 }
 
 private fun File.managedSize(): Long =
