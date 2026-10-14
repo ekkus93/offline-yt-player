@@ -561,44 +561,45 @@ fn visit_partials(
     if !directory.exists() {
         return Ok(());
     }
-    // An explicit stack avoids unbounded call-stack use for deeply nested
-    // Library trees; files are streamed rather than eagerly collected.
-    let mut pending = vec![directory.to_path_buf()];
-    while let Some(current_directory) = pending.pop() {
-        for entry in fs::read_dir(&current_directory).map_err(io_error)? {
-            let path = entry.map_err(io_error)?.path();
-            // Removing a partial also deletes its sidecar. A directory
-            // iterator may still yield that sidecar's former name; an entry
-            // that has disappeared is not an error or an unsafe path.
-            let metadata = match fs::symlink_metadata(&path) {
-                Ok(metadata) => metadata,
-                Err(error) if error.kind() == IoErrorKind::NotFound => continue,
-                Err(error) => return Err(io_error(error)),
-            };
-            if metadata.file_type().is_symlink() {
+    // Keep one streaming directory iterator per active depth. A pending-path
+    // stack can retain every sibling of a very wide imported Library tree.
+    let mut directories = vec![fs::read_dir(directory).map_err(io_error)?];
+    while let Some(entries) = directories.last_mut() {
+        let Some(entry) = entries.next() else {
+            directories.pop();
+            continue;
+        };
+        let path = entry.map_err(io_error)?.path();
+        // Deleting a partial also unlinks its sidecar, which may still be
+        // returned by an existing directory iterator. Ignore only ENOENT.
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == IoErrorKind::NotFound => continue,
+            Err(error) => return Err(io_error(error)),
+        };
+        if metadata.file_type().is_symlink() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidInput,
+                "library cleanup refused to follow symlink",
+                false,
+            ));
+        }
+        if metadata.is_dir() {
+            let canonical_directory = fs::canonicalize(&path).map_err(io_error)?;
+            if !canonical_directory.starts_with(canonical_root) {
                 return Err(CoreError::new(
                     ErrorKind::InvalidInput,
-                    "library cleanup refused to follow symlink",
+                    "library cleanup path escapes the selected root",
                     false,
                 ));
             }
-            if metadata.is_dir() {
-                let canonical_directory = fs::canonicalize(&path).map_err(io_error)?;
-                if !canonical_directory.starts_with(canonical_root) {
-                    return Err(CoreError::new(
-                        ErrorKind::InvalidInput,
-                        "library cleanup path escapes the selected root",
-                        false,
-                    ));
-                }
-                pending.push(path);
-            } else if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".partial"))
-            {
-                visitor(&path)?;
-            }
+            directories.push(fs::read_dir(&path).map_err(io_error)?);
+        } else if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".partial"))
+        {
+            visitor(&path)?;
         }
     }
     Ok(())
@@ -1069,6 +1070,29 @@ mod tests {
         assert!(!partial.exists());
         assert!(!sidecar.exists());
         assert_eq!(fs::read(&completed).unwrap(), b"completed asset");
+        assert_eq!(engine.cleanup_orphan_partials().unwrap(), 0);
+    }
+
+    #[test]
+    fn orphan_cleanup_streams_wide_sibling_directories_and_preserves_media() {
+        let root = tempfile::tempdir().unwrap();
+        let items = root.path().join("items");
+        fs::create_dir_all(&items).unwrap();
+        for index in 0..512 {
+            let directory = items.join(format!("item-{index}"));
+            fs::create_dir(&directory).unwrap();
+            fs::write(directory.join(".clip.partial"), b"pending").unwrap();
+            fs::write(directory.join(".clip.partial.resume.json"), b"resume").unwrap();
+            fs::write(directory.join("complete.mp4"), b"preserve").unwrap();
+        }
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        assert_eq!(engine.cleanup_orphan_partials().unwrap(), 512);
+        for index in 0..512 {
+            let directory = items.join(format!("item-{index}"));
+            assert!(!directory.join(".clip.partial").exists());
+            assert!(!directory.join(".clip.partial.resume.json").exists());
+            assert_eq!(fs::read(directory.join("complete.mp4")).unwrap(), b"preserve");
+        }
         assert_eq!(engine.cleanup_orphan_partials().unwrap(), 0);
     }
 
