@@ -1091,7 +1091,10 @@ mod tests {
             let directory = items.join(format!("item-{index}"));
             assert!(!directory.join(".clip.partial").exists());
             assert!(!directory.join(".clip.partial.resume.json").exists());
-            assert_eq!(fs::read(directory.join("complete.mp4")).unwrap(), b"preserve");
+            assert_eq!(
+                fs::read(directory.join("complete.mp4")).unwrap(),
+                b"preserve"
+            );
         }
         assert_eq!(engine.cleanup_orphan_partials().unwrap(), 0);
     }
