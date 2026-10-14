@@ -107,10 +107,10 @@ internal class StorageSettingsManager private constructor(
             if (!visited && !Files.isSymbolicLink(normalizedTarget) &&
                 Files.isDirectory(normalizedTarget, LinkOption.NOFOLLOW_LINKS)
             ) {
-                val children = entry.listFiles()
-                    ?: throw IOException("Cannot list managed cleanup directory")
                 pending.addLast(entry to true)
-                children.forEach { pending.addLast(it to false) }
+                Files.newDirectoryStream(normalizedTarget).use { children ->
+                    for (child in children) pending.addLast(child.toFile() to false)
+                }
             } else {
                 // Files.delete unlinks a symlink, never its external referent.
                 // Failures propagate instead of reporting successful cleanup.
@@ -148,8 +148,9 @@ private fun File.managedEntries(): Sequence<File> = sequence {
         if (Files.isSymbolicLink(entry.toPath()) || !entry.exists() || !entry.isDirectory) {
             continue
         }
-        val children = entry.listFiles() ?: throw IOException("Cannot enumerate managed storage")
-        children.forEach(pending::addLast)
+        Files.newDirectoryStream(entry.toPath()).use { children ->
+            for (child in children) pending.addLast(child.toFile())
+        }
     }
 }
 
