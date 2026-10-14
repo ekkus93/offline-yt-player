@@ -78,6 +78,29 @@ class SourceMetadataPolicyTest {
         assertTrue(output.length <= SourceMetadataPolicy.MaxDiagnosticChars)
     }
 
+    @Test fun percentEncodedHeaderSeparatorsNeverExposeCredentials() {
+        val marker = "ENCODED_HEADER_SECRET_1802"
+        val inputs = listOf(
+            "Authorization%3A Bearer $marker",
+            "2026-10-13 ERROR Proxy-Authorization%253A Basic $marker",
+            "Cookie%25253A session=$marker",
+            "request failed: X-Api-Key%3a $marker",
+            "Set-Cookie%253a session=$marker",
+        )
+        inputs.forEach { input ->
+            listOf(
+                SourceMetadataPolicy.title(input),
+                SourceMetadataPolicy.channel(input),
+                SourceMetadataPolicy.description(input),
+                SourceMetadataPolicy.qualityLabel(input),
+                SourceMetadataPolicy.diagnostic(input),
+            ).forEach { projected ->
+                assertFalse(projected.contains(marker))
+                assertTrue(projected.contains("[REDACTED]"))
+            }
+        }
+    }
+
     @Test fun foldedSensitiveHeaderLinesNeverDiscloseRawValues() {
         val marker = "FOLDED_ANDROID_SECRET_1802"
         val input = "Authorization: Bearer\n  $marker\nsafe: context\nCookie: session=\n\t$marker"
