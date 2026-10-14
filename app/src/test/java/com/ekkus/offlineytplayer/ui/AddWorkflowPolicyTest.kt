@@ -44,10 +44,24 @@ class AddWorkflowPolicyTest {
     @Test
     fun qualityLabelsUseResolvedOptionsBeforeFallback() {
         assertEquals(
-            listOf("720p", "Audio only"),
+            listOf("720p", "720p (2)", "Unnamed option", "Audio only"),
             AddWorkflowPolicy.qualityLabels(listOf("720p", "720p", " ", "Audio only"), "Best"),
         )
         assertEquals(listOf("Best"), AddWorkflowPolicy.qualityLabels(emptyList(), "Best"))
+    }
+
+    @Test
+    fun duplicateProviderLabelsPreserveAllExecutableChoiceKeys() {
+        val labels = listOf("720p", "720p", "720p (2)", "720p", "Audio", "Audio")
+        val keys = AddWorkflowPolicy.selectionKeys(labels)
+        assertEquals(
+            listOf("720p", "720p (3)", "720p (2)", "720p (4)", "Audio", "Audio (2)"),
+            keys,
+        )
+        assertEquals(keys.size, keys.toSet().size)
+        val ids = listOf("video-a", "video-b", "video-c", "video-d", "audio-a", "audio-b")
+        assertEquals("video-b", keys.zip(ids).toMap()["720p (3)"])
+        assertEquals("audio-b", keys.zip(ids).toMap()["Audio (2)"])
     }
 
     @Test

@@ -24,13 +24,28 @@ internal object AddWorkflowPolicy {
         return ClipboardPasteDecision(bounded, PastedClipboardMessage)
     }
 
+    /** Preserve all executable choices, even when provider labels collide. */
+    fun selectionKeys(labels: List<String>): List<String> {
+        val reserved = labels.filter { it.isNotBlank() }.toSet()
+        val used = mutableSetOf<String>()
+        return labels.map { raw ->
+            val base = raw.takeIf { it.isNotBlank() } ?: "Unnamed option"
+            if (used.add(base)) base else {
+                var suffix = 2
+                var candidate: String
+                do {
+                    candidate = "$base ($suffix)"
+                    suffix++
+                } while (candidate in reserved || candidate in used)
+                used.add(candidate)
+                candidate
+            }
+        }
+    }
+
     fun qualityLabels(resolvedLabels: List<String>, fallbackLabel: String): List<String> =
-        resolvedLabels
-            // The original label is the key in the production format-choice map.
-            // Trimming it here would silently disconnect the UI from its choice ID.
-            .filter { it.isNotBlank() }
-            .distinct()
-            .ifEmpty { listOf(fallbackLabel).filter { it.isNotBlank() } }
+        if (resolvedLabels.isEmpty()) listOf(fallbackLabel).filter { it.isNotBlank() }
+        else selectionKeys(resolvedLabels)
 
     fun preferredQualityLabel(options: List<String>, configured: String, fallback: String): String =
         options.firstOrNull { it.trim().equals(configured.trim(), ignoreCase = true) }
