@@ -177,11 +177,10 @@ pub fn redact_sensitive(input: &str) -> String {
                         // Logging layers can escape the closing double quote once
                         // or repeatedly. Only consume it when the opening quote
                         // also belongs to this sensitive field name.
-                        let escape_count = trimmed.bytes().take_while(|byte| *byte == b'\\').count();
+                        let escape_count =
+                            trimmed.bytes().take_while(|byte| *byte == b'\\').count();
                         let closing_quote_len = match opening_quote {
-                            Some(b'"')
-                                if trimmed.as_bytes().get(escape_count) == Some(&b'"') =>
-                            {
+                            Some(b'"') if trimmed.as_bytes().get(escape_count) == Some(&b'"') => {
                                 escape_count + 1
                             }
                             Some(b'\'') if trimmed.starts_with('\'') => 1,
