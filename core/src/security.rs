@@ -194,6 +194,22 @@ fn redact_urls(line: &str) -> String {
 
 fn redact_url_token(token: &str) -> String {
     let lower = token.to_ascii_lowercase();
+    // Mixed or repeatedly percent-encoded schemes are not reliably parsed as URLs.
+    // Never echo the original token: it may contain credentials or a signed query.
+    // This also catches encoded schemes embedded in an otherwise ordinary token.
+    if [
+        "http%3a",
+        "https%3a",
+        "http%25",
+        "https%25",
+        "http:%2f",
+        "https:%2f",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+    {
+        return "[REDACTED_URL]".to_string();
+    }
     // A scheme-relative URL is still able to carry credentials and a signed query.
     // Do not interpret the "//" inside an existing scheme or path as a second URL.
     let scheme_relative_start = lower.match_indices("//").find_map(|(offset, _)| {
@@ -256,6 +272,9 @@ fn redact_url_token(token: &str) -> String {
                 // credentials inside a path that would otherwise be echoed.
                 || path.contains("%3f")
                 || path.contains("%23")
+                // Layered percent encoding can hide delimiters (%253F, %2523,
+                // %2540, etc.) from a single decoding pass. Fail closed.
+                || path.contains("%25")
             {
                 return format!("{prefix}[REDACTED_URL]{suffix}");
             }
@@ -508,6 +527,34 @@ mod tests {
             assert!(!output.contains(marker), "{output}");
             assert!(output.contains("[REDACTED_URL]"), "{output}");
         }
+    }
+
+    #[test]
+    fn layered_percent_encoded_urls_and_delimiters_fail_closed() {
+        let marker = "RMD1802_LAYERED_RUST_URL_SECRET";
+        let cases = [
+            // Doubly and triply encoded full URL schemes.
+            format!("url=https%253A%252F%252Fcdn.example%252Fvideo%253Fsig%253D{marker}"),
+            format!("url=HTTP%25253a%25252f%25252fcdn.example%25253fsig%253d{marker}"),
+            // Mixed encoded/literal scheme separators.
+            format!("url=https%3A%252F%2Fcdn.example/video%3Fsig%3D{marker}"),
+            format!("url=https:%2F%2Fcdn.example/video?sig={marker}"),
+            // Doubly encoded query, fragment, userinfo, and nested scheme in a path.
+            format!("GET https://cdn.example/video%253Fsig%253D{marker}"),
+            format!("GET https://cdn.example/video%2523frag-{marker}"),
+            format!("GET https://cdn.example/archive/user%2540{marker}"),
+            format!("GET https://cdn.example/archive/https%253A%252F%252Fuser:{marker}@other.example"),
+        ];
+        for input in cases {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("[REDACTED_URL]"), "{output}");
+        }
+        // Preserve ordinary path context when there are no encoded delimiters.
+        assert_eq!(
+            redact_sensitive("GET https://cdn.example/video/segment"),
+            "GET https://cdn.example/video/segment"
+        );
     }
 
     #[test]
