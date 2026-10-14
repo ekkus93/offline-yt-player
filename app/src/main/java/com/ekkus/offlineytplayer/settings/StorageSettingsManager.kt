@@ -56,19 +56,28 @@ internal class StorageSettingsManager private constructor(
         // app-private cleanup boundary. Reject it before enumerating children,
         // including cacheRoot.listFiles(), which otherwise follows the link.
         requireRealManagedRoot(root)
-        // Stream matching files instead of retaining every incomplete transfer.
-        val targets: Sequence<File> = when (action) {
-            ManagedCleanup.Cache -> (cacheRoot.listFiles()
-                ?: throw IOException("Cannot enumerate managed cache")).asSequence()
-            // Unlink incomplete-asset symlinks rather than following their targets.
-            ManagedCleanup.Incomplete -> filesRoot.managedEntries().filter {
-                isIncompleteFile(it) && (it.isManagedRegularFile() || Files.isSymbolicLink(it.toPath()))
-            }
-        }
         var bytes = 0L
-        for (target in targets) {
-            bytes += target.managedSize()
-            deleteManagedEntry(target, root)
+        when (action) {
+            ManagedCleanup.Cache -> {
+                // DirectoryStream avoids allocating an array of every cache
+                // child before the first cleanup operation can start.
+                Files.newDirectoryStream(cacheRoot.toPath()).use { entries ->
+                    for (entry in entries) {
+                        val target = entry.toFile()
+                        bytes += target.managedSize()
+                        deleteManagedEntry(target, root)
+                    }
+                }
+            }
+            ManagedCleanup.Incomplete -> {
+                // Unlink incomplete-asset symlinks without following targets.
+                for (target in filesRoot.managedEntries().filter {
+                    isIncompleteFile(it) && (it.isManagedRegularFile() || Files.isSymbolicLink(it.toPath()))
+                }) {
+                    bytes += target.managedSize()
+                    deleteManagedEntry(target, root)
+                }
+            }
         }
         // Files.delete throws on any failure: never report a successful cleanup
         // while inaccessible or failed-to-delete files remain.

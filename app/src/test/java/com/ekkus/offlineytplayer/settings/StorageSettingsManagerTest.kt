@@ -153,6 +153,30 @@ class StorageSettingsManagerTest {
     }
 
     @Test
+    fun cacheCleanupStreamsWideDirectoryAndPreservesMedia() {
+        val root = Files.createTempDirectory("storage-wide-cache").toFile()
+        try {
+            val files = root.resolve("files").apply { mkdirs() }
+            val cache = root.resolve("cache").apply { mkdirs() }
+            val media = files.resolve("items/completed.mp4").apply {
+                parentFile?.mkdirs()
+                writeBytes(ByteArray(19))
+            }
+            repeat(768) { index ->
+                cache.resolve("thumb-$index.bin").writeBytes(byteArrayOf(1, 2))
+            }
+            val manager = StorageSettingsManager.forTest(files, cache)
+            assertEquals(1_536L, manager.summarize().cacheBytes)
+            assertEquals(1_536L, manager.cleanup(ManagedCleanup.Cache))
+            assertEquals(0L, manager.summarize().cacheBytes)
+            assertEquals(19L, media.length())
+            assertEquals(0L, manager.cleanup(ManagedCleanup.Cache))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cacheCleanupRejectsAnUnenumerableRootInsteadOfReportingSuccess() {
         val root = Files.createTempDirectory("storage-cache-enumeration").toFile()
         try {
