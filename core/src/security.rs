@@ -150,21 +150,23 @@ pub fn redact_sensitive(input: &str) -> String {
             .iter()
             .flat_map(|name| {
                 let field = name.trim_end_matches(':');
-                lower_ref.match_indices(field).filter_map(move |(offset, _)| {
-                    let suffix = &lower_ref[offset + field.len()..];
-                    let separator_len = if suffix.starts_with(':') {
-                        Some(1)
-                    } else if let Some(encoded) = suffix.strip_prefix('%') {
-                        let mut index = 0;
-                        while encoded[index..].starts_with("25") {
-                            index += 2;
-                        }
-                        encoded[index..].starts_with("3a").then_some(index + 3)
-                    } else {
-                        None
-                    };
-                    separator_len.map(|length| (offset, field.len() + length))
-                })
+                lower_ref
+                    .match_indices(field)
+                    .filter_map(move |(offset, _)| {
+                        let suffix = &lower_ref[offset + field.len()..];
+                        let separator_len = if suffix.starts_with(':') {
+                            Some(1)
+                        } else if let Some(encoded) = suffix.strip_prefix('%') {
+                            let mut index = 0;
+                            while encoded[index..].starts_with("25") {
+                                index += 2;
+                            }
+                            encoded[index..].starts_with("3a").then_some(index + 3)
+                        } else {
+                            None
+                        };
+                        separator_len.map(|length| (offset, field.len() + length))
+                    })
             })
             .min_by_key(|(offset, _)| *offset);
         // A new indented header is a separate field, not continuation data.
