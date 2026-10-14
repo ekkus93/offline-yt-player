@@ -177,6 +177,28 @@ class StorageSettingsManagerTest {
     }
 
     @Test
+    fun nestedWideCacheAccountingAndCleanupPreserveMedia() {
+        val root = Files.createTempDirectory("nested-cache").toFile()
+        try {
+            val files = root.resolve("files").apply { mkdirs() }
+            val cache = root.resolve("cache").apply { mkdirs() }
+            val nested = cache.resolve("nested").apply { mkdirs() }
+            val media = files.resolve("completed.mp4").apply { writeBytes(ByteArray(7)) }
+            repeat(512) { index ->
+                nested.resolve("thumb-$index.bin").writeBytes(byteArrayOf(1, 2))
+            }
+            val manager = StorageSettingsManager.forTest(files, cache)
+            assertEquals(1_024L, manager.summarize().cacheBytes)
+            assertEquals(1_024L, manager.cleanup(ManagedCleanup.Cache))
+            assertEquals(0L, manager.summarize().cacheBytes)
+            assertTrue(media.isFile)
+            assertEquals(0L, manager.cleanup(ManagedCleanup.Cache))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cacheCleanupRejectsAnUnenumerableRootInsteadOfReportingSuccess() {
         val root = Files.createTempDirectory("storage-cache-enumeration").toFile()
         try {
