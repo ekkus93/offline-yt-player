@@ -9,6 +9,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 import android.content.ContextWrapper
 import android.content.Intent
+import android.os.Looper
 import org.junit.Assert.assertTrue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
@@ -39,16 +40,91 @@ import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalSubtitleTrack
 import com.ekkus.offlineytplayer.settings.AppSettingsMutation
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
+import com.ekkus.offlineytplayer.settings.ManagedCleanup
+import com.ekkus.offlineytplayer.settings.ManagedStorageOperations
+import com.ekkus.offlineytplayer.settings.ManagedStorageSummary
 import org.junit.Assert.assertEquals
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Rule
 import org.junit.Test
 
 class ProductionComposeBehaviorTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun storageSettingsScanAndCleanupDoNotBlockMainThreadOrDuplicateCleanup() {
+        val scanStarted = CountDownLatch(1)
+        val releaseScan = CountDownLatch(1)
+        val cleanupStarted = CountDownLatch(1)
+        val releaseCleanup = CountDownLatch(1)
+        val scans = AtomicInteger(0)
+        val cleanupCalls = AtomicInteger(0)
+        val cleaned = AtomicBoolean(false)
+        val allOperationsOnIo = AtomicBoolean(true)
+        val requestedCleanup = AtomicReference<ManagedCleanup?>()
+        val operations = object : ManagedStorageOperations {
+            override fun summarize(): ManagedStorageSummary {
+                if (Looper.myLooper() == Looper.getMainLooper()) allOperationsOnIo.set(false)
+                if (scans.incrementAndGet() == 1) {
+                    scanStarted.countDown()
+                    check(releaseScan.await(30, TimeUnit.SECONDS)) { "Blocked summary never released" }
+                }
+                return ManagedStorageSummary(
+                    mediaBytes = if (cleaned.get()) 200 else 100,
+                    databaseBytes = 10,
+                    partialBytes = 0,
+                    cacheBytes = 0,
+                    freeBytes = 1_024,
+                )
+            }
+
+            override fun cleanup(action: ManagedCleanup): Long {
+                if (Looper.myLooper() == Looper.getMainLooper()) allOperationsOnIo.set(false)
+                requestedCleanup.set(action)
+                cleanupCalls.incrementAndGet()
+                cleanupStarted.countDown()
+                check(releaseCleanup.await(30, TimeUnit.SECONDS)) { "Blocked cleanup never released" }
+                cleaned.set(true)
+                return 0
+            }
+        }
+        compose.setContent { StorageSettingsPage(operations = operations) }
+        try {
+            assertTrue("Initial scan never started", scanStarted.await(10, TimeUnit.SECONDS))
+            compose.onNodeWithText("Loading storage…").assertIsDisplayed()
+            compose.runOnIdle { assertTrue("Summary ran on UI thread", allOperationsOnIo.get()) }
+            releaseScan.countDown()
+            compose.waitUntil(10_000) {
+                runCatching { compose.onNodeWithText("100 B").assertIsDisplayed() }.isSuccess
+            }
+            compose.onNodeWithText("Clear cache").performClick()
+            compose.onNodeWithText("Confirm").performClick()
+            assertTrue("Cleanup never started", cleanupStarted.await(10, TimeUnit.SECONDS))
+            compose.onNodeWithText("Cleaning storage…").assertIsDisplayed()
+            compose.onNodeWithText("Confirm").assertIsNotEnabled()
+            compose.onNodeWithText("Cancel").assertIsNotEnabled()
+            compose.runOnIdle { assertTrue("Cleanup ran on UI thread", allOperationsOnIo.get()) }
+            releaseCleanup.countDown()
+            compose.waitUntil(10_000) {
+                runCatching { compose.onNodeWithText("200 B").assertIsDisplayed() }.isSuccess
+            }
+            compose.onNodeWithText("Cleaning storage…").assertDoesNotExist()
+            compose.runOnIdle {
+                assertEquals(ManagedCleanup.Cache, requestedCleanup.get())
+                assertEquals(1, cleanupCalls.get())
+                assertEquals(2, scans.get())
+                assertTrue(allOperationsOnIo.get())
+            }
+        } finally {
+            releaseScan.countDown()
+            releaseCleanup.countDown()
+        }
+    }
 
     @Test
     fun library_empty_and_populated_states_are_behavioral() {

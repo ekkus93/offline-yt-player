@@ -17,12 +17,17 @@ internal data class ManagedStorageSummary(
 
 internal enum class ManagedCleanup { Cache, Incomplete }
 
+internal interface ManagedStorageOperations {
+    fun summarize(): ManagedStorageSummary
+    fun cleanup(action: ManagedCleanup): Long
+}
+
 internal class StorageSettingsManager private constructor(
     private val filesRoot: File,
     private val cacheRoot: File,
     private val freeBytesProvider: (File) -> Long,
-) {
-    fun summarize(): ManagedStorageSummary {
+) : ManagedStorageOperations {
+    override fun summarize(): ManagedStorageSummary {
         // File.walkTopDown() follows symbolic-link directories on some runtimes;
         // never read or count contents outside this app-owned tree.
         val files = filesRoot.managedEntries().filter(File::isManagedRegularFile)
@@ -32,7 +37,7 @@ internal class StorageSettingsManager private constructor(
         return ManagedStorageSummary(media, database, partial, cacheRoot.managedSize(), freeBytesProvider(filesRoot))
     }
 
-    fun cleanup(action: ManagedCleanup): Long {
+    override fun cleanup(action: ManagedCleanup): Long {
         val root = if (action == ManagedCleanup.Cache) cacheRoot else filesRoot
         // A symlinked cleanup root turns an external directory into an apparent
         // app-private cleanup boundary. Reject it before enumerating children,

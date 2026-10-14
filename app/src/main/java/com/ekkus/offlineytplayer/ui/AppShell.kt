@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +63,8 @@ import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.settings.AppearanceSetting
 import com.ekkus.offlineytplayer.settings.LibraryLayoutSetting
 import com.ekkus.offlineytplayer.settings.ManagedCleanup
+import com.ekkus.offlineytplayer.settings.ManagedStorageOperations
+import com.ekkus.offlineytplayer.settings.ManagedStorageSummary
 import com.ekkus.offlineytplayer.settings.StorageSettingsManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -150,7 +153,109 @@ internal fun OfflineYTPlayerApp(
 @Composable private fun SettingsScreen(padding: PaddingValues, settings: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit) { var section by rememberSaveable { mutableStateOf<SettingsSection?>(null) }; if (section == null) SettingsHub(padding) { section = it } else SettingsPage(padding, section!!, settings, onUpdateSettings) { section = null } }
 @Composable private fun SettingsHub(padding: PaddingValues, onOpen: (SettingsSection) -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Text("Choose a settings category. Primary settings stay on dedicated fixed-layout pages."); SettingsSection.entries.forEach { section -> OutlinedButton(onClick = { onOpen(section) }, modifier = Modifier.fillMaxWidth().weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(section.label) } } } }
 @Composable private fun SettingsPage(padding: PaddingValues, section: SettingsSection, settings: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit, onBack: () -> Unit) { Column(Modifier.fillMaxSize().padding(padding).padding(MidnightTransit.ScreenSpacing), verticalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(section.label); OutlinedButton(onClick = onBack, modifier = Modifier.sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Back") } }; when (section) { SettingsSection.Downloads -> { OutlinedButton(onClick = { onUpdateSettings { defaultQuality = if (settings.defaultQuality == "Best compatible") "Audio only" else "Best compatible" } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Default quality: ${settings.defaultQuality}") }; SettingToggle("Wi-Fi only", settings.wifiOnlyDownloads) { checked -> onUpdateSettings { wifiOnlyDownloads = checked } }; OutlinedButton(onClick = { onUpdateSettings { maxConcurrentDownloads = if (settings.maxConcurrentDownloads >= 4) 1 else settings.maxConcurrentDownloads + 1 } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Concurrent downloads: ${settings.maxConcurrentDownloads}") }; OutlinedButton(onClick = { onUpdateSettings { subtitleDefault = if (settings.subtitleDefault == "Preferred language") "None" else "Preferred language" } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Subtitles: ${settings.subtitleDefault}") }; SettingValue("Retry", "Automatic runtime policy") }; SettingsSection.Playback -> { SettingToggle("Remember position", settings.rememberPlaybackPosition) { checked -> onUpdateSettings { rememberPlaybackPosition = checked } }; OutlinedButton(onClick = { onUpdateSettings { playbackSpeed = nextPlaybackSettingSpeed(settings.playbackSpeed) } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Default speed: ${settings.playbackSpeed}×") } }; SettingsSection.Storage -> StorageSettingsPage(); SettingsSection.Appearance -> { OutlinedButton(onClick = { onUpdateSettings { appearance = nextAppearanceSetting(settings.appearance) } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Theme: ${settings.appearance.name}") }; OutlinedButton(onClick = { onUpdateSettings { libraryLayout = if (settings.libraryLayout == LibraryLayoutSetting.List) LibraryLayoutSetting.Grid else LibraryLayoutSetting.List } }, modifier = Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Library layout: ${settings.libraryLayout.name}") } }; SettingsSection.About -> AboutSettingsPage() } } }
-@Composable private fun StorageSettingsPage() { val context = LocalContext.current; val manager = remember(context) { StorageSettingsManager.open(context) }; var summary by remember { mutableStateOf(manager.summarize()) }; var pendingCleanup by remember { mutableStateOf<ManagedCleanup?>(null) }; var cleanupError by remember { mutableStateOf<String?>(null) }; fun refresh() { summary = manager.summarize() }; SettingValue("Managed media", formatStorageBytes(summary.mediaBytes)); SettingValue("Database", formatStorageBytes(summary.databaseBytes)); SettingValue("Incomplete", formatStorageBytes(summary.partialBytes)); SettingValue("Cache", formatStorageBytes(summary.cacheBytes)); SettingValue("Free", formatStorageBytes(summary.freeBytes)); val pending = pendingCleanup; if (pending == null) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { OutlinedButton(onClick = { pendingCleanup = ManagedCleanup.Cache }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Clear cache") }; OutlinedButton(onClick = { pendingCleanup = ManagedCleanup.Incomplete }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Clean incomplete") } } } else { Text("Confirm destructive cleanup of " + if (pending == ManagedCleanup.Cache) "cache files?" else "incomplete transfer files?"); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) { OutlinedButton(onClick = { pendingCleanup = null }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Cancel") }; Button(onClick = { cleanupError = runCatching { manager.cleanup(pending) }.exceptionOrNull()?.let { "Cleanup failed; some files may remain." }; pendingCleanup = null; refresh() }, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Confirm") } } }; cleanupError?.let { Text(it) } }
+@Composable
+internal fun StorageSettingsPage(operations: ManagedStorageOperations? = null) {
+    val context = LocalContext.current
+    val manager = remember(context) { StorageSettingsManager.open(context) }
+    val storage = operations ?: manager
+    val scope = rememberCoroutineScope()
+    var summary by remember(storage) { mutableStateOf<ManagedStorageSummary?>(null) }
+    var loading by remember(storage) { mutableStateOf(true) }
+    var busy by remember(storage) { mutableStateOf(false) }
+    var pendingCleanup by remember(storage) { mutableStateOf<ManagedCleanup?>(null) }
+    var cleanupError by remember(storage) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(storage) {
+        loading = true
+        try {
+            summary = withContext(Dispatchers.IO) { storage.summarize() }
+            cleanupError = null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            cleanupError = "Storage details unavailable."
+        } finally {
+            loading = false
+        }
+    }
+
+    if (loading) {
+        Text("Loading storage…")
+    } else {
+        summary?.let { current ->
+            SettingValue("Managed media", formatStorageBytes(current.mediaBytes))
+            SettingValue("Database", formatStorageBytes(current.databaseBytes))
+            SettingValue("Incomplete", formatStorageBytes(current.partialBytes))
+            SettingValue("Cache", formatStorageBytes(current.cacheBytes))
+            SettingValue("Free", formatStorageBytes(current.freeBytes))
+        }
+    }
+    if (busy) Text("Cleaning storage…")
+
+    val pending = pendingCleanup
+    val canAct = !busy && !loading && summary != null
+    if (pending == null) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+        ) {
+            OutlinedButton(
+                onClick = { pendingCleanup = ManagedCleanup.Cache },
+                enabled = canAct,
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Clear cache") }
+            OutlinedButton(
+                onClick = { pendingCleanup = ManagedCleanup.Incomplete },
+                enabled = canAct,
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Clean incomplete") }
+        }
+    } else {
+        Text(
+            "Confirm destructive cleanup of " +
+                if (pending == ManagedCleanup.Cache) "cache files?" else "incomplete transfer files?",
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing),
+        ) {
+            OutlinedButton(
+                onClick = { if (!busy) pendingCleanup = null },
+                enabled = !busy,
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Cancel") }
+            Button(
+                onClick = {
+                    if (!canAct) return@Button
+                    busy = true
+                    cleanupError = null
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) { storage.cleanup(pending) }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            cleanupError = "Cleanup failed; some files may remain."
+                        }
+                        try {
+                            summary = withContext(Dispatchers.IO) { storage.summarize() }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            if (cleanupError == null) cleanupError = "Storage details unavailable."
+                        } finally {
+                            busy = false
+                            pendingCleanup = null
+                        }
+                    }
+                },
+                enabled = canAct,
+                modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
+            ) { Text("Confirm") }
+        }
+    }
+    cleanupError?.let { Text(it) }
+}
 private fun formatStorageBytes(bytes: Long): String = when { bytes >= 1024L * 1024L * 1024L -> "%.1f GB".format(bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)); bytes >= 1024L * 1024L -> "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0)); bytes >= 1024L -> "%.1f KB".format(bytes.toDouble() / 1024.0); else -> "$bytes B" }
 @Composable private fun SettingValue(label: String, value: String) { Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Text(value, textAlign = TextAlign.End) } }
 @Composable private fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth().sizeIn(minHeight = MidnightTransit.MinimumTouchTarget), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label); Switch(checked = checked, onCheckedChange = onCheckedChange) } }
