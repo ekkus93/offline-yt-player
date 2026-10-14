@@ -1,0 +1,5 @@
+# RMD-1802 — Storage post-cleanup refresh failure (2026-10-14)
+
+Independent review finding: `StorageSettingsPage` retains the old non-null `summary` when the post-cleanup `storage.summarize()` throws. After `busy` becomes false, the pre-cleanup totals are displayed and destructive cleanup actions are re-enabled despite unknown current filesystem state. This is a correctness and recovery defect.
+
+Required correction: clear `summary` in the post-cleanup refresh exception handler while preserving the prior cleanup error message, leaving cleanup actions disabled. Reuse the existing `Retry storage scan` action to recover. Add a packaged Compose instrumentation regression with a successful first summary, successful cleanup, failing second summary, and successful third summary; assert stale totals disappear, cleanup controls are disabled during the error, and fresh totals restore after retry. Include exact-method proof in the required API-29 smoke script. Run all eight workflows on the exact corrected head. Do not close RMD-1802/1803/1805 or external approval based on this finding alone.
