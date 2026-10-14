@@ -17,7 +17,8 @@ for required_class in \
     com.ekkus.offlineytplayer.ui.Rmd1802DownloadsControlThreadingInstrumentedTest#visibleDownloadsPauseInvokesControlOffMainAndReportsDurableUpdate \
     com.ekkus.offlineytplayer.ui.StorageSettingsRecoveryInstrumentedTest#initialScanFailureCanRetryWithoutLeavingSettings \
     com.ekkus.offlineytplayer.ui.StorageSettingsRecoveryInstrumentedTest#cleanupRefreshFailureInvalidatesStaleSummaryAndCanRetry \
-    com.ekkus.offlineytplayer.ui.DuplicateProviderOptionsInstrumentedTest#duplicateAudioAndSubtitleLabelsEnqueueSelectedOriginalIds
+    com.ekkus.offlineytplayer.ui.DuplicateProviderOptionsInstrumentedTest#duplicateAudioAndSubtitleLabelsEnqueueSelectedOriginalIds \
+    com.ekkus.offlineytplayer.ui.DownloadSetupSingleFlightInstrumentedTest#enqueueCannotBeSubmittedTwiceWhileFirstRequestIsPending
 do
     class_ref=${required_class%%#*}
     class_name=${class_ref##*.}
