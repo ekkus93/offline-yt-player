@@ -172,6 +172,31 @@ class SourceMetadataPolicyTest {
         }
     }
 
+    @Test fun multiplyEncodedUrlPathDelimitersNeverExposePrivateValues() {
+        val marker = "MULTI_ENCODED_PRIVATE_VALUE_1802"
+        val inputs = listOf(
+            "https://cdn.example/video%253Fsignature%253D$marker",
+            "https://cdn.example/video%25253Fsignature%25253D$marker",
+            "https://cdn.example/video%252523private-$marker",
+            "https://cdn.example/archive/https%253A%252F%252Fuser%253A$marker%2540inner.example",
+        )
+        inputs.forEach { input ->
+            val projected = listOf(
+                SourceMetadataPolicy.title("Title $input"),
+                SourceMetadataPolicy.channel("Channel $input"),
+                SourceMetadataPolicy.description("Description $input"),
+                SourceMetadataPolicy.qualityLabel("1080p $input"),
+                SourceMetadataPolicy.diagnostic("GET $input"),
+            )
+            projected.forEach { value ->
+                assertFalse(value.contains(marker))
+                assertTrue(value.contains("[REDACTED_URL]"))
+            }
+        }
+        // Ordinary percent-encoded path components remain visible.
+        assertTrue(SourceMetadataPolicy.diagnostic("GET https://cdn.example/media%20file").contains("media%2520file"))
+    }
+
     @Test fun oversizedUntrustedTextFailsClosedBeforePresentationRedaction() {
         val marker = "PRIVATE_RAW_OVERFLOW_1802"
         val oversized = "https://user:$marker@cdn.example/video?sig=$marker" +

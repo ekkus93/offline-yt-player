@@ -15,7 +15,7 @@ internal object SourceMetadataPolicy {
     private val urlPattern = Regex("(?:https?://|(?<![\\w:])//|https?%3a%2f%2f)[^\\s]+", RegexOption.IGNORE_CASE)
     // URI treats a nested URL as ordinary path text, including embedded credentials.
     // Reject credential-looking or nested-URL paths instead of echoing them to UI/export.
-    private val unsafeUrlPathPattern = Regex("(?i)(?:https?(?:://|%3a)|@|%40|%3f|%23)")
+    private val unsafeUrlPathPattern = Regex("(?i)(?:https?(?:://|%(?:25)*3a)|@|%(?:25)*(?:40|3f|23))")
 
     fun title(value: String): String = present(value, MaxTitleChars, "Untitled video")
 
