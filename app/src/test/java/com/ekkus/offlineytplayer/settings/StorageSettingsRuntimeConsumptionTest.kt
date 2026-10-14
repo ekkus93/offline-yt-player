@@ -1,12 +1,42 @@
 package com.ekkus.offlineytplayer.settings
 
 import java.nio.file.Files
+import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StorageSettingsRuntimeConsumptionTest {
+    @Test
+    fun storageSummaryRejectsSymlinkedManagedRootsInsteadOfReportingMisleadingZeros() {
+        val root = Files.createTempDirectory("storage-settings-root-guard").toFile()
+        val external = Files.createTempDirectory("storage-settings-external").toFile()
+        val files = root.resolve("files").apply { mkdirs() }
+        val cache = root.resolve("cache").apply { mkdirs() }
+        val filesLink = root.resolve("files-link").toPath()
+        val cacheLink = root.resolve("cache-link").toPath()
+        val externalAsset = external.resolve("private-media.bin").apply { writeBytes(ByteArray(8)) }
+        try {
+            Files.createSymbolicLink(filesLink, external.toPath())
+            Files.createSymbolicLink(cacheLink, external.toPath())
+            val filesError = runCatching {
+                StorageSettingsManager.forTest(filesLink.toFile(), cache).summarize()
+            }.exceptionOrNull()
+            val cacheError = runCatching {
+                StorageSettingsManager.forTest(files, cacheLink.toFile()).summarize()
+            }.exceptionOrNull()
+            assertTrue("Symlinked files root must fail closed", filesError is IOException)
+            assertTrue("Symlinked cache root must fail closed", cacheError is IOException)
+            assertTrue("External media must remain untouched", externalAsset.exists())
+        } finally {
+            Files.deleteIfExists(filesLink)
+            Files.deleteIfExists(cacheLink)
+            root.deleteRecursively()
+            external.deleteRecursively()
+        }
+    }
+
     @Test
     fun storageSummaryAndCleanupOperateOnRealAppOwnedFiles() {
         val root = Files.createTempDirectory("storage-settings-runtime").toFile()

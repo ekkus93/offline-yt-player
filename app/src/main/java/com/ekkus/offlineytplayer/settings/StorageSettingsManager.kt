@@ -28,6 +28,8 @@ internal class StorageSettingsManager private constructor(
     private val freeBytesProvider: (File) -> Long,
 ) : ManagedStorageOperations {
     override fun summarize(): ManagedStorageSummary {
+        requireRealManagedRoot(filesRoot)
+        requireRealManagedRoot(cacheRoot)
         // File.walkTopDown() follows symbolic-link directories on some runtimes;
         // never read or count contents outside this app-owned tree.
         val files = filesRoot.managedEntries().filter(File::isManagedRegularFile)
@@ -42,11 +44,7 @@ internal class StorageSettingsManager private constructor(
         // A symlinked cleanup root turns an external directory into an apparent
         // app-private cleanup boundary. Reject it before enumerating children,
         // including cacheRoot.listFiles(), which otherwise follows the link.
-        if (Files.isSymbolicLink(root.toPath()) ||
-            !Files.isDirectory(root.toPath(), LinkOption.NOFOLLOW_LINKS)
-        ) {
-            throw IOException("Managed cleanup root must be a real directory")
-        }
+        requireRealManagedRoot(root)
         val targets = when (action) {
             ManagedCleanup.Cache -> (cacheRoot.listFiles()
                 ?: if (cacheRoot.exists()) throw IOException("Cannot enumerate managed cache") else emptyArray()).toList()
@@ -60,6 +58,14 @@ internal class StorageSettingsManager private constructor(
         // Files.delete throws on any failure: never report a successful cleanup
         // while inaccessible or failed-to-delete files remain.
         return bytes
+    }
+
+    private fun requireRealManagedRoot(root: File) {
+        if (Files.isSymbolicLink(root.toPath()) ||
+            !Files.isDirectory(root.toPath(), LinkOption.NOFOLLOW_LINKS)
+        ) {
+            throw IOException("Managed storage root must be a real directory")
+        }
     }
 
     private fun deleteManagedEntry(target: File, root: File) {
