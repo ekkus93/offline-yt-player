@@ -106,7 +106,13 @@ pub fn validate_relative_library_path(path: &str) -> Result<(), CoreError> {
             false,
         ));
     }
-    if path.is_empty() {
+    // "." and "./" contain no file component, yet previously passed the
+    // relative-path check and resolved to the Library root itself. Never let
+    // a caller treat that root as an individual media/metadata path.
+    if !candidate
+        .components()
+        .any(|component| matches!(component, Component::Normal(_)))
+    {
         return Err(CoreError::new(
             ErrorKind::InvalidInput,
             "empty library path",
@@ -393,6 +399,10 @@ mod tests {
         assert!(validate_relative_library_path("items/abc/video.mp4").is_ok());
         assert!(validate_relative_library_path("../private").is_err());
         assert!(validate_relative_library_path("/absolute").is_err());
+        assert!(validate_relative_library_path(".").is_err());
+        assert!(validate_relative_library_path("./").is_err());
+        assert!(validate_relative_library_path("././").is_err());
+        assert!(validate_relative_library_path("./items/abc/video.mp4").is_ok());
     }
 
     #[test]
