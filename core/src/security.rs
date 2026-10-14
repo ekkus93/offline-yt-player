@@ -143,9 +143,28 @@ pub fn redact_sensitive(input: &str) -> String {
         // "request failed:" context. Redact the header value even when the
         // sensitive field is not the first token on its diagnostic line.
         let lower = line.to_ascii_lowercase();
+        // Encoded colons can hide credential-bearing header names in upstream
+        // diagnostics. Match any depth of %25 layering, not just literal ':'.
         let header = sensitive_names
             .iter()
-            .filter_map(|name| lower.find(name.as_str()).map(|offset| (offset, name.len())))
+            .flat_map(|name| {
+                let field = name.trim_end_matches(':');
+                lower.match_indices(field).filter_map(move |(offset, _)| {
+                    let suffix = &lower[offset + field.len()..];
+                    let separator_len = if suffix.starts_with(':') {
+                        Some(1)
+                    } else if let Some(encoded) = suffix.strip_prefix('%') {
+                        let mut index = 0;
+                        while encoded[index..].starts_with("25") {
+                            index += 2;
+                        }
+                        encoded[index..].starts_with("3a").then_some(index + 3)
+                    } else {
+                        None
+                    };
+                    separator_len.map(|length| (offset, field.len() + length))
+                })
+            })
             .min_by_key(|(offset, _)| *offset);
         // A new indented header is a separate field, not continuation data.
         // Recognize it first so both fields retain their redacted names.
@@ -556,6 +575,27 @@ mod tests {
         assert_eq!(
             redact_sensitive("GET https://cdn.example/video/segment"),
             "GET https://cdn.example/video/segment"
+        );
+    }
+
+    #[test]
+    fn percent_encoded_sensitive_header_colons_never_expose_credentials() {
+        let marker = "RMD1802_RUST_ENCODED_HEADER_SECRET";
+        let cases = [
+            format!("Authorization%3A Bearer {marker}"),
+            format!("2026-10-14 ERROR Proxy-Authorization%253A Basic {marker}"),
+            format!("Cookie%25253A session={marker}"),
+            format!("Set-Cookie%3a session={marker}"),
+            format!("X-Api-Key%2525253a {marker}"),
+        ];
+        for input in cases {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{output}");
+            assert!(output.contains("[REDACTED]"), "{output}");
+        }
+        assert_eq!(
+            redact_sensitive("request failed: no authorization header received"),
+            "request failed: no authorization header received"
         );
     }
 
