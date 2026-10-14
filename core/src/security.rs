@@ -543,7 +543,9 @@ mod tests {
             format!("GET https://cdn.example/video%253Fsig%253D{marker}"),
             format!("GET https://cdn.example/video%2523frag-{marker}"),
             format!("GET https://cdn.example/archive/user%2540{marker}"),
-            format!("GET https://cdn.example/archive/https%253A%252F%252Fuser:{marker}@other.example"),
+            format!(
+                "GET https://cdn.example/archive/https%253A%252F%252Fuser:{marker}@other.example"
+            ),
         ];
         for input in cases {
             let output = redact_sensitive(&input);
