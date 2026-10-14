@@ -329,6 +329,97 @@ class ProductionComposeBehaviorTest {
     }
 
     @Test
+    fun libraryContentRefreshWithStableIdDropsInFlightDetails() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val returned = CountDownLatch(1)
+        val gateway = object : AppLibraryDetailsGateway {
+            override fun getDetails(itemId: String): CoreGatewayResult<CoreLibraryDetails?> {
+                started.countDown()
+                check(release.await(10, TimeUnit.SECONDS)) { "Details lookup was not released" }
+                returned.countDown()
+                return CoreGatewayResult(
+                    CoreLibraryDetails(
+                        itemId = itemId,
+                        provider = "fixture",
+                        mediaId = itemId,
+                        canonicalUrl = null,
+                        displayTitle = "Obsolete repository details",
+                        durationMs = 42_000,
+                        qualityLabel = "720p",
+                        completed = true,
+                        playbackPositionMs = 0,
+                        totalBytes = 1_234,
+                        assets = emptyList(),
+                    ),
+                    null,
+                )
+            }
+            override fun close() = Unit
+        }
+        var repository by mutableStateOf<LibraryScreenState>(
+            LibraryScreenState.Ready(listOf(LibraryRowModel("stable-id", "Before refresh", "720p"))),
+        )
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = repository,
+                detailsGatewayProvider = { gateway },
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        try {
+            compose.onNodeWithText("Details").performClick()
+            assertTrue("Details lookup did not start", started.await(5, TimeUnit.SECONDS))
+            compose.runOnIdle {
+                repository = LibraryScreenState.Ready(
+                    listOf(LibraryRowModel("stable-id", "After refresh", "1080p")),
+                )
+            }
+            compose.onNodeWithText("After refresh").assertIsDisplayed()
+            compose.onNodeWithText("Loading details for Before refresh…").assertDoesNotExist()
+            release.countDown()
+            assertTrue("Old details lookup did not return", returned.await(5, TimeUnit.SECONDS))
+            compose.waitForIdle()
+            compose.onNodeWithText("Obsolete repository details").assertDoesNotExist()
+            compose.onNodeWithText("Library details").assertDoesNotExist()
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun libraryContentRefreshWithStableIdClearsExpandedDetails() {
+        val gateway = RecordingLibraryDetailsGateway()
+        var repository by mutableStateOf<LibraryScreenState>(
+            LibraryScreenState.Ready(listOf(LibraryRowModel("item-1", "Fixture video", "720p"))),
+        )
+        compose.setContent {
+            LibraryScreen(
+                onAdd = {},
+                onPlay = {},
+                state = repository,
+                detailsGatewayProvider = { gateway },
+                onUpdateSettings = {},
+                onQueryChanged = {},
+            )
+        }
+        compose.onNodeWithText("Details").performClick()
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithText("Library details").assertIsDisplayed() }.isSuccess
+        }
+        compose.runOnIdle {
+            repository = LibraryScreenState.Ready(
+                listOf(LibraryRowModel("item-1", "Updated fixture video", "1080p")),
+            )
+        }
+        compose.onNodeWithText("Updated fixture video").assertIsDisplayed()
+        compose.onNodeWithText("Library details").assertDoesNotExist()
+    }
+
+    @Test
     fun libraryRepositoryChangeDropsDelayedDetailsAndRenameControls() {
         val requested = CountDownLatch(1)
         val unblock = CountDownLatch(1)

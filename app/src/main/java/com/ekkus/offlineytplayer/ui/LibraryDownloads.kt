@@ -166,8 +166,9 @@ internal fun LibraryScreen(
     val isReady = state is LibraryScreenState.Ready
     val readyRows = (state as? LibraryScreenState.Ready)?.rows.orEmpty()
     val readyIds = readyRows.mapTo(mutableSetOf()) { it.id }
-    // Readiness and row-membership transitions invalidate older gateway callbacks.
-    val repositoryToken = remember(isReady, readyIds) { Any() }
+    // A repository refresh can change metadata while preserving the same item IDs.
+    // Invalidate expanded details and pending gateway callbacks on any row-content change.
+    val repositoryToken = remember(isReady, readyRows) { Any() }
     val currentRepositoryToken by rememberUpdatedState(repositoryToken)
     LaunchedEffect(repositoryToken) {
         detailsRequestGeneration += 1
