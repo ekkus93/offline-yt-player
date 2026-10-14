@@ -217,6 +217,27 @@ class SourceMetadataPolicyTest {
         }
     }
 
+    @Test fun mixedLiteralAndEncodedSchemeSeparatorsNeverExposeCredentials() {
+        val marker = "MIXED_ENCODED_SCHEME_PRIVATE_1802"
+        val inputs = listOf(
+            "https%3A//cdn.example/video%3Fsig%3D$marker",
+            "https:%2F%2Fcdn.example/video%3Fsig%3D$marker",
+            "https%253A/%252Fcdn.example/video%253Fsig%253D$marker",
+        )
+        inputs.forEach { input ->
+            listOf(
+                SourceMetadataPolicy.title("Title $input"),
+                SourceMetadataPolicy.channel("Channel $input"),
+                SourceMetadataPolicy.description("Description $input"),
+                SourceMetadataPolicy.qualityLabel("1080p $input"),
+                SourceMetadataPolicy.diagnostic("GET $input"),
+            ).forEach { projected ->
+                assertFalse(projected.contains(marker))
+                assertTrue(projected.contains("[REDACTED_URL]"))
+            }
+        }
+    }
+
     @Test fun oversizedUntrustedTextFailsClosedBeforePresentationRedaction() {
         val marker = "PRIVATE_RAW_OVERFLOW_1802"
         val oversized = "https://user:$marker@cdn.example/video?sig=$marker" +
