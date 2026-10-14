@@ -56,16 +56,20 @@ internal class StorageSettingsManager private constructor(
         // app-private cleanup boundary. Reject it before enumerating children,
         // including cacheRoot.listFiles(), which otherwise follows the link.
         requireRealManagedRoot(root)
-        val targets = when (action) {
+        // Stream matching files instead of retaining every incomplete transfer.
+        val targets: Sequence<File> = when (action) {
             ManagedCleanup.Cache -> (cacheRoot.listFiles()
-                ?: if (cacheRoot.exists()) throw IOException("Cannot enumerate managed cache") else emptyArray()).toList()
+                ?: throw IOException("Cannot enumerate managed cache")).asSequence()
             // Unlink incomplete-asset symlinks rather than following their targets.
             ManagedCleanup.Incomplete -> filesRoot.managedEntries().filter {
                 isIncompleteFile(it) && (it.isManagedRegularFile() || Files.isSymbolicLink(it.toPath()))
-            }.toList()
+            }
         }
-        val bytes = targets.sumOf(File::managedSize)
-        targets.forEach { deleteManagedEntry(it, root) }
+        var bytes = 0L
+        for (target in targets) {
+            bytes += target.managedSize()
+            deleteManagedEntry(target, root)
+        }
         // Files.delete throws on any failure: never report a successful cleanup
         // while inaccessible or failed-to-delete files remain.
         return bytes

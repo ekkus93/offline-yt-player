@@ -34,6 +34,29 @@ class StorageSettingsManagerTest {
     }
 
     @Test
+    fun incompleteCleanupStreamsLargeInterruptedQueueAndPreservesCompletedMedia() {
+        val root = Files.createTempDirectory("storage-many-partials").toFile()
+        try {
+            val files = root.resolve("files").apply { mkdirs() }
+            val cache = root.resolve("cache").apply { mkdirs() }
+            val itemDir = files.resolve("items").apply { mkdirs() }
+            repeat(512) { index ->
+                itemDir.resolve("item-$index.partial").writeBytes(byteArrayOf(1))
+                itemDir.resolve("item-$index.partial.resume.json").writeBytes(byteArrayOf(2, 3))
+            }
+            val completed = itemDir.resolve("completed.mp4").apply { writeBytes(ByteArray(19)) }
+            val manager = StorageSettingsManager.forTest(files, cache)
+            assertEquals(512L * 3L, manager.summarize().partialBytes)
+            assertEquals(512L * 3L, manager.cleanup(ManagedCleanup.Incomplete))
+            assertEquals(0L, manager.summarize().partialBytes)
+            assertEquals(19L, completed.length())
+            assertEquals(0L, manager.cleanup(ManagedCleanup.Incomplete))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cacheCleanupUnlinksNestedSymlinksWithoutReadingOrDeletingExternalData() {
         val root = Files.createTempDirectory("storage-symlinks").toFile()
         val external = Files.createTempDirectory("storage-external").toFile()
