@@ -250,6 +250,7 @@ internal fun StorageSettingsPage(operations: ManagedStorageOperations? = null) {
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (_: Exception) {
+                            summary = null
                             if (cleanupError == null) cleanupError = "Storage details unavailable."
                         } finally {
                             busy = false
