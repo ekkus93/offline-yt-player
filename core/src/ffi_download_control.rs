@@ -416,7 +416,10 @@ mod stale_control_tests {
         // Do not break existing opaque identifiers used by legacy callers.
         let opaque = service.enqueue("legacy-job".into());
         assert!(opaque.updated && opaque.error.is_none(), "{opaque:?}");
-        assert_eq!(library.load_download_snapshots().unwrap()[0].job_id, "legacy-job");
+        assert_eq!(
+            library.load_download_snapshots().unwrap()[0].job_id,
+            "legacy-job"
+        );
     }
 
     #[test]
