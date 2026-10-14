@@ -81,19 +81,29 @@ internal class StorageSettingsManager private constructor(
 
     private fun deleteManagedEntry(target: File, root: File) {
         val normalizedRoot = root.toPath().toAbsolutePath().normalize()
-        val normalizedTarget = target.toPath().toAbsolutePath().normalize()
-        require(normalizedTarget != normalizedRoot && normalizedTarget.startsWith(normalizedRoot)) {
-            "Managed cleanup target is outside its app-private root"
+        // Explicit post-order stack avoids recursive cleanup stack exhaustion.
+        // Validate every descendant, not only the original cleanup target.
+        val pending = ArrayDeque<Pair<File, Boolean>>()
+        pending.addLast(target to false)
+        while (pending.isNotEmpty()) {
+            val (entry, visited) = pending.removeLast()
+            val normalizedTarget = entry.toPath().toAbsolutePath().normalize()
+            require(normalizedTarget != normalizedRoot && normalizedTarget.startsWith(normalizedRoot)) {
+                "Managed cleanup target is outside its app-private root"
+            }
+            if (!visited && !Files.isSymbolicLink(normalizedTarget) &&
+                Files.isDirectory(normalizedTarget, LinkOption.NOFOLLOW_LINKS)
+            ) {
+                val children = entry.listFiles()
+                    ?: throw IOException("Cannot list managed cleanup directory")
+                pending.addLast(entry to true)
+                children.forEach { pending.addLast(it to false) }
+            } else {
+                // Files.delete unlinks a symlink, never its external referent.
+                // Failures propagate instead of reporting successful cleanup.
+                Files.delete(normalizedTarget)
+            }
         }
-        if (!Files.isSymbolicLink(normalizedTarget) &&
-            Files.isDirectory(normalizedTarget, LinkOption.NOFOLLOW_LINKS)
-        ) {
-            val children = target.listFiles() ?: throw IOException("Cannot list managed cleanup directory")
-            children.forEach { deleteManagedEntry(it, root) }
-        }
-        // Never traverse symbolic links. Files.delete removes a link itself,
-        // not its external referent. Failures propagate to the UI.
-        Files.delete(normalizedTarget)
     }
 
     private fun isDatabaseFile(file: File): Boolean =

@@ -9,6 +9,33 @@ import org.junit.Test
 
 class StorageSettingsRuntimeConsumptionTest {
     @Test
+    fun deepCacheCleanupUsesPostorderWithoutFollowingSymlinks() {
+        val root = Files.createTempDirectory("storage-settings-deep-cache").toFile()
+        val external = Files.createTempDirectory("storage-settings-cache-external").toFile()
+        val files = root.resolve("files").apply { mkdirs() }
+        val cache = root.resolve("cache").apply { mkdirs() }
+        try {
+            var nested = cache
+            repeat(256) {
+                nested = nested.resolve("d").apply { mkdir() }
+            }
+            nested.resolve("thumbnail.bin").writeBytes(ByteArray(23))
+            val externalAsset = external.resolve("untouched.bin").apply { writeBytes(ByteArray(11)) }
+            Files.createSymbolicLink(nested.resolve("outside").toPath(), externalAsset.toPath())
+            val manager = StorageSettingsManager.forTest(files, cache)
+            assertEquals(23L, manager.summarize().cacheBytes)
+            assertEquals(23L, manager.cleanup(ManagedCleanup.Cache))
+            assertTrue("External symlink target must not be deleted", externalAsset.exists())
+            assertTrue("Cache root must remain available", cache.isDirectory)
+            assertTrue("Cache must be empty after successful cleanup", cache.listFiles()?.isEmpty() == true)
+            assertEquals(0L, manager.summarize().cacheBytes)
+        } finally {
+            root.deleteRecursively()
+            external.deleteRecursively()
+        }
+    }
+
+    @Test
     fun deepManagedTreeIsCountedWithoutRecursiveTraversalOrFollowingSymlinks() {
         val root = Files.createTempDirectory("storage-settings-deep-tree").toFile()
         val external = Files.createTempDirectory("storage-settings-deep-external").toFile()
