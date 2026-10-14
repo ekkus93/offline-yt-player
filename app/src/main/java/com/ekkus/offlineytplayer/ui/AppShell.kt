@@ -451,7 +451,8 @@ private fun AddScreen(
         Text("Supports recognized YouTube video URLs. Playlists and channel pages are not supported.")
         status?.let { Text(it) }
         setup?.let { setupState ->
-            DownloadSetupPreview(setupState, { advanced = true }) {
+            DownloadSetupPreview(setupState, { advanced = true }, scheduling) {
+                if (scheduling) return@DownloadSetupPreview
                 val gateway = downloadControlGateway
                 if (gateway == null) {
                     status = "Download scheduler is unavailable."
@@ -513,6 +514,7 @@ private fun formatSetupBytes(bytes: Long): String = if (bytes >= 1024L * 1024L) 
 private fun ColumnScope.DownloadSetupPreview(
     setup: DownloadSetupState,
     onOptions: () -> Unit,
+    isScheduling: Boolean,
     onDownload: () -> Unit,
 ) {
     Column(
@@ -540,11 +542,12 @@ private fun ColumnScope.DownloadSetupPreview(
         ) {
             OutlinedButton(
                 onClick = onOptions,
+                enabled = !isScheduling,
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("Options") }
             Button(
                 onClick = onDownload,
-                enabled = setup.readyForDownload && !setup.selectedQualityChoiceId.isNullOrBlank(),
+                enabled = !isScheduling && setup.readyForDownload && !setup.selectedQualityChoiceId.isNullOrBlank(),
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("Download") }
         }
