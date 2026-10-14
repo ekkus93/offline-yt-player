@@ -169,16 +169,23 @@ pub fn redact_sensitive(input: &str) -> String {
                         // They also appear escaped inside stringified JSON. Consume
                         // the matching closing quote, including its escaped form,
                         // before recognizing either literal or encoded colons.
-                        let quoted_name =
-                            offset > 0 && matches!(lower_ref.as_bytes()[offset - 1], b'"' | b'\'');
-                        let closing_quote_len = if quoted_name && trimmed.starts_with("\\\"") {
-                            2
-                        } else if quoted_name
-                            && (trimmed.starts_with('"') || trimmed.starts_with('\''))
-                        {
-                            1
+                        let opening_quote = if offset > 0 {
+                            Some(lower_ref.as_bytes()[offset - 1])
                         } else {
-                            0
+                            None
+                        };
+                        // Logging layers can escape the closing double quote once
+                        // or repeatedly. Only consume it when the opening quote
+                        // also belongs to this sensitive field name.
+                        let escape_count = trimmed.bytes().take_while(|byte| *byte == b'\\').count();
+                        let closing_quote_len = match opening_quote {
+                            Some(b'"')
+                                if trimmed.as_bytes().get(escape_count) == Some(&b'"') =>
+                            {
+                                escape_count + 1
+                            }
+                            Some(b'\'') if trimmed.starts_with('\'') => 1,
+                            _ => 0,
                         };
                         if closing_quote_len > 0 {
                             trimmed = &trimmed[closing_quote_len..];
@@ -672,7 +679,8 @@ mod tests {
             format!(r#"{{"Cookie": "session={marker}"}}"#),
             format!(r#"{{"Set-Cookie" %3A "session={marker}"}}"#),
             format!(r#"{{"X-Api-Key" %253A "{marker}"}}"#),
-            format!(r#"logger: {{\\"Authorization\\": \\"Bearer {marker}\\"}}"#),
+            format!(r#"logger: {{\"Authorization\": \"Bearer {marker}\"}}"#),
+            format!(r#"logger: {{\\"Cookie\\": \\"session={marker}\\"}}"#),
         ];
         for input in cases {
             let output = redact_sensitive(&input);
