@@ -169,8 +169,8 @@ pub fn redact_sensitive(input: &str) -> String {
                         // They also appear escaped inside stringified JSON. Consume
                         // the matching closing quote, including its escaped form,
                         // before recognizing either literal or encoded colons.
-                        let quoted_name = offset > 0
-                            && matches!(lower_ref.as_bytes()[offset - 1], b'"' | b'\'');
+                        let quoted_name =
+                            offset > 0 && matches!(lower_ref.as_bytes()[offset - 1], b'"' | b'\'');
                         let closing_quote_len = if quoted_name && trimmed.starts_with("\\\"") {
                             2
                         } else if quoted_name
