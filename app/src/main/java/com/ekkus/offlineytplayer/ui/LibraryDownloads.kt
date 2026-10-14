@@ -243,6 +243,10 @@ internal fun LibraryScreen(
                                     ?: result.value?.let { "Renamed to ${SourceMetadataPolicy.title(it)}." }
                                     ?: "Rename did not change the item."
                                 if (result.error == null && result.value != null) {
+                                    // A successful rename invalidates the previous repository
+                                    // details snapshot and any in-flight pre-rename lookup.
+                                    detailsRequestGeneration += 1
+                                    selectedDetails = null
                                     renameRow = null
                                     renameTitle = ""
                                 }
