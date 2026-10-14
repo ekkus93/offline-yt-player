@@ -197,6 +197,26 @@ class SourceMetadataPolicyTest {
         assertTrue(SourceMetadataPolicy.diagnostic("GET https://cdn.example/media%20file").contains("media%2520file"))
     }
 
+    @Test fun multiplyEncodedWholeUrlsNeverExposeCredentials() {
+        val marker = "WHOLE_ENCODED_PRIVATE_VALUE_1802"
+        val urls = listOf(
+            "https%253A%252F%252Fcdn.example%252Fvideo%253Fsig%253D$marker",
+            "https%25253A%25252F%25252Fcdn.example%25252Fvideo%25253Fsig%25253D$marker",
+        )
+        urls.forEach { encoded ->
+            listOf(
+                SourceMetadataPolicy.title("Title $encoded"),
+                SourceMetadataPolicy.channel("Channel $encoded"),
+                SourceMetadataPolicy.description("Description $encoded"),
+                SourceMetadataPolicy.qualityLabel("1080p $encoded"),
+                SourceMetadataPolicy.diagnostic("GET $encoded"),
+            ).forEach { projected ->
+                assertFalse(projected.contains(marker))
+                assertTrue(projected.contains("[REDACTED_URL]"))
+            }
+        }
+    }
+
     @Test fun oversizedUntrustedTextFailsClosedBeforePresentationRedaction() {
         val marker = "PRIVATE_RAW_OVERFLOW_1802"
         val oversized = "https://user:$marker@cdn.example/video?sig=$marker" +
