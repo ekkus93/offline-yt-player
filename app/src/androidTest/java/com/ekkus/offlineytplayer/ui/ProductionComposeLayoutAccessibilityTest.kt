@@ -10,13 +10,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasScrollAction
-import androidx.compose.ui.test.hasRole
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -252,7 +252,7 @@ class ProductionComposeLayoutAccessibilityTest {
         compose.onNodeWithText("Settings").performClick()
         // The shell also contains a Downloads navigation tab; select the Settings
         // category button by semantic role rather than matching both nodes.
-        compose.onNode(hasText("Downloads") and hasRole(Role.Button)).performClick()
+        compose.onNode(hasText("Downloads") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).performClick()
         compose.onNodeWithText("Default quality: Best compatible").assertIsDisplayed()
 
         compose.runOnIdle { dispatcher.onBackPressed() }
