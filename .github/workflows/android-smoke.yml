@@ -78,6 +78,7 @@ jobs:
             git diff --exit-code -- app/src/androidTest/java/com/ekkus/offlineytplayer/ui/ProductionComposeGoldenTest.kt || exit $?;
             golden_status=0;
             rm -rf app/build/outputs/androidTest-results/connected;
+            adb shell rm -rf /sdcard/Download/offline-yt-player-goldens || exit $?;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest > app/build/reports/androidSmokeLogs/golden-gradle.log 2>&1 || golden_status=$?;
             if [ "$golden_status" -eq 0 ]; then python3 scripts/assert_android_smoke_execution.py --results-dir app/build/outputs/androidTest-results/connected --required-class com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_library_empty --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_library_populated --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_add_invalid --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_add_resolved --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_download_setup_options --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_downloads_active --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_downloads_failure --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_player --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_settings_hub --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_smallest_supported_portrait --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_large_font_library --required-test com.ekkus.offlineytplayer.ui.ProductionComposeGoldenTest#golden_large_font_settings || golden_status=$?; fi;
             mkdir -p app/build/reports/androidGoldens;
@@ -86,6 +87,7 @@ jobs:
             echo "Golden evidence pull diagnostics:"; cat app/build/reports/androidSmokeLogs/golden-pull.log || true;
             echo "Golden raster SHA-256 manifest:";
             cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true;
+            if [ ! -s app/build/reports/androidGoldens/golden-raster-sha256.txt ]; then echo "ANDROID_GOLDEN_EVIDENCE_MISSING: expected nonempty exported manifest"; status=1; fi;
             if [ "$golden_status" -ne 0 ]; then echo "Golden Gradle log:"; cat app/build/reports/androidSmokeLogs/golden-gradle.log || true; echo "Golden failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$golden_status; fi;
             layout_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest > app/build/reports/androidSmokeLogs/layout-accessibility-gradle.log 2>&1 || layout_status=$?;

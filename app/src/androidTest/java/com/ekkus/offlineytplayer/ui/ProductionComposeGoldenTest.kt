@@ -229,8 +229,17 @@ class ProductionComposeGoldenTest {
     private fun persistGoldenEvidence(output: File, name: String, actual: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val evidenceDir = "/sdcard/Download/offline-yt-player-goldens"
-        val command = "mkdir -p $evidenceDir && cp '${output.absolutePath}' '$evidenceDir/$name.png' && printf '%s\\n' '$name=$actual' >> '$evidenceDir/golden-raster-sha256.txt'"
-        instrumentation.uiAutomation.executeShellCommand(command).use { descriptor -> FileInputStream(descriptor.fileDescriptor).use { input -> input.readBytes() } }
+        // The API 29 shell UID cannot read app-scoped external storage directly.
+        // Read as the debuggable target app and redirect into a stable shell-owned directory
+        // before Gradle instrumentation teardown removes the app-scoped files.
+        val packageName = instrumentation.targetContext.packageName
+        val command = "mkdir -p '$evidenceDir' && run-as '$packageName' cat '${output.absolutePath}' > '$evidenceDir/$name.png' && test -s '$evidenceDir/$name.png' && printf '%s\\n' '$name=$actual' >> '$evidenceDir/golden-raster-sha256.txt' && echo GOLDEN_EVIDENCE_EXPORTED"
+        val response = instrumentation.uiAutomation.executeShellCommand(command).use { descriptor ->
+            FileInputStream(descriptor.fileDescriptor).use { input -> input.readBytes().toString(Charsets.UTF_8) }
+        }
+        check("GOLDEN_EVIDENCE_EXPORTED" in response) {
+            "Golden evidence export failed for $name (run-as shell copy); output: ${response.take(256)}"
+        }
     }
 
     private fun bitmapRasterSha256(bitmap: Bitmap): String {
