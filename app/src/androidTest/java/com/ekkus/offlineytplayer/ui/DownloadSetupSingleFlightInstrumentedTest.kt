@@ -63,6 +63,8 @@ class DownloadSetupSingleFlightInstrumentedTest {
             assertTrue("Enqueue never started", entered.await(10, TimeUnit.SECONDS))
             compose.onNodeWithText("Download").assertIsNotEnabled()
             compose.onNodeWithText("Options").assertIsNotEnabled()
+            compose.onNodeWithText("Paste").assertIsNotEnabled()
+            compose.onNodeWithText("Video URL").assertIsNotEnabled()
             compose.runOnIdle { assertEquals(1, calls.get()) }
             release.countDown()
             compose.waitUntil(10_000) {

@@ -350,6 +350,7 @@ private fun AddScreen(
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Video URL") },
             singleLine = true,
+            enabled = !scheduling,
         )
         Row(
             Modifier.fillMaxWidth(),
@@ -368,6 +369,7 @@ private fun AddScreen(
                         status = pasted.statusMessage
                     }
                 },
+                enabled = !scheduling,
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text("Paste") }
             Button(
