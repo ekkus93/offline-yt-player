@@ -260,7 +260,9 @@ impl DownloadEngine {
         if let Some(expected) = request.expected_bytes
             && (start > expected
                 || declared_body.is_some_and(|value| {
-                    start.checked_add(value).is_none_or(|total| total > expected)
+                    start
+                        .checked_add(value)
+                        .is_none_or(|total| total > expected)
                 }))
         {
             return Err(CoreError::new(
