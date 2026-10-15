@@ -163,7 +163,7 @@ pub fn redact_sensitive(input: &str) -> String {
                         // Diagnostics may separate a field name from a literal or
                         // encoded colon with spaces/tabs. Consume that whitespace
                         // before matching, or the credential value can escape.
-                        let mut trimmed = suffix.trim_start_matches([' ', '\t']);
+                        let mut trimmed = suffix.trim_start_matches(char::is_whitespace);
                         let mut skipped = suffix.len() - trimmed.len();
                         // Header dumps may quote field names (JSON or debug maps).
                         // They also appear escaped inside stringified JSON. Consume
@@ -189,7 +189,7 @@ pub fn redact_sensitive(input: &str) -> String {
                         if closing_quote_len > 0 {
                             trimmed = &trimmed[closing_quote_len..];
                             skipped += closing_quote_len;
-                            let without_padding = trimmed.trim_start_matches([' ', '\t']);
+                            let without_padding = trimmed.trim_start_matches(char::is_whitespace);
                             skipped += trimmed.len() - without_padding.len();
                             trimmed = without_padding;
                         }
@@ -215,7 +215,7 @@ pub fn redact_sensitive(input: &str) -> String {
         // Recognize it first so both fields retain their redacted names.
         if redacting_folded_header
             && header.is_none()
-            && (line.starts_with(' ') || line.starts_with('\t'))
+            && line.chars().next().is_some_and(char::is_whitespace)
         {
             if !output.is_empty() {
                 output.push('\n');
@@ -318,6 +318,7 @@ fn redact_url_token(token: &str) -> String {
     let parsed = if scheme_relative {
         Url::parse(&format!("https:{url_text}"))
     } else {
+
         Url::parse(url_text)
     };
     parsed.map_or_else(
@@ -558,6 +559,7 @@ mod tests {
             assert!(!output.contains(marker), "{output}");
             assert!(output.contains("[REDACTED_URL]"), "{output}");
         }
+
         assert!(
             redact_sensitive("GET https://cdn.example/video/segment")
                 .contains("cdn.example/video/segment")
@@ -646,6 +648,41 @@ mod tests {
             redact_sensitive("request failed: no authorization header received"),
             "request failed: no authorization header received"
         );
+    }
+
+    #[test]
+    fn unicode_whitespace_before_sensitive_header_separators_never_leaks() {
+        // Headers can be rendered by loggers with Unicode spacing rather than ASCII
+        // spaces/tabs. Redact the value for all five sensitive field families.
+        let marker = "RMD1802_UNICODE_SEPARATOR_SECRET";
+        let cases = [
+            format!("Authorization\\u{2003}: Bearer {marker}"),
+            format!("Proxy-Authorization\\u{00a0}%253A Basic {marker}"),
+            format!("Cookie\\u{2009}= session={marker}"),
+            format!("Set-Cookie\\u{2003}%3D session={marker}"),
+            format!("X-Api-Key\\u{202f}%25253a {marker}"),
+            format!("request failed: Authorization\\u{2003}%3A Bearer {marker}"),
+            format!(r#"{{"Cookie"\\u{2003}: "session={marker}"}}"#),
+        ];
+        for input in cases {
+            let output = redact_sensitive(&input);
+            assert!(!output.contains(marker), "{input}: {output}");
+            assert!(output.contains("[REDACTED]"), "{input}: {output}");
+        }
+        assert_eq!(
+            redact_sensitive("request failed: no authorization header received"),
+            "request failed: no authorization header received"
+        );
+    }
+
+    #[test]
+    fn unicode_indented_folded_header_values_never_leak() {
+        let marker = "RMD1802_UNICODE_FOLDED_SECRET";
+        let input = format!("Authorization: Bearer\\n\\u{2003}{marker}\\n\\u{00a0}{marker}\\nnext: safe");
+        let output = redact_sensitive(&input);
+        assert!(!output.contains(marker), "{output}");
+        assert_eq!(output.matches("[REDACTED_HEADER_CONTINUATION]").count(), 2);
+        assert!(output.contains("next: safe"), "{output}");
     }
 
     #[test]
