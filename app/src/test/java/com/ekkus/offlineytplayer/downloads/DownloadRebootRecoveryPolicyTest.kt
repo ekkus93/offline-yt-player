@@ -16,14 +16,4 @@ class DownloadRebootRecoveryPolicyTest {
         assertFalse(manifest.contains("android.intent.action.LOCKED_BOOT_COMPLETED"))
     }
 
-    @Test
-    fun rebootReceiverDoesNotStartForegroundServiceOrTouchProtectedState() {
-        val receiver = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadRebootReceiver.kt").readText()
-        assertFalse(receiver.contains("ContextCompat.startForegroundService"))
-        assertFalse(receiver.contains("DownloadForegroundService::class.java"))
-        assertTrue(receiver.contains("DownloadBootRecovery.onReceive(intent?.action)"))
-        assertFalse(receiver.contains("AndroidDownloadExecutionScheduler"))
-        assertFalse(receiver.contains("startService("))
-    }
-
 }

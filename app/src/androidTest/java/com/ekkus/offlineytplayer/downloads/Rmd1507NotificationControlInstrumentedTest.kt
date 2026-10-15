@@ -64,7 +64,17 @@ class Rmd1507NotificationControlInstrumentedTest {
                 // uses the actual production notification PendingIntent/control path.
                 .putExtra(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, jobId),
         )
-        val notification = waitForDownloadNotification().notification
+        val posted = waitForDownloadNotification()
+        val notification = posted.notification
+        // The real posted notification is an ongoing, low-importance, indeterminate
+        // progress notification on the documented channel.
+        assertEquals(true, posted.isOngoing)
+        assertEquals(DownloadServicePolicy.ChannelId, notification.channelId)
+        assertEquals(
+            NotificationManager.IMPORTANCE_LOW,
+            notifications.getNotificationChannel(DownloadServicePolicy.ChannelId).importance,
+        )
+        assertEquals(true, notification.extras.getBoolean(android.app.Notification.EXTRA_PROGRESS_INDETERMINATE))
         val actions = notification.actions.associateBy { it.title.toString() }
         assertNotNull(actions["Pause"])
         assertNotNull(actions["Resume"])

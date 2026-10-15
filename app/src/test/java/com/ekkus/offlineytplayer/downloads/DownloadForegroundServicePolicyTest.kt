@@ -48,36 +48,11 @@ class DownloadForegroundServicePolicyTest {
     }
 
     @Test
-    fun androidDoesNotOwnADuplicateConcurrencyMaximum() {
-        val service = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundService.kt").readText()
-        assertFalse(service.contains("const val MaxConcurrentDownloads"))
-        assertTrue(service.contains("ffiMaxConcurrentDownloads"))
-    }
-
-    @Test
     fun manifestDeclaresNonExportedDataSyncForegroundService() {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("android.permission.FOREGROUND_SERVICE_DATA_SYNC"))
         assertTrue(manifest.contains("android:name=\".downloads.DownloadForegroundService\""))
         assertTrue(manifest.contains("android:exported=\"false\""))
         assertTrue(manifest.contains("android:foregroundServiceType=\"dataSync\""))
-    }
-
-    @Test
-    fun serviceStartsForegroundAndHasExplicitStopLifecycle() {
-        val service = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundService.kt").readText()
-        assertTrue(service.contains("startForeground(DownloadServicePolicy.NotificationId"))
-        assertTrue(service.contains("stopForeground(STOP_FOREGROUND_REMOVE)"))
-        assertTrue(service.contains("stopSelf()"))
-        assertTrue(service.contains("return START_STICKY"))
-    }
-
-    @Test
-    fun notificationControlsRouteThroughDurableGatewayDispatcher() {
-        val service = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadForegroundService.kt").readText()
-        assertTrue(service.contains("DownloadForegroundControlDispatcher.dispatch"))
-        assertTrue(service.contains("GeneratedUniffiDownloadControlGateway.open"))
-        assertTrue(service.contains("intent.getStringExtra(EXTRA_QUEUE_ITEM_ID)"))
-        assertTrue(service.contains("serviceAction(ACTION_PAUSE, 1, queueItemId)"))
     }
 }

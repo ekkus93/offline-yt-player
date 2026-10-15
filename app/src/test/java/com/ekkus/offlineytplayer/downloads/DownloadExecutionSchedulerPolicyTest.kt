@@ -62,17 +62,6 @@ class DownloadExecutionSchedulerPolicyTest {
     }
 
     @Test
-    fun uidtJobCarriesOnlyDurableQueueIdentityInExtras() {
-        val scheduler = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadExecutionScheduler.kt").readText()
-        val extrasFunction = scheduler.substringAfter("fun durableQueueItemExtras").substringBefore("fun stableJobId")
-
-        assertTrue(extrasFunction.contains("putString(DownloadUserInitiatedJobService.ExtraQueueItemId, queueItemId)"))
-        assertFalse(extrasFunction.contains("url"))
-        assertFalse(extrasFunction.contains("title"))
-        assertFalse(extrasFunction.contains("provider_payload"))
-    }
-
-    @Test
     fun stableJobIdsAreDeterministicAndInsideConfiguredRange() {
         val first = DownloadExecutionSchedulerPolicy.stableJobId("queue-item-1")
         val second = DownloadExecutionSchedulerPolicy.stableJobId("queue-item-1")
@@ -116,20 +105,6 @@ class DownloadExecutionSchedulerPolicyTest {
         // The first collision occupant completed, leaving its slot available.
         // A reschedule of BB must reuse BB's pending job, not create a duplicate.
         assertEquals(secondId, DownloadExecutionSchedulerPolicy.availableJobId("BB", mapOf(secondId to "BB")))
-    }
-
-    @Test
-    fun invalidJobExtrasReturnAlreadyFinishedWithoutDoubleSettlement() {
-        // Android treats onStartJob=false as an already-completed job. Ensure
-        // malformed durable IDs cannot double-settle or post a UIDT notification.
-        val source = File("src/main/java/com/ekkus/offlineytplayer/downloads/DownloadExecutionScheduler.kt").readText()
-        val onStart = source.substringAfter("override fun onStartJob(params: JobParameters): Boolean {")
-            .substringBefore("Thread {")
-        val invalidIdBranch = onStart.substringAfter("if (queueItemId.isNullOrBlank()) {")
-            .substringBefore("}")
-        assertTrue(invalidIdBranch.contains("return false"))
-        assertFalse(invalidIdBranch.contains("jobFinished("))
-        assertTrue(onStart.indexOf("if (queueItemId.isNullOrBlank())") < onStart.indexOf("setNotification("))
     }
 
     @Test

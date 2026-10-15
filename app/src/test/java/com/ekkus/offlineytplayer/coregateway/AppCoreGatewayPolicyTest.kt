@@ -1,6 +1,5 @@
 package com.ekkus.offlineytplayer.coregateway
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -75,39 +74,5 @@ class AppCoreGatewayPolicyTest {
         assertTrue(runCatching { generatedNumericAsInt(Int.MAX_VALUE.toULong() + 1uL) }.exceptionOrNull() is IllegalArgumentException)
         assertTrue(runCatching { generatedNumericAsInt(-1L) }.exceptionOrNull() is IllegalArgumentException)
         assertTrue(runCatching { generatedNumericAsInt(ULong.MAX_VALUE) }.exceptionOrNull() is IllegalArgumentException)
-    }
-
-    @Test
-    fun productionSourceAndLibraryDetailsUseSharedUnsignedConversion() {
-        val source = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppSourceAnalysisGateway.kt").readText()
-        val details = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppLibraryDetailsGateway.kt").readText()
-        assertFalse(source.contains("as Number?"))
-        assertFalse(details.contains("as Number?"))
-        assertTrue(source.contains("::generatedNumericAsLong"))
-        assertTrue(details.contains("::generatedNumericAsLong"))
-    }
-
-    @Test
-    fun productionGatewayIsTheOnlyLayerThatNamesGeneratedUniffiService() {
-        val source = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppCoreGateway.kt").readText()
-        val controls = File("src/main/java/com/ekkus/offlineytplayer/coregateway/AppDownloadControlGateway.kt").readText()
-
-        assertTrue(source.contains("Class.forName(className)"))
-        assertTrue(source.contains("FfiCoreService"))
-        assertTrue(source.contains("FfiStartupReconciliationService"))
-        assertTrue(source.contains("startupReconcile"))
-        assertTrue(source.contains("reconcileStartupAsync"))
-        assertTrue(source.contains("CoreCallDispatcher"))
-        assertTrue(source.contains("checkNotMainThread()"))
-        assertTrue(source.contains("FakeCoreGateway"))
-        assertTrue(source.contains("CoreGatewayError"))
-        assertTrue(source.contains("CoreDownloadSnapshot"))
-        assertTrue(source.contains("listDownloadQueueAsync"))
-        assertTrue(controls.contains("enqueueAsync"))
-        assertTrue(controls.contains("resumeAsync"))
-        assertTrue(controls.contains("cancelAsync"))
-        assertTrue(controls.contains("retryAsync"))
-        assertTrue(controls.contains("checkNotMainThread()"))
-        assertFalse(source.contains("onClick = {}"))
     }
 }

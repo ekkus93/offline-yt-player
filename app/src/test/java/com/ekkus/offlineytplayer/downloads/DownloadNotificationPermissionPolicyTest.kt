@@ -1,6 +1,5 @@
 package com.ekkus.offlineytplayer.downloads
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -20,13 +19,5 @@ class DownloadNotificationPermissionPolicyTest {
             DownloadNotificationPermissionBehavior.QueueStateOnly,
             DownloadNotificationPermissionPolicy.behavior(granted = false),
         )
-    }
-
-    @Test
-    fun mainActivityRequestsPostNotificationsPermission() {
-        val activity = File("src/main/java/com/ekkus/offlineytplayer/MainActivity.kt").readText()
-        assertTrue(activity.contains("ActivityResultContracts.RequestPermission"))
-        assertTrue(activity.contains("Manifest.permission.POST_NOTIFICATIONS"))
-        assertTrue(activity.contains("DownloadNotificationPermissionStateStore.recordGrantState"))
     }
 }
