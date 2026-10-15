@@ -8,6 +8,23 @@ import org.junit.Test
 
 class AddWorkflowPolicyTest {
     @Test
+    fun switchingFromUnavailableToExecutableQualityAndBackRecomputesReadiness() {
+        val choices = mapOf("Preferred" to "", "Playable" to "format-720")
+        val initial = AddWorkflowPolicy.selectedQuality(choices, "Preferred")
+        assertEquals("", initial.choiceId)
+        assertEquals(false, initial.readyForDownload)
+
+        val available = AddWorkflowPolicy.selectedQuality(choices, "Playable")
+        assertEquals("format-720", available.choiceId)
+        assertTrue(available.readyForDownload)
+
+        val unavailableAgain = AddWorkflowPolicy.selectedQuality(choices, "Preferred")
+        assertEquals("", unavailableAgain.choiceId)
+        assertEquals(false, unavailableAgain.readyForDownload)
+        assertEquals(false, AddWorkflowPolicy.selectedQuality(choices, "Missing").readyForDownload)
+    }
+
+    @Test
     fun boundedClipboardTextHandlesMissingAndBlankTextGracefully() {
         assertNull(AddWorkflowPolicy.boundedClipboardText(null).acceptedText)
         assertEquals(

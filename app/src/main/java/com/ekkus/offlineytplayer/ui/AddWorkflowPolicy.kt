@@ -7,7 +7,15 @@ internal data class ClipboardPasteDecision(
     val statusMessage: String,
 )
 
+internal data class ExecutableQualitySelection(val choiceId: String?, val readyForDownload: Boolean)
+
 internal object AddWorkflowPolicy {
+    /** Keep Download Setup readiness synchronized with the selected executable format. */
+    fun selectedQuality(choiceIdsByLabel: Map<String, String?>, label: String): ExecutableQualitySelection {
+        val choiceId = choiceIdsByLabel[label]
+        return ExecutableQualitySelection(choiceId, !choiceId.isNullOrBlank())
+    }
+
     const val MaxClipboardChars: Int = 4096
     const val MissingClipboardMessage: String = "Clipboard does not contain a video URL."
     const val PastedClipboardMessage: String = "Pasted clipboard text. Choose Analyze to validate it."
