@@ -34,14 +34,14 @@ internal object SourceMetadataPolicy {
 
     /** Preserve useful context, but never allow FFI/provider HTTP header values into Compose. */
     private val sensitiveHeaderPattern =
-        Regex("(?i)(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key)(?:\\s*:|%(?:25)*3a)")
+        Regex("""(?i)(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key)(?:[\p{javaWhitespace}\p{Zs}]*\\*["']?[\p{javaWhitespace}\p{Zs}]*(?::|=|%(?:25)*(?:3a|3d)))""")
 
     private fun redactDiagnosticHeaders(value: String): String {
         var redactingFoldedHeader = false
         return value.lineSequence().joinToString("\n") { line ->
             val header = sensitiveHeaderPattern.find(line)
             if (redactingFoldedHeader && header == null &&
-                (line.startsWith(' ') || line.startsWith('\t'))
+                (line.firstOrNull()?.isWhitespace() == true)
             ) {
                 // Indented follow-on header values must not reappear without the field name.
                 "[REDACTED_HEADER_CONTINUATION]"

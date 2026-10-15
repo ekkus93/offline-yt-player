@@ -101,6 +101,40 @@ class SourceMetadataPolicyTest {
         }
     }
 
+    @Test fun quotedEqualsAndUnicodeSpacedHeaderFieldsNeverExposeCredentials() {
+        val marker = "UNICODE_PRESENTATION_SECRET_1802"
+        val inputs = listOf(
+            "Authorization\u2003: Bearer $marker",
+            "Proxy-Authorization\u00a0%253A Basic $marker",
+            "Cookie\u2009= session=$marker",
+            "Set-Cookie\u2003%3D session=$marker",
+            "X-Api-Key\u202f%25253a $marker",
+            """{"Authorization": "Bearer $marker"}""",
+            "logger: {\"Cookie\": \"session=$marker\"}",
+            "Authorization: Bearer\n\u2003$marker\n\u00a0$marker\nnext: safe",
+        )
+        inputs.forEach { input ->
+            val outputs = listOf(
+                SourceMetadataPolicy.title(input),
+                SourceMetadataPolicy.channel(input),
+                SourceMetadataPolicy.description(input),
+                SourceMetadataPolicy.qualityLabel(input),
+                SourceMetadataPolicy.diagnostic(input),
+            )
+            outputs.forEach { projected ->
+                assertFalse("Unredacted value in $projected", projected.contains(marker))
+                assertTrue(projected.contains("[REDACTED]"))
+            }
+        }
+        val folded = SourceMetadataPolicy.diagnostic("Authorization: Bearer\n\u2003$marker\n\u00a0$marker")
+        assertFalse(folded.contains(marker))
+        assertTrue(folded.contains("[REDACTED_HEADER_CONTINUATION]"))
+        assertEquals(
+            "request failed: no authorization header received",
+            SourceMetadataPolicy.diagnostic("request failed: no authorization header received"),
+        )
+    }
+
     @Test fun foldedSensitiveHeaderLinesNeverDiscloseRawValues() {
         val marker = "FOLDED_ANDROID_SECRET_1802"
         val input = "Authorization: Bearer\n  $marker\nsafe: context\nCookie: session=\n\t$marker"
