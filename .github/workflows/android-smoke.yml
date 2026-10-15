@@ -85,9 +85,9 @@ jobs:
             adb pull /sdcard/Android/data/com.ekkus.offlineytplayer/files/goldens/. app/build/reports/androidGoldens/ > app/build/reports/androidSmokeLogs/golden-pull.log 2>&1 || true;
             adb pull /sdcard/Download/offline-yt-player-goldens/. app/build/reports/androidGoldens/ >> app/build/reports/androidSmokeLogs/golden-pull.log 2>&1 || true;
             echo "Golden evidence pull diagnostics:"; cat app/build/reports/androidSmokeLogs/golden-pull.log || true;
+            python3 scripts/verify_android_golden_exports.py app/build/reports/androidGoldens || status=1;
             echo "Golden raster SHA-256 manifest:";
             cat app/build/reports/androidGoldens/golden-raster-sha256.txt || true;
-            if [ ! -s app/build/reports/androidGoldens/golden-raster-sha256.txt ]; then echo "ANDROID_GOLDEN_EVIDENCE_MISSING: expected nonempty exported manifest"; status=1; fi;
             if [ "$golden_status" -ne 0 ]; then echo "Golden Gradle log:"; cat app/build/reports/androidSmokeLogs/golden-gradle.log || true; echo "Golden failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$golden_status; fi;
             layout_status=0;
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest > app/build/reports/androidSmokeLogs/layout-accessibility-gradle.log 2>&1 || layout_status=$?;

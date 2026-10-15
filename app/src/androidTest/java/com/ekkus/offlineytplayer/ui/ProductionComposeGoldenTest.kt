@@ -1,6 +1,10 @@
 package com.ekkus.offlineytplayer.ui
 
+import android.content.ContentValues
 import android.graphics.Bitmap
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -28,7 +32,6 @@ import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.settings.AppearanceSetting
 import java.io.File
 import java.io.FileOutputStream
-import java.io.FileInputStream
 import java.security.MessageDigest
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -227,19 +230,42 @@ class ProductionComposeGoldenTest {
     }
 
     private fun persistGoldenEvidence(output: File, name: String, actual: String) {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val evidenceDir = "/sdcard/Download/offline-yt-player-goldens"
-        // The API 29 shell UID cannot read app-scoped external storage directly.
-        // Read as the debuggable target app and redirect into a stable shell-owned directory
-        // before Gradle instrumentation teardown removes the app-scoped files.
-        val packageName = instrumentation.targetContext.packageName
-        val command = "mkdir -p '$evidenceDir' && run-as '$packageName' cat '${output.absolutePath}' > '$evidenceDir/$name.png' && test -s '$evidenceDir/$name.png' && printf '%s\\n' '$name=$actual' >> '$evidenceDir/golden-raster-sha256.txt' && echo GOLDEN_EVIDENCE_EXPORTED"
-        val response = instrumentation.uiAutomation.executeShellCommand(command).use { descriptor ->
-            FileInputStream(descriptor.fileDescriptor).use { input -> input.readBytes().toString(Charsets.UTF_8) }
+        // Golden smoke runs on API 29. Instrumentation must publish as the app,
+        // not via UiAutomation shell/run-as: those identities cannot reliably
+        // traverse app-scoped external storage on the emulator.
+        check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "Golden evidence export requires Android API 29 or later"
         }
-        check("GOLDEN_EVIDENCE_EXPORTED" in response) {
-            "Golden evidence export failed for $name (run-as shell copy); output: ${response.take(256)}"
+        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        val destination = Environment.DIRECTORY_DOWNLOADS + "/offline-yt-player-goldens/"
+
+        fun publish(filename: String, mimeType: String, bytes: ByteArray) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, destination)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = checkNotNull(resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)) {
+                "MediaStore refused golden export: $filename"
+            }
+            try {
+                val stream = checkNotNull(resolver.openOutputStream(uri)) {
+                    "Cannot open MediaStore golden export: $filename"
+                }
+                stream.use { it.write(bytes) }
+                val published = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                check(resolver.update(uri, published, null, null) == 1) {
+                    "Cannot publish golden export: $filename"
+                }
+            } catch (failure: Exception) {
+                resolver.delete(uri, null, null)
+                throw failure
+            }
         }
+
+        publish("$name.png", "image/png", output.readBytes())
+        publish("$name.sha256", "text/plain", "$name=$actual\n".toByteArray(Charsets.UTF_8))
     }
 
     private fun bitmapRasterSha256(bitmap: Bitmap): String {
