@@ -89,6 +89,17 @@ jobs:
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.ProductionComposeLayoutAccessibilityTest > app/build/reports/androidSmokeLogs/layout-accessibility-gradle.log 2>&1 || layout_status=$?;
             if [ "$layout_status" -ne 0 ]; then echo "Layout/accessibility Gradle log:"; cat app/build/reports/androidSmokeLogs/layout-accessibility-gradle.log || true; echo "Layout/accessibility failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$layout_status; fi;
             exit $status'
+      - name: Upload failed golden evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke-failed-goldens-${{ github.run_id }}
+          path: |
+            app/build/reports/androidGoldens
+            app/build/reports/androidSmokeLogs/golden-pull.log
+            app/build/outputs/androidTest-results/connected
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload instrumentation evidence
         if: always() && github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
