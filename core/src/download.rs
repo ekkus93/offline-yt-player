@@ -255,6 +255,23 @@ impl DownloadEngine {
                 false,
             ));
         }
+        // Known provider asset size is a tighter bound than the global policy.
+        // Reject an oversized advertised response before allocating a partial.
+        if let Some(expected) = request.expected_bytes {
+            if start > expected
+                || declared_body.is_some_and(|value| {
+                    start
+                        .checked_add(value)
+                        .is_none_or(|total| total > expected)
+                })
+            {
+                return Err(CoreError::new(
+                    ErrorKind::IntegrityFailure,
+                    "Remote response exceeds expected asset size",
+                    true,
+                ));
+            }
+        }
 
         if observed.has_remote_validator() {
             save_resume_representation(&partial_path, &observed)?;
@@ -301,14 +318,29 @@ impl DownloadEngine {
                 }
             }
 
-            total = total.saturating_add(count as u64);
-            if total > self.policy.max_asset_bytes {
+            let next_total = total.checked_add(count as u64).ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::InvalidInput,
+                    "Downloaded asset exceeded configured maximum size",
+                    false,
+                )
+            })?;
+            if next_total > self.policy.max_asset_bytes {
                 return Err(CoreError::new(
                     ErrorKind::InvalidInput,
                     "Downloaded asset exceeded configured maximum size",
                     false,
                 ));
             }
+            // Fail before writing even one chunk beyond a known selected asset size.
+            if request.expected_bytes.is_some_and(|expected| next_total > expected) {
+                return Err(CoreError::new(
+                    ErrorKind::IntegrityFailure,
+                    "Downloaded asset exceeded expected size",
+                    true,
+                ));
+            }
+            total = next_total;
             file.write_all(&buffer[..count]).map_err(io_error)?;
             if let Err(error) = on_progress(total) {
                 drop(file);
@@ -702,6 +734,84 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use tiny_http::{Header, Response as TinyResponse, Server, StatusCode};
+
+    #[test]
+    fn declared_body_over_expected_size_fails_before_creating_partial() {
+        let server = RawHttpFixtureServer::start(|mut stream| {
+            drain_http_request(&mut stream);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\nConnection: close\r\n\r\n0123456789ab",
+            );
+        });
+        let root = tempfile::tempdir().unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let final_path = root.path().join("items/one/video.mp4");
+        let mut request = transfer_from(format!("{}/media", server.address));
+        request.expected_bytes = Some(4);
+        let error = engine.transfer(&request, &AtomicBool::new(false)).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+        assert!(!partial_path(&final_path).exists());
+        assert!(!final_path.exists());
+    }
+
+    #[test]
+    fn streamed_chunked_body_aborts_before_writing_over_expected_size() {
+        let server = RawHttpFixtureServer::start(|mut stream| {
+            drain_http_request(&mut stream);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\na\r\n0123456789\r\n0\r\n\r\n",
+            );
+        });
+        let root = tempfile::tempdir().unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let final_path = root.path().join("items/one/video.mp4");
+        let mut request = transfer_from(format!("{}/media", server.address));
+        request.expected_bytes = Some(4);
+        let error = engine.transfer(&request, &AtomicBool::new(false)).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+        let partial = partial_path(&final_path);
+        assert!(partial.exists());
+        assert_eq!(fs::metadata(partial).unwrap().len(), 0);
+        assert!(!final_path.exists());
+    }
+
+    #[test]
+    fn resumed_declared_tail_over_expected_size_preserves_existing_partial() {
+        let data = b"0123456789".to_vec();
+        let server = FixtureServer::start(data.clone());
+        let root = tempfile::tempdir().unwrap();
+        let relative_path = "items/one/video.mp4";
+        let final_path = root.path().join(relative_path);
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        let partial = partial_path(&final_path);
+        fs::write(&partial, &data[..3]).unwrap();
+        let url = format!("{}/media", server.address);
+        save_resume_representation(
+            &partial,
+            &ResumeRepresentation {
+                url: url.clone(),
+                etag: Some("\"fixture-v1\"".into()),
+                last_modified: None,
+                total_bytes: Some(data.len() as u64),
+            },
+        )
+        .unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let error = engine
+            .transfer(
+                &TransferRequest {
+                    url,
+                    relative_path: relative_path.into(),
+                    expected_bytes: Some(8),
+                    expected_sha256: None,
+                },
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+        assert_eq!(fs::read(&partial).unwrap(), &data[..3]);
+        assert!(!final_path.exists());
+    }
 
     #[test]
     fn oversized_existing_partial_is_rejected_before_any_network_request() {
