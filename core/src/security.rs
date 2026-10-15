@@ -319,6 +319,7 @@ fn redact_url_token(token: &str) -> String {
         Url::parse(&format!("https:{url_text}"))
     } else {
 
+
         Url::parse(url_text)
     };
     parsed.map_or_else(
@@ -638,6 +639,7 @@ mod tests {
             format!("Cookie%25253A session={marker}"),
             format!("Set-Cookie%3a session={marker}"),
             format!("X-Api-Key%2525253a {marker}"),
+
         ];
         for input in cases {
             let output = redact_sensitive(&input);
@@ -656,13 +658,13 @@ mod tests {
         // spaces/tabs. Redact the value for all five sensitive field families.
         let marker = "RMD1802_UNICODE_SEPARATOR_SECRET";
         let cases = [
-            format!("Authorization\\u{2003}: Bearer {marker}"),
-            format!("Proxy-Authorization\\u{00a0}%253A Basic {marker}"),
-            format!("Cookie\\u{2009}= session={marker}"),
-            format!("Set-Cookie\\u{2003}%3D session={marker}"),
-            format!("X-Api-Key\\u{202f}%25253a {marker}"),
-            format!("request failed: Authorization\\u{2003}%3A Bearer {marker}"),
-            format!(r#"{{"Cookie"\\u{2003}: "session={marker}"}}"#),
+            format!("Authorization : Bearer {marker}"),
+            format!("Proxy-Authorization %253A Basic {marker}"),
+            format!("Cookie = session={marker}"),
+            format!("Set-Cookie %3D session={marker}"),
+            format!("X-Api-Key %25253a {marker}"),
+            format!("request failed: Authorization %3A Bearer {marker}"),
+            format!(r#"{{"Cookie" : "session={marker}"}}"#),
         ];
         for input in cases {
             let output = redact_sensitive(&input);
@@ -678,7 +680,7 @@ mod tests {
     #[test]
     fn unicode_indented_folded_header_values_never_leak() {
         let marker = "RMD1802_UNICODE_FOLDED_SECRET";
-        let input = format!("Authorization: Bearer\\n\\u{2003}{marker}\\n\\u{00a0}{marker}\\nnext: safe");
+        let input = format!("Authorization: Bearer\n {marker}\n {marker}\nnext: safe");
         let output = redact_sensitive(&input);
         assert!(!output.contains(marker), "{output}");
         assert_eq!(output.matches("[REDACTED_HEADER_CONTINUATION]").count(), 2);
