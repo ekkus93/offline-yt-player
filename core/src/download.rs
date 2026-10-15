@@ -820,6 +820,48 @@ mod tests {
     }
 
     #[test]
+    fn resumed_chunked_tail_aborts_without_appending_over_expected_size() {
+        let server = RawHttpFixtureServer::start(|mut stream| {
+            drain_http_request(&mut stream);
+            let _ = stream.write_all(
+                b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 3-9/10\r\nETag: \"fixture-v1\"\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n7\r\n3456789\r\n0\r\n\r\n",
+            );
+        });
+        let root = tempfile::tempdir().unwrap();
+        let relative_path = "items/one/video.mp4";
+        let final_path = root.path().join(relative_path);
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        let partial = partial_path(&final_path);
+        fs::write(&partial, b"012").unwrap();
+        let url = format!("{}/media", server.address);
+        save_resume_representation(
+            &partial,
+            &ResumeRepresentation {
+                url: url.clone(),
+                etag: Some("\"fixture-v1\"".into()),
+                last_modified: None,
+                total_bytes: Some(10),
+            },
+        )
+        .unwrap();
+        let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let error = engine
+            .transfer(
+                &TransferRequest {
+                    url,
+                    relative_path: relative_path.into(),
+                    expected_bytes: Some(5),
+                    expected_sha256: None,
+                },
+                &AtomicBool::new(false),
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::IntegrityFailure);
+        assert_eq!(fs::read(&partial).unwrap(), b"012");
+        assert!(!final_path.exists());
+    }
+
+    #[test]
     fn oversized_existing_partial_is_rejected_before_any_network_request() {
         let root = tempfile::tempdir().unwrap();
         let relative_path = "items/oversized/video.mp4";

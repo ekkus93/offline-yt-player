@@ -16,3 +16,15 @@ This is a resource-bound hardening gap, not evidence that the existing end-of-tr
 4. Qualify the implementation on its exact head with Rust/core CI and the required Android/fixture matrix. Reconcile this finding in the canonical remediation TODO only after production code, regression tests, and passing exact-head evidence exist.
 
 **Qualification:** Pending. This report is an independently identified follow-up under RMD-1304/RMD-1802, not a completed remediation. External service-policy/legal release approval remains separate.
+
+## Implementation status (2026-10-14)
+
+Production hardening in `core/src/download.rs::DownloadEngine::transfer_with_progress` compares a declared response length plus validated resume offset against the known expected asset size before creating/writing a partial. Each streamed read also checks the expected limit before `write_all`, preserving the previous global maximum-size check and final byte-length integrity verification.
+
+Deterministic Rust regressions:
+- `declared_body_over_expected_size_fails_before_creating_partial`
+- `streamed_chunked_body_aborts_before_writing_over_expected_size`
+- `resumed_declared_tail_over_expected_size_preserves_existing_partial`
+- `resumed_chunked_tail_aborts_without_appending_over_expected_size`
+
+**Evidence state:** implementation committed to master; exact-head CI and final RMD-1802 independent-review/engineering closeout remain open. No closeout checkbox is being changed by this implementation note.
