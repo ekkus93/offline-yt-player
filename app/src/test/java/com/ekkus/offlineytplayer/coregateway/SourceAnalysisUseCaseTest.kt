@@ -3,6 +3,7 @@ package com.ekkus.offlineytplayer.coregateway
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CancellationException
 
 class SourceAnalysisUseCaseTest {
     @Test
@@ -100,6 +101,26 @@ class SourceAnalysisUseCaseTest {
         assertEquals("SOURCE_ANALYSIS_UNAVAILABLE", error.kind)
         assertEquals("Source analysis is unavailable.", error.message)
         assertTrue(error.retryable)
+    }
+
+    @Test
+    fun gatewayCancellationPropagatesRatherThanBecomingRetryableSourceFailure() {
+        val gateway = object : AppSourceAnalysisGateway {
+            override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> {
+                throw CancellationException("cancelled analysis")
+            }
+            override fun close() = Unit
+        }
+        val useCase = SourceAnalysisUseCase(gateway)
+        val loading = useCase.begin(supportedWatchUrl()) as SourceAnalysisState.Loading
+        var cancellationObserved = false
+        try {
+            useCase.analyzeBlocking(loading.ticket)
+        } catch (_: CancellationException) {
+            cancellationObserved = true
+        }
+        assertTrue("Cancellation must not be turned into a provider failure", cancellationObserved)
+        assertTrue(useCase.cancelActive() is SourceAnalysisState.Superseded)
     }
 
     @Test

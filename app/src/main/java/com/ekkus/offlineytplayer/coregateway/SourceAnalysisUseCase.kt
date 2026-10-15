@@ -2,6 +2,7 @@ package com.ekkus.offlineytplayer.coregateway
 
 import com.ekkus.offlineytplayer.SupportedUrlPolicy
 import java.io.Closeable
+import java.util.concurrent.CancellationException
 
 /**
  * App-owned source-analysis use case.
@@ -38,6 +39,10 @@ class SourceAnalysisUseCase(
     fun analyzeBlocking(ticket: SourceAnalysisTicket): SourceAnalysisState {
         val result = try {
             gateway.analyze(ticket.normalizedUrl)
+        } catch (cancelled: CancellationException) {
+            // Preserve coroutine cancellation instead of converting it into a retryable
+            // provider error. Superseding requests and UI disposal own ticket invalidation.
+            throw cancelled
         } catch (_: Exception) {
             // Provider, binding, or transport failures may throw before returning an FFI
             // result. Preserve the UI state machine without exposing URLs/credentials.
