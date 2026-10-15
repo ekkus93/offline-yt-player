@@ -5,20 +5,26 @@ import android.content.Context
 import android.media.AudioManager
 import android.os.SystemClock
 import android.view.KeyEvent
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.ekkus.offlineytplayer.coregateway.AppPlaybackPositionGateway
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.settings.AppSettingsSnapshot
 import com.ekkus.offlineytplayer.ui.PortraitPlayerScreen
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -217,6 +223,253 @@ class PlaybackSessionBehaviorInstrumentedTest {
         }
     }
 
+    @Test
+    fun sessionPlayerDeclaresMediaAudioUsage() {
+        val audio = createLocalWaveFixture()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            instrumentation.runOnMainSync {
+                controller.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
+                controller.prepare()
+                controller.play()
+            }
+            waitForControllerState(controller) {
+                playbackState == androidx.media3.common.Player.STATE_READY && playWhenReady
+            }
+            // setHandleAudioBecomingNoisy(true) is not asserted here: ACTION_AUDIO_BECOMING_NOISY is a
+            // protected system broadcast that an app or shell cannot send, so that setter stays unverified
+            // (see docs/RMD_1802_SOURCE_TEXT_TEST_AUDIT_2026-10-15.md).
+            instrumentation.runOnMainSync { assertEquals(C.USAGE_MEDIA, controller.audioAttributes.usage) }
+        } finally {
+            instrumentation.runOnMainSync { controller.release() }
+            audio.delete()
+        }
+    }
+
+    @Test
+    fun splitAudioPathSurvivesTheMediaIdTransportedByControllersAndRejectsRemoteIds() {
+        val audioPath = File(context.cacheDir, "items/a b/audio 128k.m4a").absolutePath
+        val item = LocalPlaybackPolicy.mediaItemFor(
+            LocalPlaybackAsset(
+                videoPath = File(context.cacheDir, "items/a b/video.mp4").absolutePath,
+                audioPath = audioPath,
+                title = "Split fixture",
+            ),
+        )
+        // MediaSession controllers serialize the media ID, not LocalConfiguration.tag.
+        val transported = MediaItem.Builder()
+            .setMediaId(item.mediaId)
+            .setUri(item.localConfiguration?.uri)
+            .build()
+        assertEquals(audioPath, LocalPlaybackPolicy.splitAudioPathFrom(transported))
+        assertEquals(null, LocalPlaybackPolicy.splitAudioPathFrom(LocalPlaybackPolicy.mediaItemFor("/library/video.mp4")))
+
+        val forged = MediaItem.Builder()
+            .setMediaId("offline-yt-player/split-audio/" + android.net.Uri.encode("https://example.invalid/a.m4a"))
+            .setUri("file:///library/video.mp4")
+            .build()
+        val rejected = runCatching { LocalPlaybackPolicy.splitAudioPathFrom(forged) }.exceptionOrNull()
+        assertTrue(rejected is IllegalArgumentException)
+    }
+
+    @Test
+    fun subtitleControlCyclesTracksThenOffOnTheSessionTrackSelection() {
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            compose.setContent {
+                PortraitPlayerScreen(
+                    asset = LocalPlaybackAsset(
+                        videoPath = File(context.cacheDir, "subtitle-select.mp4").absolutePath,
+                        title = "Subtitle select fixture",
+                        subtitleTracks = listOf(
+                            LocalSubtitleTrack(File(context.cacheDir, "en.vtt").absolutePath, "en", "English", MimeTypes.TEXT_VTT),
+                            LocalSubtitleTrack(File(context.cacheDir, "fr.vtt").absolutePath, "fr", "French", MimeTypes.TEXT_VTT),
+                        ),
+                    ),
+                    settings = AppSettingsSnapshot(),
+                    onUpdateSettings = {},
+                    onBack = {},
+                    positionGatewayFactory = { RecordingPositionGateway() },
+                )
+            }
+            waitForControllerState(observer) {
+                trackSelectionParameters.preferredTextLanguages == listOf("en") &&
+                    C.TRACK_TYPE_TEXT !in trackSelectionParameters.disabledTrackTypes
+            }
+            compose.onNodeWithText("Subtitles: English").performClick()
+            compose.onNodeWithText("Subtitles: French").assertIsDisplayed()
+            waitForControllerState(observer) { trackSelectionParameters.preferredTextLanguages == listOf("fr") }
+
+            compose.onNodeWithText("Subtitles: French").performClick()
+            compose.onNodeWithText("Subtitles: Off").assertIsDisplayed()
+            waitForControllerState(observer) { C.TRACK_TYPE_TEXT in trackSelectionParameters.disabledTrackTypes }
+
+            compose.onNodeWithText("Subtitles: Off").performClick()
+            compose.onNodeWithText("Subtitles: English").assertIsDisplayed()
+            waitForControllerState(observer) {
+                C.TRACK_TYPE_TEXT !in trackSelectionParameters.disabledTrackTypes &&
+                    trackSelectionParameters.preferredTextLanguages == listOf("en")
+            }
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+        }
+    }
+
+    @Test
+    fun audioControlCyclesPersistedTracksAndWrapsOnTheSessionTrackSelection() {
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            compose.setContent {
+                PortraitPlayerScreen(
+                    asset = LocalPlaybackAsset(
+                        videoPath = File(context.cacheDir, "audio-select.mp4").absolutePath,
+                        title = "Audio select fixture",
+                        audioTracks = listOf(
+                            LocalAudioTrack(File(context.cacheDir, "en.m4a").absolutePath, "en", "English"),
+                            LocalAudioTrack(File(context.cacheDir, "fr.m4a").absolutePath, "fr", "French"),
+                        ),
+                    ),
+                    settings = AppSettingsSnapshot(),
+                    onUpdateSettings = {},
+                    onBack = {},
+                    positionGatewayFactory = { RecordingPositionGateway() },
+                )
+            }
+            compose.onNodeWithText("Audio: English").performClick()
+            compose.onNodeWithText("Audio: French").assertIsDisplayed()
+            waitForControllerState(observer) { trackSelectionParameters.preferredAudioLanguages == listOf("fr") }
+
+            compose.onNodeWithText("Audio: French").performClick()
+            compose.onNodeWithText("Audio: English").assertIsDisplayed()
+            waitForControllerState(observer) { trackSelectionParameters.preferredAudioLanguages == listOf("en") }
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+        }
+    }
+
+    @Test
+    fun defaultPlaybackSpeedSettingIsAppliedToTheSessionPlayer() {
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            compose.setContent {
+                PortraitPlayerScreen(
+                    asset = LocalPlaybackAsset(
+                        videoPath = File(context.cacheDir, "speed-setting.mp4").absolutePath,
+                        title = "Speed setting fixture",
+                    ),
+                    settings = AppSettingsSnapshot(playbackSpeed = 1.5f),
+                    onUpdateSettings = {},
+                    onBack = {},
+                    positionGatewayFactory = { RecordingPositionGateway() },
+                )
+            }
+            waitForControllerState(observer) { abs(playbackParameters.speed - 1.5f) < 0.001f }
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+        }
+    }
+
+    @Test
+    fun enabledResumeStartsAtStoredPositionAndDisposalPersistsTheControllerPosition() {
+        val audio = createLocalWaveFixture()
+        val saves = RecordingPositionGateway()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        val showPlayer = mutableStateOf(true)
+        try {
+            compose.setContent {
+                if (showPlayer.value) {
+                    PortraitPlayerScreen(
+                        asset = LocalPlaybackAsset(
+                            videoPath = audio.absolutePath,
+                            title = "Resume fixture",
+                            startPositionMs = 15_000L,
+                            itemId = "library-item-1",
+                        ),
+                        settings = AppSettingsSnapshot(rememberPlaybackPosition = true),
+                        onUpdateSettings = {},
+                        onBack = {},
+                        positionGatewayFactory = { saves },
+                    )
+                }
+            }
+            waitForControllerState(observer) {
+                playbackState == androidx.media3.common.Player.STATE_READY && currentPosition in 14_000L..20_000L
+            }
+            instrumentation.runOnMainSync { observer.seekTo(30_000L) }
+            waitForControllerState(observer) { currentPosition in 29_000L..33_000L }
+
+            compose.runOnIdle { showPlayer.value = false }
+            compose.waitForIdle()
+
+            val deadline = SystemClock.elapsedRealtime() + 5_000
+            while (saves.calls.none { it.positionMs in 29_000L..34_000L } && SystemClock.elapsedRealtime() < deadline) {
+                SystemClock.sleep(50)
+            }
+            val final = saves.calls.last { it.positionMs in 29_000L..34_000L }
+            assertEquals("library-item-1", final.itemId)
+            assertTrue("duration should be reported, was ${final.durationMs}", (final.durationMs ?: -1L) in 44_000L..46_000L)
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+            audio.delete()
+        }
+    }
+
+    @Test
+    fun disabledResumeStartsAtZeroAndNeverWritesPosition() {
+        val audio = createLocalWaveFixture()
+        val saves = RecordingPositionGateway()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        val showPlayer = mutableStateOf(true)
+        try {
+            compose.setContent {
+                if (showPlayer.value) {
+                    PortraitPlayerScreen(
+                        asset = LocalPlaybackAsset(
+                            videoPath = audio.absolutePath,
+                            title = "No-resume fixture",
+                            startPositionMs = 15_000L,
+                            itemId = "library-item-2",
+                        ),
+                        settings = AppSettingsSnapshot(rememberPlaybackPosition = false),
+                        onUpdateSettings = {},
+                        onBack = {},
+                        positionGatewayFactory = { saves },
+                    )
+                }
+            }
+            waitForControllerState(observer) {
+                playbackState == androidx.media3.common.Player.STATE_READY && currentPosition in 0L..8_000L
+            }
+            compose.runOnIdle { showPlayer.value = false }
+            compose.waitForIdle()
+            SystemClock.sleep(750)
+
+            assertTrue("no position may be written when resume is disabled: ${saves.calls}", saves.calls.isEmpty())
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+            audio.delete()
+        }
+    }
+
+    private class RecordingPositionGateway : AppPlaybackPositionGateway {
+        data class Call(val itemId: String, val positionMs: Long, val durationMs: Long?)
+
+        val calls = CopyOnWriteArrayList<Call>()
+
+        override fun savePlaybackPosition(itemId: String, positionMs: Long, durationMs: Long?): CoreGatewayResult<Boolean> {
+            calls.add(Call(itemId, positionMs, durationMs))
+            return CoreGatewayResult(value = true, error = null)
+        }
+
+        override fun close() = Unit
+    }
+
     private fun createLocalWaveFixture(): File {
         val sampleRate = 8_000
         val pcmBytes = sampleRate * 45 * 2
@@ -261,6 +514,9 @@ class PlaybackSessionBehaviorInstrumentedTest {
         instrumentation.runOnMainSync {
             assertTrue(
                 "Timed out waiting for shared MediaSession state; item=${controller.currentMediaItem?.mediaId}, " +
+                    "uri=${controller.currentMediaItem?.localConfiguration?.uri}, " +
+                    "requestUri=${controller.currentMediaItem?.requestMetadata?.mediaUri}, " +
+                    "state=${controller.playbackState}, position=${controller.currentPosition}, " +
                     "speed=${controller.playbackParameters.speed}, playWhenReady=${controller.playWhenReady}",
                 controller.predicate(),
             )

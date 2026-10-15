@@ -2,6 +2,7 @@ package com.ekkus.offlineytplayer.playback
 
 import androidx.media3.common.MimeTypes
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -310,6 +311,25 @@ class LocalPlaybackPolicyTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun subtitleSelectionCyclesEveryTrackThenOffThenFirstTrack() {
+        assertEquals(-1, LocalPlaybackPolicy.nextSubtitleSelection(current = 0, trackCount = 0))
+        assertEquals(0, LocalPlaybackPolicy.nextSubtitleSelection(current = -1, trackCount = 2))
+        assertEquals(1, LocalPlaybackPolicy.nextSubtitleSelection(current = 0, trackCount = 2))
+        assertEquals(-1, LocalPlaybackPolicy.nextSubtitleSelection(current = 1, trackCount = 2))
+        assertEquals(0, LocalPlaybackPolicy.nextSubtitleSelection(current = -1, trackCount = 1))
+        assertEquals(-1, LocalPlaybackPolicy.nextSubtitleSelection(current = 0, trackCount = 1))
+    }
+
+    @Test
+    fun audioSelectionCyclesPersistedTracksAndWrapsWithoutOff() {
+        assertEquals(-1, LocalPlaybackPolicy.nextAudioSelection(current = 0, trackCount = 0))
+        assertEquals(0, LocalPlaybackPolicy.nextAudioSelection(current = -1, trackCount = 3))
+        assertEquals(1, LocalPlaybackPolicy.nextAudioSelection(current = 0, trackCount = 3))
+        assertEquals(2, LocalPlaybackPolicy.nextAudioSelection(current = 1, trackCount = 3))
+        assertEquals(0, LocalPlaybackPolicy.nextAudioSelection(current = 2, trackCount = 3))
     }
 
     private fun expectIllegalArgument(

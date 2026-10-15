@@ -12,12 +12,4 @@ class PlaybackSessionPolicyTest {
         assertTrue(manifest.contains("android:foregroundServiceType=\"mediaPlayback\""))
         assertTrue(manifest.contains("androidx.media3.session.MediaSessionService"))
     }
-
-    @Test
-    fun serviceDelegatesAudioFocusAndNoisyHandlingToMedia3Player() {
-        val service = File("src/main/java/com/ekkus/offlineytplayer/playback/PlaybackSessionService.kt").readText()
-        assertTrue(service.contains("setAudioAttributes(AudioAttributes.DEFAULT, true)"))
-        assertTrue(service.contains("setHandleAudioBecomingNoisy(true)"))
-        assertTrue(service.contains("MediaSession.Builder(this, player).build()"))
-    }
 }

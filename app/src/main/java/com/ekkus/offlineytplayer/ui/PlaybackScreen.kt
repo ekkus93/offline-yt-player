@@ -30,6 +30,7 @@ import androidx.media3.common.C
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
+import com.ekkus.offlineytplayer.coregateway.AppPlaybackPositionGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiPlaybackPositionGateway
 import com.ekkus.offlineytplayer.playback.LocalPlaybackAsset
 import com.ekkus.offlineytplayer.playback.LocalPlaybackPolicy
@@ -51,6 +52,7 @@ internal fun PortraitPlayerScreen(
     asset: LocalPlaybackAsset,
     settings: AppSettingsSnapshot,
     onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit,
+    positionGatewayFactory: (databasePath: String) -> AppPlaybackPositionGateway = GeneratedUniffiPlaybackPositionGateway::open,
     onBack: () -> Unit,
 ) {
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
@@ -86,7 +88,7 @@ internal fun PortraitPlayerScreen(
             val persistedPositionMs = if (durationMs == null) currentPositionMs else LocalPlaybackPolicy.persistedPositionForStop(currentPositionMs, durationMs)
             if (!finalTransition && durationMs != null && !LocalPlaybackPolicy.shouldPersistPosition(lastSavedPositionMs, currentPositionMs, durationMs)) return
             lastSavedPositionMs = persistedPositionMs
-            persistenceExecutor.execute { GeneratedUniffiPlaybackPositionGateway.open(databasePath).use { gateway -> gateway.savePlaybackPosition(itemId, persistedPositionMs, durationMs) } }
+            persistenceExecutor.execute { positionGatewayFactory(databasePath).use { gateway -> gateway.savePlaybackPosition(itemId, persistedPositionMs, durationMs) } }
         }
 
         val periodicSaver = object : Runnable { override fun run() { if (disposed) return; persistPlaybackPosition(false); mainHandler.postDelayed(this, LocalPlaybackPolicy.PositionPersistCadenceMs) } }
@@ -119,11 +121,11 @@ internal fun PortraitPlayerScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             SecondaryControl("Speed ${settings.playbackSpeed}×", enabled = controller != null) { val speed = nextSpeed(settings.playbackSpeed); controller?.setPlaybackSpeed(speed); onUpdateSettings { playbackSpeed = speed } }
             SecondaryControl(subtitleControlLabel(subtitleLabels, selectedSubtitleIndex), controller != null && subtitleLabels.isNotEmpty()) {
-                selectedSubtitleIndex = nextSubtitleSelection(selectedSubtitleIndex, subtitleLabels.size)
+                selectedSubtitleIndex = LocalPlaybackPolicy.nextSubtitleSelection(selectedSubtitleIndex, subtitleLabels.size)
                 controller?.applySubtitleSelection(validated, selectedSubtitleIndex)
             }
             SecondaryControl(audioControlLabel(audioLabels, selectedAudioIndex), controller != null && LocalPlaybackPolicy.shouldEnableAudioSelection(validated)) {
-                selectedAudioIndex = nextAudioSelection(selectedAudioIndex, audioLabels.size)
+                selectedAudioIndex = LocalPlaybackPolicy.nextAudioSelection(selectedAudioIndex, audioLabels.size)
                 controller?.applyAudioSelection(validated, selectedAudioIndex)
             }
         }
@@ -133,8 +135,6 @@ internal fun PortraitPlayerScreen(
 @Composable private fun androidx.compose.foundation.layout.RowScope.SecondaryControl(label: String, enabled: Boolean = true, onClick: () -> Unit) { OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text(label) } }
 private fun subtitleControlLabel(labels: List<String>, selectedIndex: Int): String = when { labels.isEmpty() -> "Subtitles"; selectedIndex in labels.indices -> "Subtitles: ${labels[selectedIndex]}"; else -> "Subtitles: Off" }
 private fun audioControlLabel(labels: List<String>, selectedIndex: Int): String = when { labels.isEmpty() -> "Audio"; selectedIndex in labels.indices -> "Audio: ${labels[selectedIndex]}"; else -> "Audio" }
-private fun nextSubtitleSelection(current: Int, trackCount: Int): Int = when { trackCount <= 0 -> -1; current < 0 -> 0; current + 1 < trackCount -> current + 1; else -> -1 }
-private fun nextAudioSelection(current: Int, trackCount: Int): Int = when { trackCount <= 0 -> -1; current < 0 -> 0; current + 1 < trackCount -> current + 1; else -> 0 }
 private fun MediaController.applySubtitleSelection(asset: LocalPlaybackAsset, selectedIndex: Int) {
     val builder = trackSelectionParameters.buildUpon()
     if (selectedIndex !in asset.subtitleTracks.indices) {

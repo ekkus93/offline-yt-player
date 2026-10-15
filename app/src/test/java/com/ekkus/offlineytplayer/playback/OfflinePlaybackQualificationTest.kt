@@ -1,6 +1,5 @@
 package com.ekkus.offlineytplayer.playback
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -31,16 +30,5 @@ class OfflinePlaybackQualificationTest {
         assertEquals(10_000L, LocalPlaybackPolicy.SkipIntervalMs)
         assertTrue(LocalPlaybackPolicy.completedByPosition(95_000L, 120_000L))
         assertFalse(LocalPlaybackPolicy.completedByPosition(80_000L, 120_000L))
-    }
-
-    @Test
-    fun playerControllerBuildsOnlyLocalMediaSourcesAndSupportsRestoredSeek() {
-        val controller = File("src/main/java/com/ekkus/offlineytplayer/playback/LocalPlayerController.kt").readText()
-        val playback = File("src/main/java/com/ekkus/offlineytplayer/playback/LocalPlayback.kt").readText()
-        assertTrue(controller.contains("player.setMediaSource(LocalPlaybackPolicy.mediaSourceFor"))
-        assertTrue(controller.contains("player.seekTo(plan.startPositionMs)"))
-        assertTrue(controller.contains("player.prepare()"))
-        assertTrue(playback.contains("MediaItem.Builder().setUri(Uri.fromFile(File(path)))"))
-        assertTrue(playback.contains("remote playback URIs are forbidden"))
     }
 }

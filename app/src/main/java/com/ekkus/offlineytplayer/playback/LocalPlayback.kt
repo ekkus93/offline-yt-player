@@ -161,6 +161,22 @@ internal object LocalPlaybackPolicy {
         )
     }
 
+    /** Subtitle control cycles every persisted track, then Off (-1), then the first track again. */
+    fun nextSubtitleSelection(current: Int, trackCount: Int): Int = when {
+        trackCount <= 0 -> -1
+        current < 0 -> 0
+        current + 1 < trackCount -> current + 1
+        else -> -1
+    }
+
+    /** Audio control cycles persisted tracks and wraps; it never selects "off". */
+    fun nextAudioSelection(current: Int, trackCount: Int): Int = when {
+        trackCount <= 0 -> -1
+        current < 0 -> 0
+        current + 1 < trackCount -> current + 1
+        else -> 0
+    }
+
     fun shouldEnableAudioSelection(asset: LocalPlaybackAsset): Boolean = availableAudioLabels(asset).size > 1
 
     fun restoredStartPosition(positionMs: Long): Long = positionMs.coerceAtLeast(0)
