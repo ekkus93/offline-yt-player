@@ -1,5 +1,6 @@
 package com.ekkus.offlineytplayer.ui
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.Density
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
@@ -193,6 +195,26 @@ class ProductionComposeLayoutAccessibilityTest {
         listOf("Playback", "Storage", "Appearance", "About").forEach { label ->
             assertInsideRoot(compose.onNodeWithText(label))
         }
+    }
+
+    @Test
+    fun large_font_download_settings_keep_last_action_reachable_by_scrolling() {
+        // The fixed settings page previously had no vertical scroll container;
+        // large accessibility text could push its final actionable row offscreen.
+        setQualificationContent(fontScale = 2.0f) {
+            SettingsPage(
+                padding = PaddingValues(),
+                section = SettingsSection.Downloads,
+                settings = lightSettings,
+                onUpdateSettings = {},
+                onBack = {},
+            )
+        }
+
+        val subtitles = compose.onNodeWithText("Subtitles:", substring = true)
+        subtitles.performScrollTo()
+        subtitles.assertIsDisplayed()
+        assertInsideRoot(subtitles)
     }
 
     @Test
