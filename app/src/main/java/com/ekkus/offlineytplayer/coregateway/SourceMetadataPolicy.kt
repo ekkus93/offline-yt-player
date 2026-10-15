@@ -34,7 +34,7 @@ internal object SourceMetadataPolicy {
 
     /** Preserve useful context, but never allow FFI/provider HTTP header values into Compose. */
     private val sensitiveHeaderPattern =
-        Regex("""(?i)(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key)(?:[\p{javaWhitespace}\p{Zs}]*\\*["']?[\p{javaWhitespace}\p{Zs}]*(?::|=|%(?:25)*(?:3a|3d)))""")
+        Regex("""(?i)(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key)(?:[\p{javaWhitespace}\p{Zs}]*\\*["'][\p{javaWhitespace}\p{Zs}]*|[\p{javaWhitespace}\p{Zs}]*)(?::|=|%(?:25)*(?:3a|3d))""")
 
     private fun redactDiagnosticHeaders(value: String): String {
         var redactingFoldedHeader = false

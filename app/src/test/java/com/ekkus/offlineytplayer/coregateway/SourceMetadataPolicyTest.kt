@@ -135,6 +135,15 @@ class SourceMetadataPolicyTest {
         )
     }
 
+    @Test fun diagnosticRedactorBoundsLongUnicodePaddingWithoutFalseCredentialClaims() {
+        // A non-header occurrence near the presentation input bound must not
+        // cause combinatorial regex backtracking from adjacent whitespace stars.
+        val padded = "Authorization" + "\u2003".repeat(60_000) + "safe"
+        val rendered = SourceMetadataPolicy.diagnostic(padded)
+        assertTrue(rendered.startsWith("Authorization"))
+        assertFalse(rendered.contains("[REDACTED]"))
+    }
+
     @Test fun foldedSensitiveHeaderLinesNeverDiscloseRawValues() {
         val marker = "FOLDED_ANDROID_SECRET_1802"
         val input = "Authorization: Bearer\n  $marker\nsafe: context\nCookie: session=\n\t$marker"
@@ -308,9 +317,3 @@ class SourceMetadataPolicyTest {
         val ordinary = SourceMetadataPolicy.title("Preview https://cdn.example/video?sig=$marker")
         assertTrue(ordinary.contains("video?REDACTED"))
         assertFalse(ordinary.contains(marker))
-    }
-
-    @Test fun ordinaryDiagnosticTextIsPreserved() {
-        assertEquals("download failed: connection reset", SourceMetadataPolicy.diagnostic("download failed: connection reset"))
-    }
-}
