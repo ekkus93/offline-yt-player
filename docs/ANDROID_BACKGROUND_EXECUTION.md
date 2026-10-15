@@ -37,7 +37,6 @@ Current production behavior:
 Relevant tests:
 
 - `DownloadNotificationPermissionPolicyTest`
-- `NotificationPermissionInstrumentationContractTest`
 - `NotificationPermissionStateInstrumentationTest`
 - `DownloadForegroundControlDispatcherTest`
 
