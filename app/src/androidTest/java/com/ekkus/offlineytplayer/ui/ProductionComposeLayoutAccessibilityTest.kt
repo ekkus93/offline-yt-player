@@ -1,5 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -231,6 +233,27 @@ class ProductionComposeLayoutAccessibilityTest {
         subtitles.performScrollTo()
         subtitles.assertIsDisplayed()
         assertInsideRoot(subtitles)
+    }
+
+    @Test
+    fun system_back_from_settings_detail_returns_to_hub() {
+        lateinit var dispatcher: OnBackPressedDispatcher
+        compose.setContent {
+            dispatcher = checkNotNull(LocalOnBackPressedDispatcherOwner.current).onBackPressedDispatcher
+            OfflineYTPlayerApp(
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
+        }
+        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithText("Downloads").performClick()
+        compose.onNodeWithText("Default quality: Best compatible").assertIsDisplayed()
+
+        compose.runOnIdle { dispatcher.onBackPressed() }
+
+        compose.onNodeWithText("Choose a settings category.", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Playback").assertIsDisplayed()
+        compose.onNodeWithText("Default quality:", substring = true).assertDoesNotExist()
     }
 
     @Test
