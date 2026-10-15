@@ -318,8 +318,6 @@ fn redact_url_token(token: &str) -> String {
     let parsed = if scheme_relative {
         Url::parse(&format!("https:{url_text}"))
     } else {
-
-
         Url::parse(url_text)
     };
     parsed.map_or_else(
@@ -639,7 +637,6 @@ mod tests {
             format!("Cookie%25253A session={marker}"),
             format!("Set-Cookie%3a session={marker}"),
             format!("X-Api-Key%2525253a {marker}"),
-
         ];
         for input in cases {
             let output = redact_sensitive(&input);
