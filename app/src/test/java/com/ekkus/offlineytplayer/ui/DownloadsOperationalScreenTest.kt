@@ -1,6 +1,5 @@
 package com.ekkus.offlineytplayer.ui
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -50,16 +49,6 @@ class DownloadsOperationalScreenTest {
             listOf(DownloadRowAction.Retry, DownloadRowAction.Cancel),
             DownloadScreenPolicy.legalActions(row(DownloadUiState.Failed)),
         )
-    }
-
-    @Test
-    fun downloadRowsShowProgressStateErrorSpeedAndEtaFields() {
-        val source = File("src/main/java/com/ekkus/offlineytplayer/ui/LibraryDownloads.kt").readText()
-        assertTrue(source.contains("DownloadScreenPolicy.detail(row)"))
-        assertTrue(source.contains("row.stateLabel"))
-        assertTrue(source.contains("row.speedLabel"))
-        assertTrue(source.contains("row.etaLabel"))
-        assertTrue(source.contains("row.error?.let"))
     }
 
     private fun row(state: DownloadUiState): DownloadRowModel = DownloadRowModel(

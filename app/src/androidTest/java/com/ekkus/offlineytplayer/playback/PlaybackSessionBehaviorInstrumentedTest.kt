@@ -374,6 +374,29 @@ class PlaybackSessionBehaviorInstrumentedTest {
     }
 
     @Test
+    fun speedControlEmitsTheNextDefaultSpeedSettingMutation() {
+        val emitted = CopyOnWriteArrayList<Float>()
+        compose.setContent {
+            PortraitPlayerScreen(
+                asset = LocalPlaybackAsset(
+                    videoPath = File(context.cacheDir, "speed-mutation.mp4").absolutePath,
+                    title = "Speed mutation fixture",
+                ),
+                settings = AppSettingsSnapshot(playbackSpeed = 1.0f),
+                onUpdateSettings = { mutation ->
+                    emitted += com.ekkus.offlineytplayer.settings.AppSettingsMutation(AppSettingsSnapshot(playbackSpeed = 1.0f))
+                        .apply(mutation).build().playbackSpeed
+                },
+                positionGatewayFactory = { RecordingPositionGateway() },
+                onBack = {},
+            )
+        }
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Offline local playback").assertIsDisplayed() }.isSuccess }
+        compose.onNodeWithText("Speed 1.0×").performClick()
+        compose.runOnIdle { assertEquals(listOf(1.25f), emitted.toList()) }
+    }
+
+    @Test
     fun enabledResumeStartsAtStoredPositionAndDisposalPersistsTheControllerPosition() {
         val audio = createLocalWaveFixture()
         val saves = RecordingPositionGateway()
