@@ -90,7 +90,7 @@ jobs:
             if [ "$layout_status" -ne 0 ]; then echo "Layout/accessibility Gradle log:"; cat app/build/reports/androidSmokeLogs/layout-accessibility-gradle.log || true; echo "Layout/accessibility failure summary:"; python3 scripts/summarize_android_test_failures.py || true; status=$layout_status; fi;
             exit $status'
       - name: Upload failed golden evidence
-        if: failure()
+        if: failure() && github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: android-smoke-failed-goldens-${{ github.run_id }}
