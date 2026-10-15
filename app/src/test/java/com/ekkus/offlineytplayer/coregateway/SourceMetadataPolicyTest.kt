@@ -317,3 +317,9 @@ class SourceMetadataPolicyTest {
         val ordinary = SourceMetadataPolicy.title("Preview https://cdn.example/video?sig=$marker")
         assertTrue(ordinary.contains("video?REDACTED"))
         assertFalse(ordinary.contains(marker))
+    }
+
+    @Test fun ordinaryDiagnosticTextIsPreserved() {
+        assertEquals("download failed: connection reset", SourceMetadataPolicy.diagnostic("download failed: connection reset"))
+    }
+}
