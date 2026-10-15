@@ -257,20 +257,17 @@ impl DownloadEngine {
         }
         // Known provider asset size is a tighter bound than the global policy.
         // Reject an oversized advertised response before allocating a partial.
-        if let Some(expected) = request.expected_bytes {
-            if start > expected
+        if let Some(expected) = request.expected_bytes
+            && (start > expected
                 || declared_body.is_some_and(|value| {
-                    start
-                        .checked_add(value)
-                        .is_none_or(|total| total > expected)
-                })
-            {
-                return Err(CoreError::new(
-                    ErrorKind::IntegrityFailure,
-                    "Remote response exceeds expected asset size",
-                    true,
-                ));
-            }
+                    start.checked_add(value).is_none_or(|total| total > expected)
+                }))
+        {
+            return Err(CoreError::new(
+                ErrorKind::IntegrityFailure,
+                "Remote response exceeds expected asset size",
+                true,
+            ));
         }
 
         if observed.has_remote_validator() {
