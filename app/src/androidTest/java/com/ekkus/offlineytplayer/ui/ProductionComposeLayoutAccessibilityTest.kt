@@ -198,6 +198,22 @@ class ProductionComposeLayoutAccessibilityTest {
     }
 
     @Test
+    fun large_font_settings_hub_keeps_last_category_reachable_by_scrolling() {
+        // The category hub also needs a scroll owner; weighted buttons in a
+        // fixed Column can push the final category off a compact viewport.
+        setQualificationContent(fontScale = 2.0f) {
+            SettingsHub(
+                padding = PaddingValues(),
+                onOpen = {},
+            )
+        }
+        val about = compose.onNodeWithText("About")
+        about.performScrollTo()
+        about.assertIsDisplayed()
+        assertInsideRoot(about)
+    }
+
+    @Test
     fun large_font_download_settings_keep_last_action_reachable_by_scrolling() {
         // The fixed settings page previously had no vertical scroll container;
         // large accessibility text could push its final actionable row offscreen.
