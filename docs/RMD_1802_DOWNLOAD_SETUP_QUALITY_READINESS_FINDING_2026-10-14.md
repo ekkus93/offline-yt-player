@@ -1,0 +1,5 @@
+# RMD-1802 — Download Setup quality readiness finding (2026-10-14)
+
+Production `app/src/main/java/com/ekkus/offlineytplayer/ui/AppShell.kt::setupWithQuality` changes the selected executable quality ID without recomputing `DownloadSetupState.readyForDownload`. The initial flag is computed from the preferred quality. When that quality has a blank choice ID but an alternate is executable, selecting the alternate in Advanced Options leaves Download disabled even though `selectedQualityChoiceId` is valid. The inverse transition also leaves a stale ready flag, although the button has an independent ID check.
+
+Required remediation: update `setupWithQuality` to set `readyForDownload = !setup.qualityChoiceIdsByLabel[qualityLabel].isNullOrBlank()`, and add a behavioral JVM regression that constructs an initially unavailable `DownloadSetupState`, switches to an executable format, then back to the unavailable option. Verify both readiness and selected executable ID. Qualify the implementation on exact-head CI, including Android smoke, before reconciling RMD-1802 or final closeout. External YouTube/service-policy/legal approval remains separate.
