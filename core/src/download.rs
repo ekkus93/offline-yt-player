@@ -333,7 +333,10 @@ impl DownloadEngine {
                 ));
             }
             // Fail before writing even one chunk beyond a known selected asset size.
-            if request.expected_bytes.is_some_and(|expected| next_total > expected) {
+            if request
+                .expected_bytes
+                .is_some_and(|expected| next_total > expected)
+            {
                 return Err(CoreError::new(
                     ErrorKind::IntegrityFailure,
                     "Downloaded asset exceeded expected size",
@@ -748,7 +751,9 @@ mod tests {
         let final_path = root.path().join("items/one/video.mp4");
         let mut request = transfer_from(format!("{}/media", server.address));
         request.expected_bytes = Some(4);
-        let error = engine.transfer(&request, &AtomicBool::new(false)).unwrap_err();
+        let error = engine
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap_err();
         assert_eq!(error.kind, ErrorKind::IntegrityFailure);
         assert!(!partial_path(&final_path).exists());
         assert!(!final_path.exists());
@@ -767,7 +772,9 @@ mod tests {
         let final_path = root.path().join("items/one/video.mp4");
         let mut request = transfer_from(format!("{}/media", server.address));
         request.expected_bytes = Some(4);
-        let error = engine.transfer(&request, &AtomicBool::new(false)).unwrap_err();
+        let error = engine
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap_err();
         assert_eq!(error.kind, ErrorKind::IntegrityFailure);
         let partial = partial_path(&final_path);
         assert!(partial.exists());
