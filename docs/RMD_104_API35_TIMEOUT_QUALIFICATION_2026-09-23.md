@@ -1,10 +1,10 @@
 # RMD-104 API 35 foreground-service timeout qualification
 
-> **Status correction (2026-10-16):** This historical note overstates the current lane. The current
-> `DownloadForegroundTimeoutAdbInstrumentedTest` does not set `device_config`, start the production
-> service, or observe `Service.onTimeout`; it directly calls the persistence store. Treat the claims
-> below as historical intent, not current evidence for a forced Android timeout. The canonical
-> checklist subtask is reopened pending a real service callback qualification.
+> **Status correction (2026-10-16):** The earlier lane described below did not force the production
+> callback. The current candidate adds `api35ShortenedTimeoutInvokesProductionServiceCallbackAndStopsCleanly`
+> and configures a 10-second `data_sync_fgs_timeout_duration` in the API-35 driver. That test passed
+> locally on API 36; exact-head API-35 CI is still pending, so the canonical checklist subtask remains
+> open until the new workflow passes on its final candidate SHA.
 
 This note records the API 35 qualification lane added for the remaining RMD-104 shortened-timeout evidence item. It supplements, but does not replace, the canonical checklist in `docs/OFFLINE_YT_PLAYER_REMEDIATION_TODO_2026-09-17.md`.
 
@@ -16,8 +16,9 @@ RMD-104 already had a retained-service inventory, a production `Service.onTimeou
 
 - `.github/workflows/android-fgs-timeout.yml` adds an isolated API 35 emulator lane for dataSync foreground-service timeout qualification.
 - The lane uses the CI-oriented `aosp_atd` API 35 x86_64 image with an extended boot timeout so slow, no-hardware-acceleration Linux runners can reach the actual test instead of failing during emulator unlock/setup.
-- `DownloadForegroundTimeoutAdbInstrumentedTest` checks that the packaged manifest retains the `dataSync` service and directly writes/reads the timeout persistence store. It does not configure `device_config`, start the service, or poll for `Service.onTimeout`.
-- The workflow runs on API 35 and checks the persistence store contract, but it does not qualify a shortened platform timeout or the service callback.
+- `DownloadForegroundTimeoutAdbInstrumentedTest` checks the packaged `dataSync` declaration and starts the real service under a shortened platform timeout, verifies the persisted service start ID/type written by `Service.onTimeout`, and waits for the service to stop.
+- `scripts/run_android_fgs_uidt_qualification.sh` saves the existing `data_sync_fgs_timeout_duration`, sets it to 10 seconds for the API-35 test, then restores or deletes the override on exit.
+- Local API-36 instrumentation passed with the shortened timeout. The exact-head API-35 CI result is required before this evidence closes RMD-104.
 
 ## Qualification evidence
 
@@ -25,7 +26,7 @@ RMD-104 already had a retained-service inventory, a production `Service.onTimeou
 
 ## Reconciliation result
 
-The RMD-104 shortened-timeout qualification requirement remains open. The API 35 lane and its historical runs prove only the packaged persistence-store check, not a shortened timeout or production callback. The canonical remediation TODO has been reopened accordingly.
+The earlier workflow and its historical runs prove only the packaged persistence-store check. The candidate's new test directly exercises the production callback, but exact-head API-35 qualification remains required before closing the canonical TODO subtask.
 
 ## Boundaries
 

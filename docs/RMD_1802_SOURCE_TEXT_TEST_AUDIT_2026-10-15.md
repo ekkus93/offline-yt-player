@@ -135,13 +135,15 @@ independent review, RMD-1803/1804/1805, or the external legal/service gate.
 
 ## 2026-10-16 timeout-evidence correction
 
-The current API-35 workflow runs `scripts/run_android_fgs_uidt_qualification.sh`; its timeout test
-does not start `DownloadForegroundService`, modify `device_config`, or observe `Service.onTimeout`.
-It checks the manifest and invokes `DownloadForegroundTimeoutStore.persistTimeout` directly. The
-separate helper-order test runs `DownloadForegroundTimeoutSequence` without instantiating the
-Android Service. The prior RMD-104/API-35 reconciliation notes overstated this as a forced timeout;
-those claims are marked historical, and the RMD-104 ADB/emulator subtask is reopened. Neither the
-production timeout callback nor its native-stop ordering is currently qualified through Android.
+The original API-35 workflow only checked the manifest and invoked
+`DownloadForegroundTimeoutStore.persistTimeout` directly; it did not exercise
+`Service.onTimeout`. The candidate adds `api35ShortenedTimeoutInvokesProductionServiceCallbackAndStopsCleanly`,
+and `scripts/run_android_fgs_uidt_qualification.sh` sets a 10-second `data_sync_fgs_timeout_duration`
+while that test starts and backgrounds the real service. Local API-36 emulator execution confirmed
+the production callback persisted its start ID/type and the service stopped. The exact-head API-35
+run is still required. The test starts no worker, so actual native-stop ordering during active
+download remains unqualified. The historical RMD-104 reconciliation notes were updated and the
+canonical ADB/emulator checkbox remains open pending CI.
 
 ## 2026-10-16 exact-head follow-up
 
