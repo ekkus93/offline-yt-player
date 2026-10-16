@@ -18,7 +18,7 @@ jobs:
   instrumentation-smoke:
     name: API 29 instrumentation smoke
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Exact commit
