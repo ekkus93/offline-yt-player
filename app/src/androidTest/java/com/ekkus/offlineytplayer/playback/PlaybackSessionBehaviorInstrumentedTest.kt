@@ -480,6 +480,32 @@ class PlaybackSessionBehaviorInstrumentedTest {
         }
     }
 
+    @Test
+    fun serviceDestroyReleasesThePlayerBeforeTheMediaSession() {
+        val steps = CopyOnWriteArrayList<PlaybackSessionTeardownStep>()
+        val done = java.util.concurrent.CountDownLatch(2)
+        PlaybackSessionService.teardownObserver = PlaybackSessionTeardownObserver { step ->
+            steps += step
+            done.countDown()
+        }
+        try {
+            val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+            val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+            instrumentation.runOnMainSync { controller.release() }
+            context.stopService(android.content.Intent(context, PlaybackSessionService::class.java))
+            assertTrue(
+                "PlaybackSessionService.onDestroy did not run its teardown; steps=$steps",
+                done.await(15, TimeUnit.SECONDS),
+            )
+            assertEquals(
+                listOf(PlaybackSessionTeardownStep.PLAYER_RELEASED, PlaybackSessionTeardownStep.SESSION_RELEASED),
+                steps.toList(),
+            )
+        } finally {
+            PlaybackSessionService.teardownObserver = null
+        }
+    }
+
     private class RecordingPositionGateway : AppPlaybackPositionGateway {
         data class Call(val itemId: String, val positionMs: Long, val durationMs: Long?)
 

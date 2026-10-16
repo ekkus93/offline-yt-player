@@ -34,11 +34,25 @@ class PlaybackSessionService : MediaSessionService() {
     override fun onDestroy() {
         mediaSession?.let { session ->
             session.player.release()
+            teardownObserver?.onTeardownStep(PlaybackSessionTeardownStep.PLAYER_RELEASED)
             session.release()
+            teardownObserver?.onTeardownStep(PlaybackSessionTeardownStep.SESSION_RELEASED)
         }
         mediaSession = null
         super.onDestroy()
     }
+
+    internal companion object {
+        /** Test seam: null in production. Notified from [onDestroy] after each real release call. */
+        @Volatile
+        internal var teardownObserver: PlaybackSessionTeardownObserver? = null
+    }
+}
+
+internal enum class PlaybackSessionTeardownStep { PLAYER_RELEASED, SESSION_RELEASED }
+
+internal fun interface PlaybackSessionTeardownObserver {
+    fun onTeardownStep(step: PlaybackSessionTeardownStep)
 }
 
 @OptIn(UnstableApi::class)

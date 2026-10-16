@@ -83,6 +83,11 @@ recorded here instead of being replaced by new fake tests:
 1. `setHandleAudioBecomingNoisy(true)` on the session player. `ACTION_AUDIO_BECOMING_NOISY` is a
    protected system broadcast that an app cannot send, and there is no getter.
 2. Release order (`player.release()` before `session.release()`) in `PlaybackSessionService.onDestroy`.
+   Partially covered: `PlaybackSessionBehaviorInstrumentedTest.serviceDestroyReleasesThePlayerBeforeTheMediaSession`
+   drives the real service teardown (controller release plus `stopService`) and checks the order of
+   a null-by-default observer that `onDestroy` notifies after each real release call. It proves
+   `onDestroy` runs and the notification order, not that Media3 observed the releases in that order.
+   Not yet executed on a device or emulator.
 3. `FLAG_IMMUTABLE` on the download notification action PendingIntents.
 4. (Closed) Timeout ordering is now covered; see the table above. Not run on a device yet.
 5. `DownloadUserInitiatedJobService.onStartJob` returning `false` without `jobFinished` for a blank
