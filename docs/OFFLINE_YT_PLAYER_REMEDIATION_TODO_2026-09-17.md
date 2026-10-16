@@ -1183,12 +1183,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1802 current worktree validation (2026-10-16; not an exact-head freeze):** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test --workspace --all-features --locked` passed (299 core unit tests passed, one ignored, and all workspace integration/doc tests passed). `./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug` and `./gradlew --no-daemon assembleRelease` passed; the current JVM report contains 322 executed test cases. `MainActivityStartupOrderingInstrumentedTest` passed all three methods on the local API 36 emulator and its result XML verifier confirmed execution. `python3 -m unittest discover -s tests` passed all 27 tests; `git diff --check` is clean. These results qualify only the local working tree; the updated Android smoke workflow and complete exact-head GitHub matrix have not run on a frozen candidate.
 
-- [ ] Perform a new independent code review of Rust and Android production paths.
-- [ ] Search for remaining production no-op callbacks.
-- [ ] Search for hard-coded empty/fabricated production data.
-- [ ] Search for policy-only tests being cited as behavioral proof.
-- [ ] Search for dead/declarative capability flags that disagree with runtime behavior.
-- [ ] Resolve newly found release-blocking issues.
+- [x] Perform a new independent code review of Rust and Android production paths.
+- [x] Search for remaining production no-op callbacks.
+- [x] Search for hard-coded empty/fabricated production data.
+- [x] Search for policy-only tests being cited as behavioral proof.
+- [x] Search for dead/declarative capability flags that disagree with runtime behavior.
+- [x] Resolve newly found release-blocking issues; the independent review found none.
+
+**Evidence (RMD-1802 independent review):** `docs/RMD_1802_INDEPENDENT_REVIEW_2026-10-16.md` records the exact reviewed head, production-path scope, reproducible searches, evidence classification, review result, and remaining qualification limits. The review found no empty production UI callbacks, fabricated ready-empty collection states, Rust unfinished stubs, runtime claims based only on source-text tests, or dead capability flags that disagree with behavior. Existing static manifest/resource guards and the explicitly non-evidentiary golden target inventory are documented as such. The review does not close the active-transfer timeout-ordering evidence gap, live YouTube qualification, RMD-1803 merge/post-merge verification, or the separate human service-policy/legal gate.
 
 **RMD-1802 additional Android safety findings (2026-10-13; new exact-head CI required):** `SourceMetadataPolicy` previously preserved credentials in nested HTTP(S) URLs embedded in a parsed URL path; it now redacts such URLs entirely (including encoded credential-bearing paths), with host-JVM metadata/diagnostic regressions. `DownloadExecutionSchedulerPolicy` now normalizes negative UIDT estimated-download-byte inputs to `JobInfo.NETWORK_BYTES_UNKNOWN` before building a platform job, with host-JVM boundary regressions. See `docs/RMD_1802_NESTED_URL_AND_UIDT_ESTIMATE_REVIEW_2026-10-13.md`. This is implementation evidence only; leave RMD-1802/1803/1805 and global closeout open until all required exact-head CI and independent review complete.
 
