@@ -1,5 +1,6 @@
 package com.ekkus.offlineytplayer
 
+import com.ekkus.offlineytplayer.coregateway.AppCoreGateway
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 
@@ -17,6 +18,15 @@ object MainActivityDependencyOverrides {
     @Volatile
     private var downloadControlFactory: ((String) -> AppDownloadControlGateway)? = null
 
+    @Volatile
+    private var coreFactory: ((String) -> AppCoreGateway)? = null
+
+    /** Installs only the core gateway override; other gateways keep their production defaults. */
+    fun installCoreForInstrumentation(factory: (String) -> AppCoreGateway) {
+        check(BuildConfig.DEBUG) { "MainActivity dependency overrides are debug-only" }
+        coreFactory = factory
+    }
+
     fun installForInstrumentation(
         sourceFactory: () -> AppSourceAnalysisGateway,
         controlsFactory: (String) -> AppDownloadControlGateway,
@@ -29,7 +39,10 @@ object MainActivityDependencyOverrides {
     fun clearForInstrumentation() {
         sourceAnalysisFactory = null
         downloadControlFactory = null
+        coreFactory = null
     }
+
+    internal fun createCore(databasePath: String): AppCoreGateway? = coreFactory?.invoke(databasePath)
 
     internal fun createSourceAnalysis(): AppSourceAnalysisGateway? = sourceAnalysisFactory?.invoke()
 

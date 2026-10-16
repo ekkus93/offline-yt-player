@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
     private val bootstrapExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "offline-yt-production-bootstrap").apply { isDaemon = true }
     }
-    private var coreGateway: GeneratedUniffiCoreGateway? = null
+    private var coreGateway: AppCoreGateway? = null
     private var downloadControlGateway by mutableStateOf<AppDownloadControlGateway?>(null)
     private var libraryPlaybackGateway: GeneratedUniffiLibraryPlaybackGateway? = null
     private var libraryDetailsGateway by mutableStateOf<AppLibraryDetailsGateway?>(null)
@@ -155,7 +155,10 @@ class MainActivity : ComponentActivity() {
         val databasePath = File(filesDir, "offline-yt-player.sqlite3").absolutePath
         val libraryRoot = filesDir
         bootstrapExecutor.execute {
-            val core = runCatching { GeneratedUniffiCoreGateway.open(databasePath) }
+            val core = runCatching {
+                MainActivityDependencyOverrides.createCore(databasePath)
+                    ?: GeneratedUniffiCoreGateway.open(databasePath)
+            }
             val controls = runCatching {
                 MainActivityDependencyOverrides.createDownloadControl(databasePath)
                     ?: GeneratedUniffiDownloadControlGateway.open(databasePath)

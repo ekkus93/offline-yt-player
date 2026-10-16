@@ -87,9 +87,10 @@ recorded here instead of being replaced by new fake tests:
 4. (Closed) Timeout ordering is now covered; see the table above. Not run on a device yet.
 5. `DownloadUserInitiatedJobService.onStartJob` returning `false` without `jobFinished` for a blank
    queue id. `JobParameters` cannot be constructed outside the framework.
-6. `MainActivity` running startup reconciliation before the first Library/Downloads reads. Force-stop
-   recovery in `Rmd1501ProductionPipelineColdStartInstrumentedTest` exercises recovery end to end but
-   does not pin the ordering.
+6. ~~`MainActivity` running startup reconciliation before the first Library/Downloads reads.~~ Now
+   covered by `MainActivityStartupOrderingInstrumentedTest` (fake core gateway via the debug-only
+   `MainActivityDependencyOverrides.installCoreForInstrumentation` seam; asserts reconcile is first and
+   that a failed or throwing reconcile yields no reads). Not yet run on a device; requires CI evidence.
 
 ## Local-environment findings (not product changes)
 
