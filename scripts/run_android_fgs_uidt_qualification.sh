@@ -4,6 +4,18 @@
 # Never turn an executed failing assertion into a passing CI result.
 set -euo pipefail
 
+PACKAGE_NAME=com.ekkus.offlineytplayer
+TIMEOUT_KEY=data_sync_fgs_timeout_duration
+ORIGINAL_TIMEOUT="$(adb shell device_config get activity_manager "$TIMEOUT_KEY" | tr -d '\r' || true)"
+restore_data_sync_timeout() {
+  if [[ -z "$ORIGINAL_TIMEOUT" || "$ORIGINAL_TIMEOUT" == "null" ]]; then
+    adb shell device_config delete activity_manager "$TIMEOUT_KEY" >/dev/null 2>&1 || true
+  else
+    adb shell device_config put activity_manager "$TIMEOUT_KEY" "$ORIGINAL_TIMEOUT" >/dev/null 2>&1 || true
+  fi
+}
+trap restore_data_sync_timeout EXIT
+
 wait_for_api35() {
   local attempt sdk boot package activity
   for attempt in $(seq 1 60); do
@@ -50,6 +62,13 @@ run_class() {
     return 1
   done
 }
+
+wait_for_api35
+APP_APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' | head -n 1)"
+test -n "$APP_APK"
+adb install -r "$APP_APK"
+# The app targets SDK 36, so Android 15 enables dataSync limits without an opt-in compat override.
+adb shell device_config put activity_manager "$TIMEOUT_KEY" 10000
 
 run_class com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutAdbInstrumentedTest
 run_class com.ekkus.offlineytplayer.downloads.DownloadUidtExecutionInstrumentedTest

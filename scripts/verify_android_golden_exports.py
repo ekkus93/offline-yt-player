@@ -27,7 +27,12 @@ def verify(directory: Path) -> int:
     manifest = []
     for name in NAMES:
         png = directory / f"{name}.png"
+        # MediaStore may append the MIME-derived .txt extension to a supplied
+        # .sha256 DISPLAY_NAME. Accept that exported spelling as well as the
+        # app-private direct-copy spelling.
         sidecar = directory / f"{name}.sha256"
+        if not sidecar.is_file():
+            sidecar = directory / f"{name}.sha256.txt"
         if not png.is_file() or not read_png_signature(png):
             failures.append(f"{name}: missing or invalid PNG")
         if not sidecar.is_file():

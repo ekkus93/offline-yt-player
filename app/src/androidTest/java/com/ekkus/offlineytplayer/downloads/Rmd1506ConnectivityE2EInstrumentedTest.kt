@@ -1,9 +1,13 @@
 package com.ekkus.offlineytplayer.downloads
 
+import android.Manifest
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
+import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.test.core.app.ApplicationProvider
@@ -21,7 +25,9 @@ import java.net.SocketTimeoutException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -30,6 +36,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -37,6 +44,21 @@ import org.junit.runner.RunWith
 class Rmd1506ConnectivityE2EInstrumentedTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val database = File(context.filesDir, DATABASE_NAME)
+
+    @Before
+    fun grantNotificationPermissionForServiceAssertions() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+
+        val permissionGrant = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}",
+        )
+        ParcelFileDescriptor.AutoCloseInputStream(permissionGrant).use { it.readBytes() }
+        assertTrue(
+            "service notification assertions require POST_NOTIFICATIONS on Android 13+",
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
     @After
     fun cleanRuntimeState() {
@@ -49,7 +71,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
      * Runs only from the host-controlled OS connectivity lane. Normal smoke
      * deliberately skips it: changing real device network state requires adb
      * while instrumentation is still running. The production service and
-     * AndroidDownloadConnectivityObserver have no injected connectivity seam.
+     * AndroidDownloadConnectivityObserver use real Android network callbacks.
      */
     @Test
     fun hostDrivenOsConnectivityLossPausesAndRestoresForegroundTransfer() {
@@ -120,7 +142,11 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 "adb must restore a real Android default network",
                 observedNetwork.get() != DownloadConnectivity.None,
             )
-            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L)
+            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L) {
+                "partial=${partial.length()} final=${finished.length()} " +
+                    "fixtureRequests=${server.requestCount.get()} fixtureBytes=${server.bytesSent.get()} " +
+                    "observedNetwork=${observedNetwork.get()}"
+            }
             assertEquals(payload.size.toLong(), finished.length())
             assertArrayEquals(payload, finished.readBytes())
             assertFalse("resume must remove partial bytes after promotion", partial.exists())
@@ -157,8 +183,20 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             .apply { mkdirs() }
         val network = AtomicReference(DownloadConnectivity.None)
         val observer = AndroidDownloadConnectivityObserver(context, network::set)
+        val serviceNetworkCallbacks = CopyOnWriteArrayList<DownloadConnectivity>()
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { serviceContext, onChange ->
+            AndroidDownloadConnectivityObserver(
+                context = serviceContext,
+                onConnectivityChanged = { connectivity ->
+                    serviceNetworkCallbacks += connectivity
+                    onChange(connectivity)
+                },
+            ).also { it.start() }
+        }
         val jobId = "rmd-1506-wifi-metered"
-        val payload = ByteArray(8 * 1024 * 1024) { (it % 247).toByte() }
+        // Keep enough work queued for the host's real ConnectivityManager callback to
+        // reach the service before completion, even on fast software emulators.
+        val payload = ByteArray(24 * 1024 * 1024) { (it % 247).toByte() }
         val relativePath = "items/rmd-1506-wifi-metered/video.mp4"
         val partial = File(context.filesDir, "items/rmd-1506-wifi-metered/.video.mp4.partial")
         val finished = File(context.filesDir, relativePath)
@@ -202,7 +240,13 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 DownloadConnectivity.Metered,
                 network.get(),
             )
-            waitForState(jobId, CoreDownloadState.PAUSED)
+            waitForState(jobId, CoreDownloadState.PAUSED) {
+                "testNetwork=${network.get()} " +
+                    "serviceCallbacks=${serviceNetworkCallbacks.joinToString()} " +
+                    "requests=${server.requestCount.get()} bytesSent=${server.bytesSent.get()} " +
+                    "partial=${if (partial.isFile) partial.length() else 0L} " +
+                    "final=${if (finished.isFile) finished.length() else 0L}"
+            }
             assertTrue("metered Wi-Fi pause retains partial bytes", partial.length() > 0L)
             assertFalse("metered Wi-Fi pause cannot promote final bytes", finished.exists())
             signals.resolve("wifi-paused").writeText("real metered Wi-Fi paused WifiOnly durable transfer")
@@ -216,7 +260,13 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 DownloadConnectivity.Unmetered,
                 network.get(),
             )
-            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L)
+            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 180_000L) {
+                "testNetwork=${network.get()} " +
+                    "serviceCallbacks=${serviceNetworkCallbacks.joinToString()} " +
+                    "requests=${server.requestCount.get()} bytesSent=${server.bytesSent.get()} " +
+                    "partial=${if (partial.isFile) partial.length() else 0L} " +
+                    "final=${if (finished.isFile) finished.length() else 0L}"
+            }
             assertArrayEquals(payload, finished.readBytes())
             assertFalse("completed Wi-Fi-only download must remove partial", partial.exists())
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
@@ -227,6 +277,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             signals.resolve("wifi-complete").writeText("real unmetered Wi-Fi resumed and completed Library item")
         } finally {
             observer.close()
+            DownloadForegroundService.connectivityObserverFactoryForTesting = null
             context.stopService(Intent(context, DownloadForegroundService::class.java))
             server.close()
         }
@@ -400,7 +451,9 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             seedDurableWork(firstJobId, firstServer.mediaUrl, firstPath, firstPayload.size)
             seedDurableWork(secondJobId, secondServer.mediaUrl, secondPath, secondPayload.size)
 
-            val scheduler = AndroidDownloadExecutionScheduler(context)
+            // This service ownership regression covers the legacy foreground path;
+            // UIDT scheduling is qualified separately on API 34+.
+            val scheduler = AndroidDownloadExecutionScheduler(context, sdkInt = 33)
             assertTrue(scheduler.schedule(DownloadScheduleRequest(firstJobId)).accepted)
             waitForState(firstJobId, CoreDownloadState.DOWNLOADING)
             assertEquals(1, registrations.get())
@@ -534,9 +587,14 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         jobId: String,
         expected: CoreDownloadState,
         timeoutMs: Long = 30_000L,
+        diagnostics: () -> String = { "" },
     ) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var last: CoreDownloadState? = null
+        var lastBytesDownloaded = 0L
+        var lastTotalBytes: Long? = null
+        var lastAttempt = 0
+        var lastErrorKind: String? = null
         // Keep one reader open while the worker updates the durable SQLite queue.
         // Reopening the Rust service for every 50-ms poll reruns schema initialization.
         GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
@@ -545,17 +603,25 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 assertNull(queue.error)
                 val snapshot = queue.value?.firstOrNull { it.jobId == jobId }
                 last = snapshot?.state
+                lastBytesDownloaded = snapshot?.bytesDownloaded ?: 0L
+                lastTotalBytes = snapshot?.totalBytes
+                lastAttempt = snapshot?.attempt ?: 0
+                lastErrorKind = snapshot?.lastError?.kind
                 if (last == expected) return
                 if (last == CoreDownloadState.FAILED || last == CoreDownloadState.CANCELED) {
                     throw AssertionError(
                         "job $jobId entered terminal state $last while waiting for $expected; " +
-                            "lastError=${snapshot?.lastError}",
+                            "lastErrorKind=$lastErrorKind",
                     )
                 }
                 SystemClock.sleep(50)
             }
         }
-        throw AssertionError("timed out waiting for $expected; last=$last")
+        throw AssertionError(
+            "timed out waiting for $expected; last=$last bytes=$lastBytesDownloaded/" +
+                "${lastTotalBytes ?: "unknown"} attempt=$lastAttempt lastErrorKind=$lastErrorKind " +
+                diagnostics(),
+        )
     }
 
     private fun deleteRuntimeState() {
@@ -569,6 +635,8 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
     private class SlowRangeFixtureServer(private val body: ByteArray) : AutoCloseable {
         private val stopping = AtomicBoolean(false)
         private val failure = AtomicReference<Throwable?>()
+        val requestCount = AtomicInteger(0)
+        val bytesSent = AtomicLong(0L)
         private val server = ServerSocket(0, 4, InetAddress.getByName("127.0.0.1")).apply {
             soTimeout = 500
         }
@@ -589,6 +657,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
 
                                 val input = socket.getInputStream().bufferedReader(StandardCharsets.US_ASCII)
                                 val requestLine = input.readLine() ?: return@use
+                                requestCount.incrementAndGet()
                                 val headers = mutableMapOf<String, String>()
                                 while (true) {
                                     val line = input.readLine() ?: break
@@ -630,6 +699,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                                     try {
                                         output.write(responseBody, offset, end - offset)
                                         output.flush()
+                                        bytesSent.addAndGet((end - offset).toLong())
                                     } catch (_: SocketException) {
                                         break
                                     }

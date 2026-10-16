@@ -45,7 +45,7 @@ adb shell am instrument -w -e rmdHostNetworkTransitions true \
 INST_PID=$!
 wait_signal() {
     local marker="$1" failure_log="${2:-$LOG}" i
-    for ((i=0;i<180;i++)); do
+    for ((i=0;i<360;i++)); do
         if adb shell "test -f '$SIGNAL_DIR/$marker'" >/dev/null 2>&1; then return 0; fi
         if ! kill -0 "$INST_PID" 2>/dev/null; then
             echo "Instrumentation ended before $marker marker"

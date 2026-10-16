@@ -10,7 +10,7 @@ RMD-101 requires Android network capability to be real, declared, tested at mani
 
 - `app/src/main/AndroidManifest.xml` declares `android.permission.INTERNET` and retains only the implemented network/runtime-related permissions needed by current production paths, including `ACCESS_NETWORK_STATE`, foreground-service permissions, boot recovery, notifications, and UIDT jobs.
 - `app/src/test/java/com/ekkus/offlineytplayer/ManifestPermissionTest.kt` asserts `android.permission.INTERNET` and `android.permission.ACCESS_NETWORK_STATE` are declared, and rejects broad storage and location permissions that are not needed by the implemented runtime paths.
-- `app/src/androidTest/java/com/ekkus/offlineytplayer/NetworkCapabilityInstrumentedTest.kt` verifies the packaged app declares `INTERNET`, starts a deterministic loopback HTTP fixture, reads the fixture through the packaged app process, and proves the app can open a deterministic fixture network endpoint on emulator/device.
+- `app/src/androidTest/java/com/ekkus/offlineytplayer/NetworkCapabilityInstrumentedTest.kt` verifies the packaged app declares `INTERNET` and exchanges deterministic bytes over a loopback TCP socket from the packaged app process. This proves emulator/device socket access without relying on cleartext HTTP, which the app intentionally blocks.
 - PR #323 updated `.github/workflows/android-smoke.yml` so the small API-29 Android smoke lane runs `NetworkCapabilityInstrumentedTest` beside the basic runtime smoke and packaged Rust/UniFFI gateway smoke tests. This keeps Android qualification tiered while making RMD-101 runtime proof part of the fast smoke lane.
 
 ## Qualification evidence

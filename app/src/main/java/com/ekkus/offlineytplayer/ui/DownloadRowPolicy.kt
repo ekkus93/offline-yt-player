@@ -3,6 +3,7 @@ package com.ekkus.offlineytplayer.ui
 import com.ekkus.offlineytplayer.coregateway.AppDownloadControlGateway
 
 internal enum class DownloadRowAction { Pause, Resume, Cancel, Retry }
+internal enum class DownloadVisualState { Active, Paused, Failed, Completed }
 
 internal data class DownloadProgressMetrics(
     val speedBytesPerSecond: Long? = null,

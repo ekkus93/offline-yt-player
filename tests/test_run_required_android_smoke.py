@@ -1,4 +1,4 @@
-"""Exercise the RMD-1401a smoke driver without an emulator or Gradle download."""
+"""Exercise the required Android smoke driver without an emulator or Gradle download."""
 
 import shutil
 import subprocess
@@ -35,6 +35,15 @@ root = pathlib.Path('app/build/outputs/androidTest-results/connected')
 root.mkdir(parents=True, exist_ok=True)
 if name != '__OMITTED__':
     suite = ET.Element('testsuite')
+    if name == 'com.ekkus.offlineytplayer.ui.MainActivityStartupOrderingInstrumentedTest':
+        for method in (
+            'reconcileRunsBeforeEveryLibraryAndDownloadsRead',
+            'failedReconcileResultYieldsNoLibraryOrDownloadsReads',
+            'throwingReconcileYieldsNoLibraryOrDownloadsReads',
+        ):
+            ET.SubElement(suite, 'testcase', classname=classname, name=method)
+        ET.ElementTree(suite).write(root / 'TEST-mock.xml', encoding='unicode')
+        sys.exit(0)
     method = selected_method or {
         'com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest':
             'actionSendFlowsThroughAnalyzeSetupRealSchedulerWorkerLibraryAndBackStack',
@@ -68,18 +77,19 @@ if name != '__OMITTED__':
     def test_all_required_classes_run_individually_and_keep_evidence(self):
         result, calls, reports = self.run_driver()
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        self.assertEqual(13, len(calls))
-        self.assertEqual(13, len(set(calls)))
+        self.assertEqual(16, len(calls))
+        self.assertEqual(16, len(set(calls)))
         self.assertTrue(any("GeneratedUniffiCoreGatewaySmokeTest" in c for c in calls))
         self.assertTrue(any("Rmd1504ShareE2EInstrumentedTest" in c for c in calls))
         self.assertTrue(any("Rmd1506ConnectivityE2EInstrumentedTest" in c for c in calls))
+        self.assertTrue(any("MainActivityStartupOrderingInstrumentedTest" in c for c in calls))
         self.assertTrue(any("StorageSettingsRecoveryInstrumentedTest" in c for c in calls))
         self.assertTrue(any("StorageSettingsRecoveryInstrumentedTest#initialScanFailureCanRetryWithoutLeavingSettings" in c for c in calls))
         self.assertTrue(any("StorageSettingsRecoveryInstrumentedTest#cleanupRefreshFailureInvalidatesStaleSummaryAndCanRetry" in c for c in calls))
         self.assertTrue(any("DuplicateProviderOptionsInstrumentedTest#duplicateAudioAndSubtitleLabelsEnqueueSelectedOriginalIds" in c for c in calls))
         self.assertTrue(any("DuplicateProviderOptionsInstrumentedTest#duplicateQualityLabelsEnqueueTheSelectedOriginalChoiceId" in c for c in calls))
         self.assertTrue(any("DownloadSetupSingleFlightInstrumentedTest#enqueueCannotBeSubmittedTwiceWhileFirstRequestIsPending" in c for c in calls))
-        self.assertEqual(13, len(reports))
+        self.assertEqual(16, len(reports))
 
     def test_missing_executed_class_fails_instead_of_false_green(self):
         omitted = "com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest"
@@ -96,7 +106,7 @@ if name != '__OMITTED__':
         result, calls, _ = self.run_driver(omit_method=selector)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("ANDROID_SMOKE_MISSING_REQUIRED_TEST " + selector, result.stdout)
-        self.assertEqual(8, len(calls))
+        self.assertEqual(11, len(calls))
 
     def test_missing_storage_cleanup_recovery_method_fails_closed(self):
         selector = (
@@ -106,7 +116,7 @@ if name != '__OMITTED__':
         result, calls, _ = self.run_driver(omit_method=selector)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("ANDROID_SMOKE_MISSING_REQUIRED_TEST " + selector, result.stdout)
-        self.assertEqual(10, len(calls))
+        self.assertEqual(13, len(calls))
 
     def test_missing_duplicate_quality_method_fails_closed(self):
         selector = (
@@ -116,7 +126,7 @@ if name != '__OMITTED__':
         result, calls, _ = self.run_driver(omit_method=selector)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("ANDROID_SMOKE_MISSING_REQUIRED_TEST " + selector, result.stdout)
-        self.assertEqual(12, len(calls))
+        self.assertEqual(15, len(calls))
 
     def test_missing_single_flight_method_fails_closed(self):
         selector = (
@@ -126,7 +136,7 @@ if name != '__OMITTED__':
         result, calls, _ = self.run_driver(omit_method=selector)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("ANDROID_SMOKE_MISSING_REQUIRED_TEST " + selector, result.stdout)
-        self.assertEqual(13, len(calls))
+        self.assertEqual(16, len(calls))
 
     def test_missing_required_method_fails_even_when_class_executed(self):
         isolated = "com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest"

@@ -179,7 +179,7 @@ class MainActivity : ComponentActivity() {
             val initialTitles = if (startupFailure == null) {
                 runCatching { presentations.getOrThrow().titlesByJobId() }
             } else {
-                Result.success(emptyMap())
+                null
             }
             val initialLibrary = when {
                 core.isFailure -> LibraryScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
@@ -189,6 +189,7 @@ class MainActivity : ComponentActivity() {
             val initialDownloads = when {
                 core.isFailure -> DownloadsScreenState.Failed(SourceMetadataPolicy.diagnostic(core.exceptionOrNull().safeUiMessage()))
                 startupFailure != null -> DownloadsScreenState.Failed(startupFailure.startupReconciliationDiagnostic())
+                initialTitles == null -> DownloadsScreenState.Failed("Download metadata is unavailable until startup reconciliation completes.")
                 initialTitles.isFailure -> DownloadsScreenState.Failed("Download presentation metadata is unavailable.")
                 else -> openedCore!!.readInitialDownloadsStateSafely(initialTitles.getOrThrow())
             }

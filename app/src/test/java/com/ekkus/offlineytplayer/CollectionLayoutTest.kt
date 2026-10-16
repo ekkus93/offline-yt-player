@@ -1,26 +1,13 @@
 package com.ekkus.offlineytplayer
 
-import com.ekkus.offlineytplayer.ui.CollectionLayoutPolicy
 import com.ekkus.offlineytplayer.ui.DownloadUiState
 import com.ekkus.offlineytplayer.ui.LibraryLayout
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class CollectionLayoutTest {
+class CollectionStateModelTest {
     @Test
-    fun collectionScreensKeepControlsOutsideScrollableLists() {
-        assertEquals(2, CollectionLayoutPolicy.LibraryFixedControlRows)
-        assertEquals(1, CollectionLayoutPolicy.DownloadFixedControlRows)
-    }
-
-    @Test
-    fun collectionActionsMeetMinimumTouchTarget() {
-        assertTrue(CollectionLayoutPolicy.MinimumActionHeightDp >= 48)
-    }
-
-    @Test
-    fun libraryAndDownloadStatesCoverRequiredUx() {
+    fun libraryLayoutAndDownloadStateModelsExposeTheirSupportedValues() {
         assertEquals(listOf("List", "Grid"), LibraryLayout.entries.map { it.name })
         assertEquals(listOf("Active", "Paused", "Failed", "Completed", "Canceled"), DownloadUiState.entries.map { it.name })
     }

@@ -256,6 +256,7 @@ class DownloadForegroundService : Service() {
         settingsStore?.close()
         settingsStore = null
         super.onDestroy()
+        serviceDestroyedObserverForTesting?.invoke()
     }
 
     private fun configureActiveWork(intent: Intent?, queueItemId: String?) {
@@ -527,6 +528,9 @@ class DownloadForegroundService : Service() {
         @Volatile
         internal var connectivityObserverFactoryForTesting:
             ((Context, (DownloadConnectivity) -> Unit) -> Closeable)? = null
+
+        @Volatile
+        internal var serviceDestroyedObserverForTesting: (() -> Unit)? = null
 
         private const val PRODUCTION_DATABASE_NAME = "offline-yt-player.sqlite3"
         const val ACTION_PAUSE = "com.ekkus.offlineytplayer.download.PAUSE"

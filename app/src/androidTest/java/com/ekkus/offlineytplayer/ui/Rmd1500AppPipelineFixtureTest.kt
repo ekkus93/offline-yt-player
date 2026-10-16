@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
@@ -91,19 +92,23 @@ class Rmd1500AppPipelineFixtureTest {
 
         assertEquals(listOf(sharedUrl), sourceGateway.analyzedUrls)
         compose.onNodeWithText("RMD-1500 app pipeline fixture", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("720p", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("0:42 · 720p · 37 bytes").assertIsDisplayed()
 
         compose.onNodeWithText("Options").performClick()
         compose.onNodeWithText("Download options").assertIsDisplayed()
         compose.onNodeWithText("Select English").performClick()
         compose.onNodeWithText("Select English audio").performClick()
-        compose.onNodeWithText("Apply options").performClick()
-        compose.onNodeWithText("Download options applied.").assertIsDisplayed()
+        compose.onNodeWithText("Apply options").performScrollTo().performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching { compose.onNodeWithText("Apply options").assertDoesNotExist() }.isSuccess
+        }
+        compose.onNodeWithText("Download setup").assertIsDisplayed()
+        compose.onNodeWithText("0:42 · 720p · 37 bytes").assertIsDisplayed()
 
         // Simulate Activity saved-state recreation while keeping the selected real setup options.
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithText("RMD-1500 app pipeline fixture", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Download options applied.").assertIsDisplayed()
+        compose.onNodeWithText("0:42 · 720p · 37 bytes").assertIsDisplayed()
 
         compose.onNodeWithText("Download").performClick()
         compose.waitUntil(timeoutMillis = 5_000) { downloadControl.enqueuedJobIds.isNotEmpty() }

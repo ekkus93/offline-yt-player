@@ -1,9 +1,13 @@
 package com.ekkus.offlineytplayer.downloads
 
+import android.Manifest
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
+import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -13,15 +17,18 @@ import androidx.core.content.ContextCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.ekkus.offlineytplayer.MainActivity
 import com.ekkus.offlineytplayer.coregateway.CoreDownloadState
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGateway
 import com.ekkus.offlineytplayer.coregateway.GeneratedUniffiDownloadControlGateway
 import java.io.File
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,6 +41,21 @@ class Rmd1507NotificationControlInstrumentedTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val database = File(context.filesDir, DATABASE_NAME)
     private val notifications: NotificationManager = context.getSystemService(NotificationManager::class.java)
+
+    @Before
+    fun grantNotificationPermissionForServiceAssertions() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+
+        val permissionGrant = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}",
+        )
+        ParcelFileDescriptor.AutoCloseInputStream(permissionGrant).use { it.readBytes() }
+        assertTrue(
+            "notification control test needs permission so Android does not interrupt the test Activity",
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
     @After
     fun cleanRuntimeState() {
@@ -79,6 +101,15 @@ class Rmd1507NotificationControlInstrumentedTest {
         assertNotNull(actions["Pause"])
         assertNotNull(actions["Resume"])
         assertNotNull(actions["Cancel"])
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            listOf("Pause", "Resume", "Cancel").forEach { action ->
+                assertEquals(
+                    "$action PendingIntent must be immutable",
+                    true,
+                    actions.getValue(action).actionIntent.isImmutable,
+                )
+            }
+        }
 
         actions.getValue("Pause").actionIntent.send()
         waitForState(jobId, CoreDownloadState.PAUSED)

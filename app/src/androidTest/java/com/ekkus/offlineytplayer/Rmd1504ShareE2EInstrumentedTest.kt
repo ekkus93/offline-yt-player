@@ -1,9 +1,12 @@
 package com.ekkus.offlineytplayer
 
+import android.Manifest
+import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.app.NotificationManager
+import android.content.pm.PackageManager
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.database.sqlite.SQLiteDatabase
 import androidx.compose.ui.test.assertIsDisplayed
@@ -49,6 +52,7 @@ class Rmd1504ShareE2EInstrumentedTest {
 
     @Before
     fun cleanBefore() {
+        grantNotificationPermissionForTest()
         MainActivityDependencyOverrides.clearForInstrumentation()
         stopFixtureService()
         deleteRuntimeState()
@@ -135,9 +139,25 @@ class Rmd1504ShareE2EInstrumentedTest {
             compose.onNodeWithText("Download").performClick()
 
             // A transient scheduling message can disappear before Compose polling
-            // observes it. Verify the actual scheduler/worker contract instead:
-            // the fixture server must receive the real transfer request, and
-            // durable Library completion is asserted below.
+            // observes it, but the final result is stable. Observe that result
+            // before waiting on the fixture socket so a rejected schedule is
+            // distinguishable from a worker that never begins the transfer.
+            compose.waitUntil(30_000) {
+                listOf(
+                    "Download scheduled for Fixture 720p",
+                    "Download scheduler is unavailable.",
+                    "Download was not queued.",
+                ).any { message ->
+                    runCatching {
+                        compose.onNodeWithText(message, substring = true).assertIsDisplayed()
+                    }.isSuccess
+                }
+            }
+            compose.onNodeWithText("Download scheduled for Fixture 720p", substring = true).assertIsDisplayed()
+
+            // A successful scheduler result is not enough: the actual worker
+            // must issue the fixture request and persist the completed Library
+            // record below.
             server.joinAndRethrow()
 
             // The fixture socket closing is not a durable completion signal:
@@ -190,6 +210,20 @@ class Rmd1504ShareE2EInstrumentedTest {
         assertTrue(
             "foreground worker must stop before fixture database cleanup",
             notifications.activeNotifications.none { it.id == DownloadServicePolicy.NotificationId },
+        )
+    }
+
+    private fun grantNotificationPermissionForTest() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+
+        val permissionGrant = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}",
+        )
+        ParcelFileDescriptor.AutoCloseInputStream(permissionGrant).use { it.readBytes() }
+        assertTrue(
+            "the ACTION_SEND fixture needs notification permission to avoid blocking its launched Activity",
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
         )
     }
 

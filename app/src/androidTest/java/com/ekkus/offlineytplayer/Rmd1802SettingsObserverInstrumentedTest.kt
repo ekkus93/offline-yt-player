@@ -1,6 +1,10 @@
 package com.ekkus.offlineytplayer
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -13,6 +17,7 @@ import com.ekkus.offlineytplayer.settings.SharedPreferencesAppSettingsStore
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,6 +29,7 @@ class Rmd1802SettingsObserverInstrumentedTest {
     @Test
     fun backgroundStoreUpdatePublishesAppearanceToComposeOnMainThread() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        grantNotificationPermissionForTest(context)
         val store = SharedPreferencesAppSettingsStore.open(context)
         val originalAppearance = store.snapshot().appearance
         val updatedAppearance = if (originalAppearance == AppearanceSetting.Dark) {
@@ -64,5 +70,19 @@ class Rmd1802SettingsObserverInstrumentedTest {
             store.update { appearance = originalAppearance }
             store.close()
         }
+    }
+
+    private fun grantNotificationPermissionForTest(context: android.content.Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+
+        val permissionGrant = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}",
+        )
+        ParcelFileDescriptor.AutoCloseInputStream(permissionGrant).use { it.readBytes() }
+        assertTrue(
+            "settings observer test needs notification permission to keep system UI out of the Activity",
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        )
     }
 }

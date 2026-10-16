@@ -29,8 +29,8 @@ Every source-text assertion was classified:
 | Deleted | Covered by |
 | --- | --- |
 | `PlaybackControllerIntegrationTest` (3) | `PlaybackSessionBehaviorInstrumentedTest`: speed/seek controls reach the shared session player, two controllers share one player |
-| `MediaSessionBehaviorQualificationTest` (4) | same class; audio usage in `sessionPlayerDeclaresMediaAudioUsage`; noisy handling is a **gap** |
-| `PlaybackSessionOwnershipTest` (2) | same class (service-owned player); release order on destroy is a **gap** |
+| `MediaSessionBehaviorQualificationTest` (4) | same class; audio usage in `sessionPlayerDeclaresMediaAudioUsage`; noisy receiver state in `sessionPlayerRegistersRuntimeAudioBecomingNoisyHandling` |
+| `PlaybackSessionOwnershipTest` (2) | same class proves service ownership; `serviceDestroyReleasesThePlayerBeforeTheMediaSession` drives real service destruction, observes immediately after each release call, and asserts their order. It passed in the API 29 base smoke portion of run `38861956038`; the later golden-evidence verifier failure does not invalidate that instrumented test result. |
 | `PlaybackSessionPolicyTest.serviceDelegatesAudioFocusAndNoisyHandlingToMedia3Player` | `sessionPlayerDeclaresMediaAudioUsage`; noisy handling is a **gap** |
 | `SubtitlePlaybackControlIntegrationTest` (2) | `LocalPlaybackPolicyTest.subtitleSelectionCyclesEveryTrackThenOffThenFirstTrack`; `subtitleControlCyclesTracksThenOffOnTheSessionTrackSelection` (real Compose + session track selection); `Rmd1503SubtitleOfflineInstrumentedTest` |
 | `AudioPlaybackControlIntegrationTest` (2) | `LocalPlaybackPolicyTest.audioSelectionCyclesPersistedTracksAndWrapsWithoutOff`; `audioControlCyclesPersistedTracksAndWrapsOnTheSessionTrackSelection` |
@@ -45,10 +45,10 @@ Every source-text assertion was classified:
 | `DownloadSettingsRuntimeConsumptionTest` (3) | `SettingsPagesRuntimeInstrumentedTest.downloadSettingsControlsPersistAndRenderTheStoredValues`, `CollectionScreensInstrumentedTest.addScreenSummarizesTheStoredDownloadSettings`, `AddWorkflowPolicyTest`, `Rmd1802SettingsObserverInstrumentedTest` |
 | `LibraryOperationalScreenTest` source-text methods (3) | `CollectionScreensInstrumentedTest`: list/grid toggle and search filtering |
 | `DownloadsOperationalScreenTest.downloadRowsShowProgressStateErrorSpeedAndEtaFields` | `CollectionScreensInstrumentedTest.downloadRowsRenderStateProgressSpeedEtaAndError` |
-| `DownloadNotificationPolicyTest` (2) | `Rmd1507NotificationControlInstrumentedTest` now asserts the real posted notification is ongoing, indeterminate, on the low-importance channel, and drives Pause/Resume/Cancel. `FLAG_IMMUTABLE` on the action PendingIntents is a **gap** (no runtime accessor). |
+| `DownloadNotificationPolicyTest` (2) | `Rmd1507NotificationControlInstrumentedTest` asserts the real posted notification is ongoing, indeterminate, on the low-importance channel, and drives Pause/Resume/Cancel. It also checks `PendingIntent.isImmutable` on each posted action. |
 | `DownloadForegroundServicePolicyTest` (3 source-text) | `Rmd1501AndroidRuntimeFixtureInstrumentedTest`, `Rmd1507NotificationControlInstrumentedTest`; manifest test kept |
 | `DownloadRebootRecoveryPolicyTest.rebootReceiverDoesNotStartForegroundServiceOrTouchProtectedState` | `DownloadRebootReceiverInstrumentedTest`; manifest test kept |
-| `DownloadForegroundTimeoutPolicyTest.foregroundServiceImplementsTimeoutBeforeStopping`, `DownloadForegroundServiceTimeoutPolicyTest` (2) | `DownloadForegroundTimeoutInstrumentedTest`, `DownloadForegroundTimeoutAdbInstrumentedTest`. Persist/native-stop/`stopForeground`/`stopSelf` ordering is covered by `DownloadForegroundTimeoutInstrumentedTest.timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground` via the `DownloadForegroundTimeoutSequence` seam that `onTimeout` delegates to (the test does not instantiate the Service). |
+| `DownloadForegroundTimeoutPolicyTest.foregroundServiceImplementsTimeoutBeforeStopping`, `DownloadForegroundServiceTimeoutPolicyTest` (2) | `DownloadForegroundTimeoutInstrumentedTest` covers the extracted helper sequence and persistence store; it does not instantiate the Service. `DownloadForegroundTimeoutAdbInstrumentedTest` currently checks manifest metadata and calls the persistence store directly. Actual `Service.onTimeout` ordering remains a **gap**. |
 | `DownloadExecutionSchedulerPolicyTest.uidtJobCarriesOnlyDurableQueueIdentityInExtras` | `DownloadSchedulerExtrasInstrumentedTest` (real `PersistableBundle`) |
 | `DownloadExecutionSchedulerPolicyTest.invalidJobExtrasReturnAlreadyFinishedWithoutDoubleSettlement` | **gap** (see below) |
 | `DownloadNotificationPermissionPolicyTest.mainActivityRequestsPostNotificationsPermission` | `DownloadNotificationPermissionInstrumentedTest`, `NotificationPermissionStateInstrumentationTest` |
@@ -80,18 +80,21 @@ These check declarative platform configuration. They must not be cited as runtim
 These were previously "covered" only by source-text assertions, which proved nothing. They are
 recorded here instead of being replaced by new fake tests:
 
-1. `setHandleAudioBecomingNoisy(true)` on the session player. `ACTION_AUDIO_BECOMING_NOISY` is a
-   protected system broadcast that an app cannot send, and there is no getter.
-2. Release order (`player.release()` before `session.release()`) in `PlaybackSessionService.onDestroy`.
-   Partially covered: `PlaybackSessionBehaviorInstrumentedTest.serviceDestroyReleasesThePlayerBeforeTheMediaSession`
-   drives the real service teardown (controller release plus `stopService`) and checks the order of
-   a null-by-default observer that `onDestroy` notifies after each real release call. It proves
-   `onDestroy` runs and the notification order, not that Media3 observed the releases in that order.
-   Not yet executed on a device or emulator.
-3. `FLAG_IMMUTABLE` on the download notification action PendingIntents.
-4. (Closed) Timeout ordering is now covered; see the table above. Not run on a device yet.
-5. `DownloadUserInitiatedJobService.onStartJob` returning `false` without `jobFinished` for a blank
-   queue id. `JobParameters` cannot be constructed outside the framework.
+1. ~~`setHandleAudioBecomingNoisy(true)` on the session player.~~ The packaged
+   `sessionPlayerRegistersRuntimeAudioBecomingNoisyHandling` test observes the service's configured
+   ExoPlayer and verifies Media3's live `AudioBecomingNoisyManager` is enabled. The protected system
+   broadcast itself cannot be sent by the test; the runtime registration state is the observable
+   contract.
+2. ~~Release order (`player.release()` before `session.release()`) in `PlaybackSessionService.onDestroy`.~~
+   `PlaybackSessionBehaviorInstrumentedTest.serviceDestroyReleasesThePlayerBeforeTheMediaSession`
+   drives real service destruction and records a null-by-default observer immediately after each
+   real release call; it asserts that player release precedes session release. This test ran in the
+   API 29 base smoke portion of run `38861956038`, before the separate golden-evidence export
+   verifier failed later in the workflow.
+3. ~~`FLAG_IMMUTABLE` on the download notification action PendingIntents.~~ The notification
+   instrumentation checks the actual posted Pause/Resume/Cancel action PendingIntents.
+4. ~~Timeout ordering through the production `Service.onTimeout` callback.~~ `DownloadForegroundTimeoutAdbInstrumentedTest.api35ShortenedTimeoutInvokesProductionServiceCallbackAndStopsCleanly` now starts the real service, triggers the shortened platform timeout, and observes persisted timeout state and service shutdown. It passed on API 35 in exact-candidate run `38872470298` and push run `38872462591` (candidate `aec4dcf32ee55ff12da428218dd072724aa6b93a1`). This proves the service callback executes and settles its lifecycle, but no active native download was running, so native-stop ordering during an active transfer remains unverified. These runs do not qualify later source changes or close RMD-1802/1803.
+5. ~~`DownloadUserInitiatedJobService.onStartJob` returning `false` without `jobFinished` for a blank queue id.~~ This is the documented `JobService` contract: returning `false` means the job is finished and JobScheduler releases its wakelock; `jobFinished` is for work where `onStartJob` returned `true`. See [Android `JobService.onStartJob`](https://developer.android.com/reference/android/app/job/JobService#onStartJob(android.app.job.JobParameters)). `DownloadUserInitiatedJobService` correctly returns `false` for a blank queue identity without calling `jobFinished`.
 6. ~~`MainActivity` running startup reconciliation before the first Library/Downloads reads.~~ Now
    covered by `MainActivityStartupOrderingInstrumentedTest` (fake core gateway via the debug-only
    `MainActivityDependencyOverrides.installCoreForInstrumentation` seam; asserts reconcile is first and
@@ -128,3 +131,68 @@ recorded here instead of being replaced by new fake tests:
 
 No exact-head CI evidence exists for these commits. This audit does not complete the RMD-1802
 independent review, RMD-1803/1804/1805, or the external legal/service gate.
+
+## 2026-10-16 timeout-evidence correction
+
+The original API-35 workflow only checked the manifest and invoked
+`DownloadForegroundTimeoutStore.persistTimeout` directly; it did not exercise
+`Service.onTimeout`. The candidate adds `api35ShortenedTimeoutInvokesProductionServiceCallbackAndStopsCleanly`,
+and `scripts/run_android_fgs_uidt_qualification.sh` sets a 10-second `data_sync_fgs_timeout_duration`
+while that test starts and backgrounds the real service. Local API-36 emulator execution confirmed
+the production callback persisted its start ID/type and the service stopped. The exact-head API-35
+run is still required. The test starts no worker, so actual native-stop ordering during active
+download remains unqualified. The historical RMD-104 reconciliation notes were updated and the
+canonical ADB/emulator checkbox remains open pending CI.
+
+## 2026-10-16 exact-head follow-up
+
+Exact master `2db7042920c463175047bbae6fe4b4943930e497` completed six of eight required workflows,
+while Android smoke and Android real-network E2E failed. Android smoke executed all 12 pinned golden
+methods successfully, but the host verifier rejected every raster digest sidecar: Android MediaStore
+published the requested `name.sha256` display name as `name.sha256.txt` because the item MIME type
+was `text/plain`. The verifier now accepts either MediaStore's MIME-normalized spelling or the
+app-private `.sha256` file. The `test_media_store_text_mime_extension_passes` governance test
+reproduces the export spelling. The separate real-network failure timed out waiting for a completed
+transfer on API 29; local reproduction was unavailable because the installed API 29 system image
+cannot create a second emulator within the available disk space. The API 36 emulator follows UIDT
+and is not equivalent to the failing API 29 foreground-service path.
+
+The packaged runtime audio-becoming-noisy observer and posted notification PendingIntent immutability
+checks described above have been added. Their source/test changes have not yet run in the API 29
+smoke workflow or on an exact-head candidate. Continue to leave final review, freeze, merge, and
+engineering-closeout items open.
+
+## 2026-10-16 first candidate qualification findings
+
+The first candidate `1b430ba02a8bfffcd0ed4c4bbb852f0675a60c35` passed the API 29 notification control
+path until the new direct `PendingIntent.isImmutable()` assertion called an API-31 method on API 29.
+The action PendingIntents are posted and exercised on API 29; direct immutability inspection is now
+gated to API 31+, where Android exposes that method. A local API 36 run with notifications granted
+passed the actual Pause/Resume/Cancel sequence.
+
+The same candidate's API 29 real-network run passed airplane-mode loss/pause/resume, then failed the
+follow-up Wi-Fi metered override: the independent observer reported `Metered`, but durable queue
+state stayed `DOWNLOADING` at 8,015,872 of 8,388,608 bytes. On the next candidate, the metered
+transition did settle the queue to `PAUSED`, but after restoring unmetered Wi-Fi the resumed attempt
+timed out at 24,104,960 of 25,165,824 bytes. The Android test now captures the foreground service
+observer's callback sequence, fixture server request/byte counts, and partial/final asset lengths on
+both pause and completion timeouts, increases the fixture to 24 MiB, and gives the slow emulator up
+to 180 seconds to finish. The candidate `0eee678482a8ca42ae592c6a30776419117b83a1` run
+`38869494052` still failed. The service's metered pause and resumed retry are now observed, but the
+full API-29 network-policy acceptance remains unresolved until a fresh run completes successfully.
+
+## 2026-10-16 review follow-up
+
+`MainActivityStartupOrderingInstrumentedTest` was present but not selected by the Android smoke
+workflow, so the existing test could not establish device-side behavioral evidence there. The class
+is now included in `scripts/run_required_android_smoke.sh`, and all three methods (successful,
+failed-result, and throwing startup reconciliation) are required by the result verifier. A local API
+36 run passed all three methods, and the result XML verifier confirmed each executed. Run the updated
+workflow on an exact candidate before treating this production-ordering test as CI-qualified.
+
+The same review removed detached main-source helpers and tests that only asserted their own
+defaults or inventories: unused UI settings/layout declarations, synthetic portrait/control budgets,
+security helpers with no production callers, and fixture/share/storage E2E step lists. Existing
+runtime paths remain covered by the Rust/core tests, actual connectivity and recovery integration,
+Compose behavior/layout tests, and packaged fixture/share/storage E2E instrumentation. The empty
+`DownloadSetupOptionsComposeTest` placeholder was removed; it had no executable test method.

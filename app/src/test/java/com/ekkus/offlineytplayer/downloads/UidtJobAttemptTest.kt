@@ -9,7 +9,7 @@ import org.junit.Test
 class UidtJobAttemptTest {
     @Test
     fun stoppedAttemptNeverSettlesAfterNativeWorkerReturns() {
-        val attempt = UidtJobAttempt()
+        val attempt = UidtJobAttempt(onStopFailure = {}, stopNative = {})
         var settlements = 0
         assertTrue(attempt.stop())
         assertFalse(attempt.stop())
@@ -19,7 +19,7 @@ class UidtJobAttemptTest {
 
     @Test
     fun finishedAttemptSettlesOnceAndCannotBeStoppedLater() {
-        val attempt = UidtJobAttempt()
+        val attempt = UidtJobAttempt(onStopFailure = {}, stopNative = {})
         var settlements = 0
         assertTrue(attempt.finishIfRunning { settlements++ })
         assertFalse(attempt.finishIfRunning { settlements++ })
@@ -29,8 +29,8 @@ class UidtJobAttemptTest {
 
     @Test
     fun replacementAttemptWaitsUntilStoppedNativeWriterHasExited() {
-        val previous = UidtJobAttempt()
-        val next = UidtJobAttempt()
+        val previous = UidtJobAttempt(onStopFailure = {}, stopNative = {})
+        val next = UidtJobAttempt(onStopFailure = {}, stopNative = {})
         val waiting = java.util.concurrent.CountDownLatch(1)
         val completed = java.util.concurrent.atomic.AtomicBoolean(false)
         val thread = Thread {
@@ -49,8 +49,8 @@ class UidtJobAttemptTest {
 
     @Test
     fun stoppedReplacementDoesNotRunAfterPriorWriterExits() {
-        val previous = UidtJobAttempt()
-        val next = UidtJobAttempt()
+        val previous = UidtJobAttempt(onStopFailure = {}, stopNative = {})
+        val next = UidtJobAttempt(onStopFailure = {}, stopNative = {})
         next.stop()
         previous.markWorkerExited()
         assertFalse(next.awaitPredecessor(previous))

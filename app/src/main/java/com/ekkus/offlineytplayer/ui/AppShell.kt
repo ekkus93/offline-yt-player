@@ -77,7 +77,6 @@ import java.net.URL
 
 internal enum class AppDestination(val label: String, val accessibilityLabel: String) { Library("Library", "Open offline library"), Downloads("Downloads", "Open downloads"), Add("Add", "Add a video"), Settings("Settings", "Open settings") }
 internal enum class SettingsSection(val label: String) { Downloads("Downloads"), Playback("Playback"), Storage("Storage"), Appearance("Appearance"), About("About") }
-internal object PortraitLayoutPolicy { const val BottomDestinationCount = 4; const val CompactPortraitHeightDp = 640; const val LargeFontScale = 1.30f; const val PrimarySetupControlCount = 4; const val AdvancedOptionsRowCount = 4; const val SettingsHubRowCount = 5; const val MaxSettingsRows = 5; fun primaryControlsFit(heightDp: Int, fontScale: Float): Boolean { val reservedChrome = 144; val minimumContent = if (fontScale >= LargeFontScale) 180 else 160; return heightDp - reservedChrome >= minimumContent } }
 
 @Composable
 internal fun OfflineYTPlayerApp(
