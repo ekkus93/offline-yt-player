@@ -178,7 +178,10 @@ class GeneratedUniffiCoreGatewaySmokeTest {
             GeneratedUniffiCoreGateway.open(database.absolutePath).close()
             seedDurableFixtureWork(database.absolutePath, jobId, mediaUrl, payload.size)
 
-            val scheduled = AndroidDownloadExecutionScheduler(context).schedule(
+            // This test proves the foreground-service compatibility path. Pin its
+            // scheduler API level so an API 34+ emulator does not silently switch
+            // the same fixture to UIDT JobScheduler coverage.
+            val scheduled = AndroidDownloadExecutionScheduler(context, sdkInt = 33).schedule(
                 DownloadScheduleRequest(
                     queueItemId = jobId,
                     estimatedDownloadBytes = payload.size.toLong(),

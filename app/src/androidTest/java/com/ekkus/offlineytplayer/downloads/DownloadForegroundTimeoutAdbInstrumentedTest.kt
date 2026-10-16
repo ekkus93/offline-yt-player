@@ -8,6 +8,7 @@ import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -23,13 +24,14 @@ import org.junit.runner.RunWith
  * API-35 tests for the timeout persistence store and a real shortened platform timeout callback.
  */
 @RunWith(AndroidJUnit4::class)
+@SdkSuppress(minSdkVersion = 35, maxSdkVersion = 35)
 class DownloadForegroundTimeoutAdbInstrumentedTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     @Before
     fun requireAndroid15AndClearState() {
-        assumeTrue("Android 15+ is required for Service.onTimeout foreground-service qualification", Build.VERSION.SDK_INT >= 35)
+        assumeTrue("This qualification is pinned to Android 15 / API 35", Build.VERSION.SDK_INT == 35)
         clearTimeoutState()
     }
 

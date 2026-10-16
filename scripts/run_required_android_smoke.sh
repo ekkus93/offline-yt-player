@@ -11,7 +11,9 @@ for required_class in \
     com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest \
     com.ekkus.offlineytplayer.Rmd1802SettingsObserverInstrumentedTest \
     com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest \
-    com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest \
+    com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest#activeTransferPausesForConnectivityAndWifiOnlyResumesOnlyOnUnmeteredNetwork \
+    com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest#secondScheduleIntentDispatchesWorkWithAlreadyRegisteredConnectivityObserver \
+    com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest#secondScheduleDuringActiveTransferDispatchesAfterFirstWorkerWithoutNewNetworkCallback \
     com.ekkus.offlineytplayer.downloads.Rmd1507NotificationControlInstrumentedTest \
     com.ekkus.offlineytplayer.ui.MainActivityStartupOrderingInstrumentedTest \
     com.ekkus.offlineytplayer.ui.Rmd1802DownloadsControlThreadingInstrumentedTest#throwingLibraryDetailsGatewayShowsUnavailableWithoutCrashingComposition \

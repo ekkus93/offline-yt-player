@@ -1,9 +1,13 @@
 package com.ekkus.offlineytplayer.downloads
 
+import android.Manifest
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
+import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.test.core.app.ApplicationProvider
@@ -32,6 +36,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -39,6 +44,21 @@ import org.junit.runner.RunWith
 class Rmd1506ConnectivityE2EInstrumentedTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val database = File(context.filesDir, DATABASE_NAME)
+
+    @Before
+    fun grantNotificationPermissionForServiceAssertions() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+
+        val permissionGrant = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}",
+        )
+        ParcelFileDescriptor.AutoCloseInputStream(permissionGrant).use { it.readBytes() }
+        assertTrue(
+            "service notification assertions require POST_NOTIFICATIONS on Android 13+",
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
     @After
     fun cleanRuntimeState() {
@@ -431,7 +451,9 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             seedDurableWork(firstJobId, firstServer.mediaUrl, firstPath, firstPayload.size)
             seedDurableWork(secondJobId, secondServer.mediaUrl, secondPath, secondPayload.size)
 
-            val scheduler = AndroidDownloadExecutionScheduler(context)
+            // This service ownership regression covers the legacy foreground path;
+            // UIDT scheduling is qualified separately on API 34+.
+            val scheduler = AndroidDownloadExecutionScheduler(context, sdkInt = 33)
             assertTrue(scheduler.schedule(DownloadScheduleRequest(firstJobId)).accepted)
             waitForState(firstJobId, CoreDownloadState.DOWNLOADING)
             assertEquals(1, registrations.get())
