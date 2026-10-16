@@ -93,9 +93,8 @@ recorded here instead of being replaced by new fake tests:
    verifier failed later in the workflow.
 3. ~~`FLAG_IMMUTABLE` on the download notification action PendingIntents.~~ The notification
    instrumentation checks the actual posted Pause/Resume/Cancel action PendingIntents.
-4. Timeout ordering is not proven through the production `Service.onTimeout` callback. `timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground` exercises the extracted helper but does not instantiate the Android service; the current API-35 workflow only calls the persistence store. Actual callback/device qualification remains open.
-5. `DownloadUserInitiatedJobService.onStartJob` returning `false` without `jobFinished` for a blank
-   queue id. `JobParameters` cannot be constructed outside the framework.
+4. ~~Timeout ordering through the production `Service.onTimeout` callback.~~ `DownloadForegroundTimeoutAdbInstrumentedTest.api35ShortenedTimeoutInvokesProductionServiceCallbackAndStopsCleanly` now starts the real service, triggers the shortened platform timeout, and observes persisted timeout state and service shutdown. It passed on API 35 in exact-candidate run `38872470298` and push run `38872462591` (candidate `aec4dcf32ee55ff12da428218dd072724aa6b93a1`). This proves the service callback executes and settles its lifecycle, but no active native download was running, so native-stop ordering during an active transfer remains unverified. These runs do not qualify later source changes or close RMD-1802/1803.
+5. ~~`DownloadUserInitiatedJobService.onStartJob` returning `false` without `jobFinished` for a blank queue id.~~ This is the documented `JobService` contract: returning `false` means the job is finished and JobScheduler releases its wakelock; `jobFinished` is for work where `onStartJob` returned `true`. See [Android `JobService.onStartJob`](https://developer.android.com/reference/android/app/job/JobService#onStartJob(android.app.job.JobParameters)). `DownloadUserInitiatedJobService` correctly returns `false` for a blank queue identity without calling `jobFinished`.
 6. ~~`MainActivity` running startup reconciliation before the first Library/Downloads reads.~~ Now
    covered by `MainActivityStartupOrderingInstrumentedTest` (fake core gateway via the debug-only
    `MainActivityDependencyOverrides.installCoreForInstrumentation` seam; asserts reconcile is first and
@@ -181,3 +180,19 @@ both pause and completion timeouts, increases the fixture to 24 MiB, and gives t
 to 180 seconds to finish. The candidate `0eee678482a8ca42ae592c6a30776419117b83a1` run
 `38869494052` still failed. The service's metered pause and resumed retry are now observed, but the
 full API-29 network-policy acceptance remains unresolved until a fresh run completes successfully.
+
+## 2026-10-16 review follow-up
+
+`MainActivityStartupOrderingInstrumentedTest` was present but not selected by the Android smoke
+workflow, so the existing test could not establish device-side behavioral evidence there. The class
+is now included in `scripts/run_required_android_smoke.sh`, and all three methods (successful,
+failed-result, and throwing startup reconciliation) are required by the result verifier. A local API
+36 run passed all three methods, and the result XML verifier confirmed each executed. Run the updated
+workflow on an exact candidate before treating this production-ordering test as CI-qualified.
+
+The same review removed detached main-source helpers and tests that only asserted their own
+defaults or inventories: unused UI settings/layout declarations, synthetic portrait/control budgets,
+security helpers with no production callers, and fixture/share/storage E2E step lists. Existing
+runtime paths remain covered by the Rust/core tests, actual connectivity and recovery integration,
+Compose behavior/layout tests, and packaged fixture/share/storage E2E instrumentation. The empty
+`DownloadSetupOptionsComposeTest` placeholder was removed; it had no executable test method.

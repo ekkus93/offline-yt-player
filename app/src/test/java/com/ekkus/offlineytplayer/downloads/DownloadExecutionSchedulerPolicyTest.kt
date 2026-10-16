@@ -154,7 +154,7 @@ class DownloadExecutionSchedulerPolicyTest {
     fun platformStopSignalsNativeOnceAndSuppressesLateJobSettlement() {
         var stopSignals = 0
         var settlements = 0
-        val attempt = UidtJobAttempt { stopSignals++ }
+        val attempt = UidtJobAttempt(onStopFailure = {}, stopNative = { stopSignals++ })
 
         assertTrue(attempt.stop())
         assertFalse(attempt.stop())
@@ -198,7 +198,7 @@ class DownloadExecutionSchedulerPolicyTest {
     fun completedAttemptCannotBeStoppedOrSettledAgain() {
         var stopSignals = 0
         var settlements = 0
-        val attempt = UidtJobAttempt { stopSignals++ }
+        val attempt = UidtJobAttempt(onStopFailure = {}, stopNative = { stopSignals++ })
 
         assertTrue(attempt.finishIfRunning { settlements++ })
         assertFalse(attempt.finishIfRunning { settlements++ })
@@ -209,8 +209,8 @@ class DownloadExecutionSchedulerPolicyTest {
 
     @Test
     fun replacementWaitsUntilPreviousNativeWriterHasExited() {
-        val previous = UidtJobAttempt()
-        val replacement = UidtJobAttempt()
+        val previous = UidtJobAttempt(onStopFailure = {}, stopNative = {})
+        val replacement = UidtJobAttempt(onStopFailure = {}, stopNative = {})
         val entered = CountDownLatch(1)
         val completed = CountDownLatch(1)
         val result = AtomicReference<Boolean>()
@@ -234,8 +234,8 @@ class DownloadExecutionSchedulerPolicyTest {
 
     @Test
     fun stoppedReplacementDoesNotBeginBeforePreviousNativeWriterExits() {
-        val previous = UidtJobAttempt()
-        val replacement = UidtJobAttempt()
+        val previous = UidtJobAttempt(onStopFailure = {}, stopNative = {})
+        val replacement = UidtJobAttempt(onStopFailure = {}, stopNative = {})
         val entered = CountDownLatch(1)
         val completed = CountDownLatch(1)
         val result = AtomicReference<Boolean>()
@@ -271,12 +271,12 @@ class DownloadExecutionSchedulerPolicyTest {
         val secondParams = Any()
         val stopEntered = CountDownLatch(1)
         val releaseStop = CountDownLatch(1)
-        val first = UidtJobAttempt {
+        val first = UidtJobAttempt(onStopFailure = {}, stopNative = {
             stopEntered.countDown()
             check(releaseStop.await(5, TimeUnit.SECONDS))
-        }
+        })
         var secondStops = 0
-        val second = UidtJobAttempt { secondStops++ }
+        val second = UidtJobAttempt(onStopFailure = {}, stopNative = { secondStops++ })
         registry.register(7301, firstParams, first)
         registry.register(7302, secondParams, second)
         val firstStopper = Thread { registry.stop(firstParams) }
@@ -314,7 +314,7 @@ class DownloadExecutionSchedulerPolicyTest {
         val stoppedParams = Any() // Android may unmarshal a distinct object.
         var stops = 0
         var settled = 0
-        val attempt = UidtJobAttempt { stops++ }
+        val attempt = UidtJobAttempt(onStopFailure = {}, stopNative = { stops++ })
         registry.register(7301, startParams, attempt, "durable-job")
 
         assertFalse(registry.stop(stoppedParams, 7301, "another-job"))
@@ -336,8 +336,8 @@ class DownloadExecutionSchedulerPolicyTest {
         val recreatedOldStop = Any()
         var oldStops = 0
         var replacementStops = 0
-        val old = UidtJobAttempt { oldStops++ }
-        val replacement = UidtJobAttempt { replacementStops++ }
+        val old = UidtJobAttempt(onStopFailure = {}, stopNative = { oldStops++ })
+        val replacement = UidtJobAttempt(onStopFailure = {}, stopNative = { replacementStops++ })
 
         registry.register(7301, originalParams, old, "same-durable-job")
         assertEquals(
@@ -377,8 +377,8 @@ class DownloadExecutionSchedulerPolicyTest {
         val newParams = Any()
         var oldStops = 0
         var newStops = 0
-        val old = UidtJobAttempt { oldStops++ }
-        val replacement = UidtJobAttempt { newStops++ }
+        val old = UidtJobAttempt(onStopFailure = {}, stopNative = { oldStops++ })
+        val replacement = UidtJobAttempt(onStopFailure = {}, stopNative = { newStops++ })
 
         assertNull(registry.register(7301, oldParams, old))
         assertEquals(old, registry.register(7301, newParams, replacement))
@@ -398,7 +398,7 @@ class DownloadExecutionSchedulerPolicyTest {
         val params = Any()
         val unrelated = Any()
         var stopSignals = 0
-        val attempt = UidtJobAttempt { stopSignals++ }
+        val attempt = UidtJobAttempt(onStopFailure = {}, stopNative = { stopSignals++ })
         registry.register(7302, params, attempt)
         assertFalse(registry.stop(unrelated))
         assertEquals(0, stopSignals)

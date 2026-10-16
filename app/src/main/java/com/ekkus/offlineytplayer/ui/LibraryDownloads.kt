@@ -90,11 +90,6 @@ internal sealed class DownloadsScreenState {
     data class Unavailable(val reason: String) : DownloadsScreenState()
     data class Failed(val message: String) : DownloadsScreenState()
 }
-internal object CollectionLayoutPolicy {
-    const val LibraryFixedControlRows = 2
-    const val DownloadFixedControlRows = 1
-    const val MinimumActionHeightDp = 48
-}
 internal object LibraryPlaybackRoute {
     fun assetFor(row: LibraryRowModel): LocalPlaybackAsset? = playbackAssetCandidate(row)?.let { candidate ->
         runCatching { LocalPlaybackPolicy.validate(candidate) }.getOrNull()

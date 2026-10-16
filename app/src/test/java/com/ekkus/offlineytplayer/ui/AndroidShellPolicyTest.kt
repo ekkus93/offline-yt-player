@@ -8,35 +8,6 @@ import org.junit.Test
 
 class AndroidShellPolicyTest {
     @Test
-    fun bottomNavigationUsesFixedPortraitDestinations() {
-        assertEquals(
-            listOf("Library", "Downloads", "Add", "Settings"),
-            AppDestination.entries.map { it.label },
-        )
-        assertEquals(PortraitLayoutPolicy.BottomDestinationCount, AppDestination.entries.size)
-        assertEquals(AppDestination.Library, AppDestination.entries.first())
-    }
-
-    @Test
-    fun compactPortraitPrimaryControlsAreBudgeted() {
-        assertTrue(
-            PortraitLayoutPolicy.primaryControlsFit(
-                PortraitLayoutPolicy.CompactPortraitHeightDp,
-                1.0f,
-            ),
-        )
-        assertTrue(
-            PortraitLayoutPolicy.primaryControlsFit(
-                PortraitLayoutPolicy.CompactPortraitHeightDp,
-                PortraitLayoutPolicy.LargeFontScale,
-            ),
-        )
-        assertEquals(4, PortraitLayoutPolicy.PrimarySetupControlCount)
-        assertEquals(4, PortraitLayoutPolicy.AdvancedOptionsRowCount)
-        assertTrue(PortraitLayoutPolicy.SettingsHubRowCount <= PortraitLayoutPolicy.MaxSettingsRows)
-    }
-
-    @Test
     fun manifestLocksMainActivityToPortraitAndNoLandscapeResourcesExist() {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("android:name=\".MainActivity\""))

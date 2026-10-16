@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicReference
  * most once; the native worker performs durable retryable settlement.
  */
 internal class ForegroundWorkerOwnership(
-    private val onStopFailure: () -> Unit = {},
+    private val onStopFailure: () -> Unit,
 ) {
     private val stopped = AtomicBoolean(false)
     private val activeStop = AtomicReference<(() -> Unit)?>(null)

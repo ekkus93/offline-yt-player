@@ -78,7 +78,7 @@ class DownloadForegroundTimeoutInstrumentedTest {
     fun timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground() {
         preferences.edit().clear().commit()
         val events = mutableListOf<String>()
-        val ownership = ForegroundWorkerOwnership()
+        val ownership = ForegroundWorkerOwnership(onStopFailure = {})
         assertTrue(ownership.tryBegin { events += "native-stop-signal" })
 
         DownloadForegroundTimeoutSequence.run(

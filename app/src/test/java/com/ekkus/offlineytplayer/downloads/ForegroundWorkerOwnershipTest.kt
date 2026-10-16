@@ -11,7 +11,7 @@ import org.junit.Test
 class ForegroundWorkerOwnershipTest {
     @Test
     fun timeoutStopsActiveNativeWriterExactlyOnceAndRejectsNewWork() {
-        val owner = ForegroundWorkerOwnership()
+        val owner = ForegroundWorkerOwnership(onStopFailure = {})
         val stops = AtomicInteger()
         val callback: () -> Unit = { stops.incrementAndGet() }
         assertTrue(owner.tryBegin(callback))
@@ -47,7 +47,7 @@ class ForegroundWorkerOwnershipTest {
     @Test
     fun throwingStopDuringBeginStopRaceIsContainedAndAtMostOnce() {
         repeat(100) {
-            val owner = ForegroundWorkerOwnership()
+            val owner = ForegroundWorkerOwnership(onStopFailure = {})
             val start = CountDownLatch(1)
             val done = CountDownLatch(2)
             val signals = AtomicInteger()
@@ -90,7 +90,7 @@ class ForegroundWorkerOwnershipTest {
 
     @Test
     fun stopBeforeLaunchCannotStartNativeWriter() {
-        val owner = ForegroundWorkerOwnership()
+        val owner = ForegroundWorkerOwnership(onStopFailure = {})
         val stops = AtomicInteger()
         owner.stop()
         assertFalse(owner.tryBegin { stops.incrementAndGet() })
@@ -99,7 +99,7 @@ class ForegroundWorkerOwnershipTest {
 
     @Test
     fun completedWriterIsNotStoppedAndSecondWriterCannotOverlap() {
-        val owner = ForegroundWorkerOwnership()
+        val owner = ForegroundWorkerOwnership(onStopFailure = {})
         val firstStops = AtomicInteger()
         val secondStops = AtomicInteger()
         val first: () -> Unit = { firstStops.incrementAndGet() }
@@ -117,7 +117,7 @@ class ForegroundWorkerOwnershipTest {
     @Test
     fun concurrentTimeoutAndNativeLaunchSignalAtMostOnce() {
         repeat(200) {
-            val owner = ForegroundWorkerOwnership()
+            val owner = ForegroundWorkerOwnership(onStopFailure = {})
             val start = CountDownLatch(1)
             val done = CountDownLatch(2)
             val stops = AtomicInteger()
