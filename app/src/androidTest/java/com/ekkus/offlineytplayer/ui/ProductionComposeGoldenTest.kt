@@ -290,10 +290,10 @@ class ProductionComposeGoldenTest {
             "downloads_active" to setOf("6724d5eef99d0d639c7dbe5812a4dd744757be9cd4b3d73f8b1d85da0b874b02"),
             "downloads_failure" to setOf("6c4cbb55f97ef254429332d5ed31397c777debcc789a8840bfc7ae40d023a89a"),
             "player" to setOf("bf3575836add842e2d9dae445c77c1194a6247ff26f9adac3a7851c3bd353f77", "9d29c633509966b60823cde060d681cb3dbd7b9849607c5576bb7879797b0ed2", "ac97f999b0b98dac7c76d0098a8c509bb80c5149a6c9a98b3882fa663c2e5f6e"),
-            "settings_hub" to setOf("907224d90bc0a87418bed06661427bc4dfc6aa9871a64348fc03ba238fac0052"),
+            "settings_hub" to setOf("67419aab65dd201a5a81a9740caa4c4f1b91be650d096b09e79bbefb511f2420"),
             "smallest_portrait" to setOf("54e27dfa0c00e4ee672d13ac7d80193512406be63a0a015ac1a44fce66fc8498", "f3876b9b72dc46b778566181a603204a26ac8e214e51607fec46854532df5028", "1817f041f023f67d485e86cd47d431701f5438d66589c8344f49509a97869218"),
             "large_font_library" to setOf("307936d82d0b4bd812638249cb888112437355f73852c697a6c1cba2487a9838", "3ac570d0d5c821bb915930ade85901f3786a377264737c7cbae1108b28bd0288", "7ab4b6e7b6dd646d1f4b1879345ce71c57dca92349ffcf6b6a3ae1edea9c76f8"),
-            "large_font_settings" to setOf("4c6185c13f3576d592a4dac8934b750c360cfa9c6e0e1b4181cac96423115611"),
+            "large_font_settings" to setOf("ff51e69e5f07c165ede55813fb04a479dcb00e184638a0f236afe27ec0bb2743"),
         )
     }
 }
