@@ -9,14 +9,14 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ## Global completion rules
 
-- [ ] **RMD-G01 — No checkbox-by-assertion.** A capability is not complete merely because a policy constant, enum, boolean, source string, or TODO entry says it exists.
-- [ ] **RMD-G02 — Production-path proof.** Every user-facing capability must have working production wiring plus behavioral test/evidence.
-- [ ] **RMD-G03 — Preserve detailed state.** Do not replace this file with a compressed all-checked summary. A separate summary may be added later.
-- [ ] **RMD-G04 — Exact-head evidence.** Every milestone merge records the exact implementation SHA and relevant CI run(s).
-- [ ] **RMD-G05 — No empty production actions.** No production button/action callback required by v1 may remain `onClick = {}` or equivalent no-op.
-- [ ] **RMD-G06 — No fabricated production data.** Preview/test fixture data must not be used as production resolved metadata or repository state.
-- [ ] **RMD-G07 — Fix newly discovered blockers.** Any new correctness/security/platform bug discovered while implementing this TODO is added here or to a linked follow-up before the affected milestone is closed.
-- [ ] **RMD-G08 — External release gate remains separate.** Engineering work must not mark the human YouTube/service-policy/legal gate approved.
+- [x] **RMD-G01 — No checkbox-by-assertion.** A capability is not complete merely because a policy constant, enum, boolean, source string, or TODO entry says it exists.
+- [ ] **RMD-G02 — Production-path proof.** Every user-facing capability must have working production wiring plus behavioral test/evidence. (Live YouTube resolution remains unqualified pending RMD-304.)
+- [x] **RMD-G03 — Preserve detailed state.** Do not replace this file with a compressed all-checked summary. A separate summary may be added later.
+- [x] **RMD-G04 — Exact-head evidence.** Every milestone merge records the exact implementation SHA and relevant CI run(s).
+- [x] **RMD-G05 — No empty production actions.** No production button/action callback required by v1 may remain `onClick = {}` or equivalent no-op.
+- [x] **RMD-G06 — No fabricated production data.** Preview/test fixture data must not be used as production resolved metadata or repository state.
+- [x] **RMD-G07 — Fix newly discovered blockers.** Any new correctness/security/platform bug discovered while implementing this TODO is added here or to a linked follow-up before the affected milestone is closed.
+- [x] **RMD-G08 — External release gate remains separate.** Engineering work must not mark the human YouTube/service-policy/legal gate approved.
 
 ---
 
@@ -185,10 +185,11 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Add an opt-in/manual or appropriately isolated live-source smoke path that is not required to leak secrets into CI.
 - [x] Document its policy/legal prerequisites.
 - [x] Record expected failure behavior when provider structure changes.
+- [ ] Run the isolated smoke against a user-authorized public YouTube video ID and record the exact SHA and workflow run. Requires the release owner to confirm the test input is authorized and the service-policy/legal prerequisites have been reviewed.
 
 **Acceptance:** OYP-703 can only be considered repaired when the production registry can resolve a supported real URL; fixture-only resolution is insufficient.
 
-**Evidence (RMD-300):** RMD-301 through RMD-304 are implemented and qualified. RMD-303 deterministic production-adapter coverage is in `core/tests/fixtures/youtube/` and `core/src/youtube_source.rs`: bounded sanitized combined-A/V, split-A/V, unavailable/private/source-change, malformed, and oversized cases exercise metadata, formats, subtitles, fail-closed provider status, malformed extraction, and provider response-size enforcement. PR #367 merged as exact master `2dfc302b9073775f801d229dcfa663542eb72f3c`; post-merge CI `36077221939`, Android smoke `36077221904`, and API-35 FGS timeout `36077221881` all passed on that exact SHA. Live-provider proof remains isolated under RMD-304. Production registration and provider isolation are in `core/src/source.rs::SourceRegistry::production`, `core/src/youtube.rs`, `core/src/youtube_source.rs`, and `core/src/youtube_extract.rs`; Android consumes provider-neutral source results through `GeneratedUniffiSourceAnalysisGateway`. The production adapter resolves canonical source identity, bounded title/duration/thumbnail metadata, stream formats, provider-neutral download plans, and subtitles with bounded response/URL/metadata policies and structured diagnostics. Controlled live qualification is the ignored/manual `live_youtube_resolves_real_metadata_and_formats` test using only validated `OYP_LIVE_YOUTUBE_VIDEO_ID`; `docs/YOUTUBE_LIVE_QUALIFICATION.md` and `docs/YOUTUBE_POLICY_RELEASE_GATE.md` keep the policy/legal prerequisites explicit and the external release gate unresolved. Supporting reconciliation is `docs/RMD_300_YOUTUBE_SOURCE_RECONCILIATION_2026-09-20.md`, which records exact master `0f5efc619ec8c700dedeb897ab9bb659466804a3` passing CI `35507540263`. The same production code is present on later exact master `601654bf7bf063f014bb8ba5fe7fa368a77a00be`, which passed CI `36060145525`, Android smoke `36060145407`, and API-35 FGS timeout `36060145427`. RMD-300 acceptance is now satisfied by production registration plus deterministic provider fixtures and isolated live-source qualification.
+**Evidence (RMD-300):** RMD-301 through RMD-304 have production implementation and deterministic fixture coverage. RMD-303 tests in `core/tests/fixtures/youtube/` and `core/src/youtube_source.rs` cover bounded sanitized combined-A/V, split-A/V, unavailable/private/source-change, malformed, and oversized provider responses, including metadata, formats, subtitles, fail-closed provider status, and response-size enforcement. Production registration and provider isolation are in `core/src/source.rs::SourceRegistry::production`, `core/src/youtube.rs`, `core/src/youtube_source.rs`, and `core/src/youtube_extract.rs`; Android consumes provider-neutral source results through `GeneratedUniffiSourceAnalysisGateway`. The production adapter implements canonical source identity, bounded title/duration/thumbnail metadata, stream formats, provider-neutral download plans, subtitles, and structured diagnostics. Controlled live qualification is the ignored/manual `live_youtube_resolves_real_metadata_and_formats` test using only validated `OYP_LIVE_YOUTUBE_VIDEO_ID`; `docs/YOUTUBE_LIVE_QUALIFICATION.md` and `docs/YOUTUBE_POLICY_RELEASE_GATE.md` document its prerequisites and the separate, unapproved release gate. Historical deterministic qualification is recorded by PR #367 and `docs/RMD_300_YOUTUBE_SOURCE_RECONCILIATION_2026-09-20.md`. **The live test path has not been run:** RMD-300 acceptance remains open until the new RMD-304 run task completes with a user-authorized video ID; fixture-only success is not treated as real-source proof.
 
 ---
 
@@ -1048,10 +1049,12 @@ This checklist repairs the implementation and qualification gaps found during th
 
 ### RMD-1801 — Detailed TODO reconciliation
 
-- [ ] Review every RMD task and subtask against current `master` code.
-- [ ] For each completed milestone, cite implementation paths and behavioral tests.
+- [x] Review every RMD task and subtask against current `master` code.
+- [x] For each completed milestone, cite implementation paths and behavioral tests.
 - [ ] Confirm zero unchecked engineering subtasks except explicitly external release approval, which must not be represented as engineering-complete approval.
-- [ ] Do not collapse this TODO.
+- [x] Do not collapse this TODO.
+
+**RMD-1801 reconciliation (2026-10-16):** Reviewed the complete RMD-000 through RMD-1706 checklist against current master `cd624c4c411c476157fbab42a0cdf7c390c6657a`. All existing subtasks in those sections remain checked and their 49 milestone evidence entries cite production implementation paths and behavioral tests or exact-head workflow results. RMD-300 is the one newly explicit engineering qualification gap: the opt-in live YouTube test exists but has not been run against an authorized real video ID, so RMD-300 acceptance and the zero-unchecked-engineering-subtasks condition remain open. The implementation and full exact-head test evidence are in this TODO and [`RMD_1803_EXACT_HEAD_CLOSEOUT_AUDIT_2026-10-16.md`](RMD_1803_EXACT_HEAD_CLOSEOUT_AUDIT_2026-10-16.md); post-merge verification is in [`RMD_1804_POST_MERGE_QUALIFICATION_2026-10-16.md`](RMD_1804_POST_MERGE_QUALIFICATION_2026-10-16.md).
 
 ### RMD-1802 — Code review after remediation
 
@@ -1306,38 +1309,40 @@ This checklist repairs the implementation and qualification gaps found during th
 ### RMD-1804 — Merge and post-merge verification
 
 
-- [ ] Merge only the qualified exact head through the configured repository policy.
-- [ ] Reload this TODO from current `master` after merge.
-- [ ] Verify the merge contains the qualified implementation.
-- [ ] Run/observe required `master` CI.
-- [ ] Record final `master` SHA and run IDs.
+- [x] Merge only the qualified exact head through the configured repository policy.
+- [x] Reload this TODO from current `master` after merge.
+- [x] Verify the merge contains the qualified implementation.
+- [x] Run/observe required `master` CI.
+- [x] Record final `master` SHA and run IDs in [`RMD_1804_POST_MERGE_QUALIFICATION_2026-10-16.md`](RMD_1804_POST_MERGE_QUALIFICATION_2026-10-16.md).
+
+**RMD-1804 evidence (2026-10-16):** Qualified implementation PR #392 merged by the configured merge-commit policy as `305c823dd8d14055cf87337fc954f45f21d4f0f2`; the smoke timeout follow-up PR #393 merged as `cd624c4c411c476157fbab42a0cdf7c390c6657a`. The TODO was reloaded from master after each merge. Every required workflow passed on final master `cd624c4`, including the API-29 smoke rerun after a transient Maven download failure. Complete run IDs and the retry history are in the linked post-merge qualification record.
 
 
 ### RMD-1805 — Engineering definition of done
 
 All items below must be true before engineering closeout:
 
-- [ ] Android APK packages and calls the Rust core.
-- [ ] Production source adapter resolves supported YouTube input.
-- [ ] Add and Share flows use real resolution.
-- [ ] Download Setup schedules real work.
-- [ ] Durable queue drives Downloads UI and runtime.
-- [ ] Pause/resume/cancel/retry are operational from UI and notification where applicable.
-- [ ] Network policy is operational.
+- [x] Android APK packages and calls the Rust core.
+- [ ] Production source adapter resolves supported YouTube input. (Live qualification is pending the RMD-304 user-authorized test input.)
+- [x] Add and Share flows use real resolution.
+- [x] Download Setup schedules real work.
+- [x] Durable queue drives Downloads UI and runtime.
+- [x] Pause/resume/cancel/retry are operational from UI and notification where applicable.
+- [x] Network policy is operational.
 
-- [ ] Reboot/process-death recovery is platform-compliant.
-- [ ] Library uses real persisted state and all item actions work.
-- [ ] Thumbnail/subtitle/metadata assets work offline as specified.
-- [ ] One MediaSession-owned player powers both UI and system controls.
-- [ ] Split A/V works offline.
-- [ ] Playback position persists/resumes correctly.
-- [ ] Settings are durable and affect runtime.
-- [ ] Retry/I/O/deletion/hash/redaction/quality-ranking review defects are fixed.
-- [ ] Real Android instrumentation, accessibility/layout, goldens, and E2E tests exist and pass.
-- [ ] Documentation matches reality.
-- [ ] Exact-head and post-merge CI evidence is recorded.
-- [ ] Detailed TODO remains preserved.
-- [ ] External policy/legal release approval is still treated as a separate gate.
+- [x] Reboot/process-death recovery is platform-compliant.
+- [x] Library uses real persisted state and all item actions work.
+- [x] Thumbnail/subtitle/metadata assets work offline as specified.
+- [x] One MediaSession-owned player powers both UI and system controls.
+- [x] Split A/V works offline.
+- [x] Playback position persists/resumes correctly.
+- [x] Settings are durable and affect runtime.
+- [x] Retry/I/O/deletion/hash/redaction/quality-ranking review defects are fixed.
+- [x] Real Android instrumentation, accessibility/layout, goldens, and E2E tests exist and pass.
+- [x] Documentation matches reality.
+- [x] Exact-head and post-merge CI evidence is recorded.
+- [x] Detailed TODO remains preserved.
+- [x] External policy/legal release approval is still treated as a separate gate.
 
 ---
 
