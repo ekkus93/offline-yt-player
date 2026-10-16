@@ -171,8 +171,11 @@ passed the actual Pause/Resume/Cancel sequence.
 
 The same candidate's API 29 real-network run passed airplane-mode loss/pause/resume, then failed the
 follow-up Wi-Fi metered override: the independent observer reported `Metered`, but durable queue
-state stayed `DOWNLOADING` at 8,015,872 of 8,388,608 bytes. The Android test now captures the
-foreground service observer's callback sequence, fixture server request/byte counts, and partial/final
-asset lengths on that failure, and increases the fixture to 24 MiB to avoid a completion race. These
-are diagnostic/test robustness changes; the actual service callback behavior remains unresolved
-until a fresh API 29 real-network run passes or identifies a production fix.
+state stayed `DOWNLOADING` at 8,015,872 of 8,388,608 bytes. On the next candidate, the metered
+transition did settle the queue to `PAUSED`, but after restoring unmetered Wi-Fi the resumed attempt
+timed out at 24,104,960 of 25,165,824 bytes. The Android test now captures the foreground service
+observer's callback sequence, fixture server request/byte counts, and partial/final asset lengths on
+both pause and completion timeouts, increases the fixture to 24 MiB, and gives the slow emulator up
+to 180 seconds to finish. The candidate `0eee678482a8ca42ae592c6a30776419117b83a1` run
+`38869494052` still failed. The service's metered pause and resumed retry are now observed, but the
+full API-29 network-policy acceptance remains unresolved until a fresh run completes successfully.

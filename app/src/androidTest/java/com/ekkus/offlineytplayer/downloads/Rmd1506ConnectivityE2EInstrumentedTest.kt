@@ -240,7 +240,13 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 DownloadConnectivity.Unmetered,
                 network.get(),
             )
-            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L)
+            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 180_000L) {
+                "testNetwork=${network.get()} " +
+                    "serviceCallbacks=${serviceNetworkCallbacks.joinToString()} " +
+                    "requests=${server.requestCount.get()} bytesSent=${server.bytesSent.get()} " +
+                    "partial=${if (partial.isFile) partial.length() else 0L} " +
+                    "final=${if (finished.isFile) finished.length() else 0L}"
+            }
             assertArrayEquals(payload, finished.readBytes())
             assertFalse("completed Wi-Fi-only download must remove partial", partial.exists())
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
