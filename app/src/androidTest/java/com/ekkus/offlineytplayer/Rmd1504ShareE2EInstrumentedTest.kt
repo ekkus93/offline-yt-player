@@ -139,9 +139,25 @@ class Rmd1504ShareE2EInstrumentedTest {
             compose.onNodeWithText("Download").performClick()
 
             // A transient scheduling message can disappear before Compose polling
-            // observes it. Verify the actual scheduler/worker contract instead:
-            // the fixture server must receive the real transfer request, and
-            // durable Library completion is asserted below.
+            // observes it, but the final result is stable. Observe that result
+            // before waiting on the fixture socket so a rejected schedule is
+            // distinguishable from a worker that never begins the transfer.
+            compose.waitUntil(30_000) {
+                listOf(
+                    "Download scheduled for Fixture 720p",
+                    "Download scheduler is unavailable.",
+                    "Download was not queued.",
+                ).any { message ->
+                    runCatching {
+                        compose.onNodeWithText(message, substring = true).assertIsDisplayed()
+                    }.isSuccess
+                }
+            }
+            compose.onNodeWithText("Download scheduled for Fixture 720p", substring = true).assertIsDisplayed()
+
+            // A successful scheduler result is not enough: the actual worker
+            // must issue the fixture request and persist the completed Library
+            // record below.
             server.joinAndRethrow()
 
             // The fixture socket closing is not a durable completion signal:
