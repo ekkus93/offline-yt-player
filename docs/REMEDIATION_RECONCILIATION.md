@@ -67,4 +67,4 @@ Do not delete older audits merely because they were misleading. Keep them availa
 
 ## Remaining closeout boundary
 
-This supersession document does not perform final reconciliation. RMD-1801 through RMD-1805 still require a complete review of every detailed checkbox, a post-remediation code review, exact-head full qualification, post-merge verification, and preservation of the detailed TODO.
+This historical supersession document does not itself perform final reconciliation. The 2026-10-16 closeout review, independent production-path review, exact-head matrix, and post-merge CI are recorded in the detailed TODO and [`RMD_1804_POST_MERGE_QUALIFICATION_2026-10-16.md`](RMD_1804_POST_MERGE_QUALIFICATION_2026-10-16.md). Engineering closeout remains open only for the isolated live YouTube qualification, which needs a user-authorized public video ID, and the separate human service-policy/legal release approval. Neither gate is treated as passed by the completed engineering matrix.
