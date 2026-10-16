@@ -3,12 +3,13 @@ package com.ekkus.offlineytplayer
 import android.content.pm.PackageManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.ServerSocket
-import java.net.URL
+import java.net.Socket
+import java.net.SocketException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -32,41 +33,38 @@ class NetworkCapabilityInstrumentedTest {
     }
 
     @Test
-    fun packagedAppCanReadDeterministicLoopbackHttpFixture() {
-        val server = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+    fun packagedAppCanReadDeterministicLoopbackSocketFixture() {
+        val loopbackAddress = InetAddress.getByName("127.0.0.1")
+        val server = ServerSocket(0, 1, loopbackAddress)
         val served = CountDownLatch(1)
         val fixtureBody = "offline-yt-player-network-fixture"
+        val receivedProbe = AtomicReference<String>()
         val serverThread = thread(name = "network-fixture", isDaemon = true) {
-            server.use { socket ->
-                socket.accept().use { client ->
-                    val reader = client.getInputStream().bufferedReader()
-                    reader.readLine()
-                    while (!reader.readLine().isNullOrEmpty()) {
-                        // Consume the bounded HTTP request headers before responding.
-                    }
-                    val bodyBytes = fixtureBody.toByteArray(Charsets.UTF_8)
-                    client.getOutputStream().bufferedWriter().use { writer ->
-                        writer.write("HTTP/1.1 200 OK\r\n")
-                        writer.write("Content-Type: text/plain; charset=utf-8\r\n")
-                        writer.write("Content-Length: ${bodyBytes.size}\r\n")
-                        writer.write("Connection: close\r\n\r\n")
-                        writer.write(fixtureBody)
-                    }
+            try {
+                server.accept().use { client ->
+                    receivedProbe.set(client.getInputStream().bufferedReader().readText())
+                    client.getOutputStream().write(fixtureBody.toByteArray(Charsets.UTF_8))
+                    client.getOutputStream().flush()
                     served.countDown()
                 }
+            } catch (closedDuringCleanup: SocketException) {
+                if (!server.isClosed) throw closedDuringCleanup
+            } finally {
+                server.close()
             }
         }
 
-        val connection = URL("http://127.0.0.1:${server.localPort}/fixture").openConnection() as HttpURLConnection
-        connection.connectTimeout = 2_000
-        connection.readTimeout = 2_000
-        connection.useCaches = false
         try {
-            assertEquals(200, connection.responseCode)
-            assertEquals(fixtureBody, connection.inputStream.bufferedReader().use { it.readText() })
+            val response = Socket(loopbackAddress, server.localPort).use { client ->
+                client.soTimeout = 2_000
+                client.getOutputStream().write("network-capability-probe".toByteArray(Charsets.UTF_8))
+                client.shutdownOutput()
+                client.getInputStream().bufferedReader().use { it.readText() }
+            }
+            assertEquals(fixtureBody, response)
             assertTrue("Fixture server did not complete", served.await(2, TimeUnit.SECONDS))
+            assertEquals("network-capability-probe", receivedProbe.get())
         } finally {
-            connection.disconnect()
             server.close()
             serverThread.join(2_000)
         }

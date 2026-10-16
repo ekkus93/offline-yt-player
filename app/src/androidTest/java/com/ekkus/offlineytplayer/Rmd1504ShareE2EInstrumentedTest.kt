@@ -1,9 +1,12 @@
 package com.ekkus.offlineytplayer
 
+import android.Manifest
+import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.app.NotificationManager
+import android.content.pm.PackageManager
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.database.sqlite.SQLiteDatabase
 import androidx.compose.ui.test.assertIsDisplayed
@@ -49,6 +52,7 @@ class Rmd1504ShareE2EInstrumentedTest {
 
     @Before
     fun cleanBefore() {
+        grantNotificationPermissionForTest()
         MainActivityDependencyOverrides.clearForInstrumentation()
         stopFixtureService()
         deleteRuntimeState()
@@ -190,6 +194,20 @@ class Rmd1504ShareE2EInstrumentedTest {
         assertTrue(
             "foreground worker must stop before fixture database cleanup",
             notifications.activeNotifications.none { it.id == DownloadServicePolicy.NotificationId },
+        )
+    }
+
+    private fun grantNotificationPermissionForTest() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+
+        val permissionGrant = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}",
+        )
+        ParcelFileDescriptor.AutoCloseInputStream(permissionGrant).use { it.readBytes() }
+        assertTrue(
+            "the ACTION_SEND fixture needs notification permission to avoid blocking its launched Activity",
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
         )
     }
 
