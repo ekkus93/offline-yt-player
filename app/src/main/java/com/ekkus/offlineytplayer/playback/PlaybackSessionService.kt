@@ -27,6 +27,7 @@ class PlaybackSessionService : MediaSessionService() {
                 setHandleAudioBecomingNoisy(true)
             }
         mediaSession = MediaSession.Builder(this, player).build()
+        playerCreationObserver?.invoke(player)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
@@ -46,6 +47,10 @@ class PlaybackSessionService : MediaSessionService() {
         /** Test seam: null in production. Notified from [onDestroy] after each real release call. */
         @Volatile
         internal var teardownObserver: PlaybackSessionTeardownObserver? = null
+
+        /** Test seam: null in production. Exposes the configured runtime player to instrumentation. */
+        @Volatile
+        internal var playerCreationObserver: ((ExoPlayer) -> Unit)? = null
     }
 }
 

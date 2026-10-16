@@ -21,6 +21,7 @@ import java.net.SocketTimeoutException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.After
@@ -120,7 +121,11 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 "adb must restore a real Android default network",
                 observedNetwork.get() != DownloadConnectivity.None,
             )
-            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L)
+            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L) {
+                "partial=${partial.length()} final=${finished.length()} " +
+                    "fixtureRequests=${server.requestCount.get()} fixtureBytes=${server.bytesSent.get()} " +
+                    "observedNetwork=${observedNetwork.get()}"
+            }
             assertEquals(payload.size.toLong(), finished.length())
             assertArrayEquals(payload, finished.readBytes())
             assertFalse("resume must remove partial bytes after promotion", partial.exists())
@@ -534,9 +539,14 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         jobId: String,
         expected: CoreDownloadState,
         timeoutMs: Long = 30_000L,
+        diagnostics: () -> String = { "" },
     ) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var last: CoreDownloadState? = null
+        var lastBytesDownloaded = 0L
+        var lastTotalBytes: Long? = null
+        var lastAttempt = 0
+        var lastErrorKind: String? = null
         // Keep one reader open while the worker updates the durable SQLite queue.
         // Reopening the Rust service for every 50-ms poll reruns schema initialization.
         GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
@@ -545,17 +555,25 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 assertNull(queue.error)
                 val snapshot = queue.value?.firstOrNull { it.jobId == jobId }
                 last = snapshot?.state
+                lastBytesDownloaded = snapshot?.bytesDownloaded ?: 0L
+                lastTotalBytes = snapshot?.totalBytes
+                lastAttempt = snapshot?.attempt ?: 0
+                lastErrorKind = snapshot?.lastError?.kind
                 if (last == expected) return
                 if (last == CoreDownloadState.FAILED || last == CoreDownloadState.CANCELED) {
                     throw AssertionError(
                         "job $jobId entered terminal state $last while waiting for $expected; " +
-                            "lastError=${snapshot?.lastError}",
+                            "lastErrorKind=$lastErrorKind",
                     )
                 }
                 SystemClock.sleep(50)
             }
         }
-        throw AssertionError("timed out waiting for $expected; last=$last")
+        throw AssertionError(
+            "timed out waiting for $expected; last=$last bytes=$lastBytesDownloaded/" +
+                "${lastTotalBytes ?: "unknown"} attempt=$lastAttempt lastErrorKind=$lastErrorKind " +
+                diagnostics(),
+        )
     }
 
     private fun deleteRuntimeState() {
@@ -569,6 +587,8 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
     private class SlowRangeFixtureServer(private val body: ByteArray) : AutoCloseable {
         private val stopping = AtomicBoolean(false)
         private val failure = AtomicReference<Throwable?>()
+        val requestCount = AtomicInteger(0)
+        val bytesSent = AtomicLong(0L)
         private val server = ServerSocket(0, 4, InetAddress.getByName("127.0.0.1")).apply {
             soTimeout = 500
         }
@@ -589,6 +609,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
 
                                 val input = socket.getInputStream().bufferedReader(StandardCharsets.US_ASCII)
                                 val requestLine = input.readLine() ?: return@use
+                                requestCount.incrementAndGet()
                                 val headers = mutableMapOf<String, String>()
                                 while (true) {
                                     val line = input.readLine() ?: break
@@ -630,6 +651,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                                     try {
                                         output.write(responseBody, offset, end - offset)
                                         output.flush()
+                                        bytesSent.addAndGet((end - offset).toLong())
                                     } catch (_: SocketException) {
                                         break
                                     }

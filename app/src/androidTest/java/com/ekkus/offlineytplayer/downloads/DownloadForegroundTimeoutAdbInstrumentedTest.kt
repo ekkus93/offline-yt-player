@@ -14,14 +14,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * API-35 qualification for the retained dataSync foreground-service timeout path.
+ * API-35 contract check for the timeout persistence store and retained service declaration.
  *
- * The emulator shell timeout trigger is not deterministic in CI: shell-launched foreground services
- * can remain exempt from the shortened dataSync timeout even after the target UID is idled. This
- * lane therefore keeps the API-35 device/runtime gate but qualifies the production pieces that must
- * remain true for Android 15 timeout handling: the packaged app retains exactly the dataSync service
- * declaration, the production timeout persistence path records start id/type/count before cleanup,
- * and the test executes on an Android 15+ runtime.
+ * This test does not start DownloadForegroundService or invoke Service.onTimeout. The actual
+ * shortened-timeout callback remains an open qualification item in the remediation TODO.
  */
 @RunWith(AndroidJUnit4::class)
 class DownloadForegroundTimeoutAdbInstrumentedTest {
@@ -40,7 +36,7 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
     }
 
     @Test
-    fun api35RuntimeQualifiesDataSyncTimeoutPersistenceContract() {
+    fun api35RuntimeChecksTimeoutStorePersistenceContract() {
         val packageInfo = context.packageManager.getPackageInfo(
             context.packageName,
             PackageManager.GET_SERVICES,
@@ -61,17 +57,17 @@ class DownloadForegroundTimeoutAdbInstrumentedTest {
         )
 
         assertEquals(
-            "onTimeout should persist the timed-out start id before stopping",
+            "timeout store should persist the start id synchronously",
             35,
             preferences.getInt(LAST_START_ID_KEY, -1),
         )
         assertEquals(
-            "onTimeout should persist the timed-out foreground-service type before stopping",
+            "timeout store should persist the foreground-service type synchronously",
             service.foregroundServiceType,
             preferences.getInt(LAST_FOREGROUND_SERVICE_TYPE_KEY, -1),
         )
         assertEquals(
-            "onTimeout should record exactly one timeout event",
+            "timeout store should record one timeout event",
             1,
             preferences.getInt(TIMEOUT_COUNT_KEY, 0),
         )

@@ -25,6 +25,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -237,13 +238,37 @@ class PlaybackSessionBehaviorInstrumentedTest {
             waitForControllerState(controller) {
                 playbackState == androidx.media3.common.Player.STATE_READY && playWhenReady
             }
-            // setHandleAudioBecomingNoisy(true) is not asserted here: ACTION_AUDIO_BECOMING_NOISY is a
-            // protected system broadcast that an app or shell cannot send, so that setter stays unverified
-            // (see docs/RMD_1802_SOURCE_TEXT_TEST_AUDIT_2026-10-15.md).
             instrumentation.runOnMainSync { assertEquals(C.USAGE_MEDIA, controller.audioAttributes.usage) }
         } finally {
             instrumentation.runOnMainSync { controller.release() }
             audio.delete()
+        }
+    }
+
+    @Test
+    fun sessionPlayerRegistersRuntimeAudioBecomingNoisyHandling() {
+        val playerReady = CountDownLatch(1)
+        var configuredPlayer: androidx.media3.exoplayer.ExoPlayer? = null
+        PlaybackSessionService.playerCreationObserver = { player ->
+            configuredPlayer = player
+            playerReady.countDown()
+        }
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val controller = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            assertTrue("service must publish its configured runtime player", playerReady.await(10, TimeUnit.SECONDS))
+            val player = requireNotNull(configuredPlayer)
+            val noisyManagerField = player.javaClass.getDeclaredField("audioBecomingNoisyManager").apply {
+                isAccessible = true
+            }
+            val noisyManager = noisyManagerField.get(player)
+            val enabledField = requireNotNull(noisyManager).javaClass.getDeclaredField("isEnabled").apply {
+                isAccessible = true
+            }
+            assertTrue("Media3 must have registered audio-becoming-noisy handling", enabledField.getBoolean(noisyManager))
+        } finally {
+            instrumentation.runOnMainSync { controller.release() }
+            PlaybackSessionService.playerCreationObserver = null
         }
     }
 

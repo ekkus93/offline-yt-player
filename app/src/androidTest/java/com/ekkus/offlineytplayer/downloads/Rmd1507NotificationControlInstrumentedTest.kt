@@ -79,6 +79,9 @@ class Rmd1507NotificationControlInstrumentedTest {
         assertNotNull(actions["Pause"])
         assertNotNull(actions["Resume"])
         assertNotNull(actions["Cancel"])
+        listOf("Pause", "Resume", "Cancel").forEach { action ->
+            assertEquals("$action PendingIntent must be immutable", true, actions.getValue(action).actionIntent.isImmutable)
+        }
 
         actions.getValue("Pause").actionIntent.send()
         waitForState(jobId, CoreDownloadState.PAUSED)

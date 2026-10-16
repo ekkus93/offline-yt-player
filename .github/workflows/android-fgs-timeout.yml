@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   api35-fgs-timeout:
-    name: API 35 dataSync timeout qualification
+    name: API 35 timeout-store and UIDT checks
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -50,7 +50,7 @@ jobs:
           cargo build -p offline-yt-core --target x86_64-linux-android
       - name: Prebuild Android instrumentation APKs before emulator startup
         run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
-      - name: Run API 35 dataSync timeout and UIDT qualification
+      - name: Run API 35 timeout-store and UIDT checks
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35

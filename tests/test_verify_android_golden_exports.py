@@ -25,6 +25,15 @@ class GoldenEvidenceVerifierTest(unittest.TestCase):
         content = (self.directory / "golden-raster-sha256.txt").read_text()
         self.assertEqual(len(NAMES), len(content.splitlines()))
 
+    def test_media_store_text_mime_extension_passes(self):
+        for name in NAMES:
+            (self.directory / f"{name}.sha256").rename(
+                self.directory / f"{name}.sha256.txt"
+            )
+        self.assertEqual(0, self.run_verifier())
+        content = (self.directory / "golden-raster-sha256.txt").read_text()
+        self.assertEqual(len(NAMES), len(content.splitlines()))
+
     def test_missing_png_fails(self):
         (self.directory / f"{NAMES[0]}.png").unlink()
         self.assertEqual(1, self.run_verifier())
