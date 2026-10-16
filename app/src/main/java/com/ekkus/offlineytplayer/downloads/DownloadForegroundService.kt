@@ -104,6 +104,37 @@ internal object DownloadForegroundTimeoutStore {
     }
 }
 
+internal enum class DownloadTimeoutStep {
+    PersistState,
+    StopNativeWork,
+    StopForeground,
+    StopSelf,
+}
+
+/**
+ * The ordered body of [DownloadForegroundService.onTimeout]. State must be durable
+ * before the service is stopped, and native work must be signalled before the
+ * foreground state is dropped. [observer] is a test seam; it is null in production.
+ */
+internal object DownloadForegroundTimeoutSequence {
+    fun run(
+        persist: () -> Unit,
+        stopNativeWork: () -> Unit,
+        stopForeground: () -> Unit,
+        stopSelf: () -> Unit,
+        observer: ((DownloadTimeoutStep) -> Unit)? = null,
+    ) {
+        persist()
+        observer?.invoke(DownloadTimeoutStep.PersistState)
+        stopNativeWork()
+        observer?.invoke(DownloadTimeoutStep.StopNativeWork)
+        stopForeground()
+        observer?.invoke(DownloadTimeoutStep.StopForeground)
+        stopSelf()
+        observer?.invoke(DownloadTimeoutStep.StopSelf)
+    }
+}
+
 /** Immediate handoff is legal only after the worker actually claimed executable work. */
 internal object ForegroundWorkerRelaunchPolicy {
     fun shouldRelaunch(
@@ -198,16 +229,20 @@ class DownloadForegroundService : Service() {
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
-        DownloadForegroundTimeoutStore.persistTimeout(
-            context = this,
-            startId = startId,
-            foregroundServiceType = fgsType,
+        DownloadForegroundTimeoutSequence.run(
+            persist = {
+                DownloadForegroundTimeoutStore.persistTimeout(
+                    context = this,
+                    startId = startId,
+                    foregroundServiceType = fgsType,
+                )
+            },
+            // A stopped dataSync service must not leave its native transfer running.
+            // Rust settles the claimed attempt as retryable without user cancellation.
+            stopNativeWork = workerOwnership::stop,
+            stopForeground = { stopForeground(STOP_FOREGROUND_REMOVE) },
+            stopSelf = { stopSelf(startId) },
         )
-        // A stopped dataSync service must not leave its native transfer running.
-        // Rust settles the claimed attempt as retryable without user cancellation.
-        workerOwnership.stop()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf(startId)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -48,7 +48,7 @@ Every source-text assertion was classified:
 | `DownloadNotificationPolicyTest` (2) | `Rmd1507NotificationControlInstrumentedTest` now asserts the real posted notification is ongoing, indeterminate, on the low-importance channel, and drives Pause/Resume/Cancel. `FLAG_IMMUTABLE` on the action PendingIntents is a **gap** (no runtime accessor). |
 | `DownloadForegroundServicePolicyTest` (3 source-text) | `Rmd1501AndroidRuntimeFixtureInstrumentedTest`, `Rmd1507NotificationControlInstrumentedTest`; manifest test kept |
 | `DownloadRebootRecoveryPolicyTest.rebootReceiverDoesNotStartForegroundServiceOrTouchProtectedState` | `DownloadRebootReceiverInstrumentedTest`; manifest test kept |
-| `DownloadForegroundTimeoutPolicyTest.foregroundServiceImplementsTimeoutBeforeStopping`, `DownloadForegroundServiceTimeoutPolicyTest` (2) | `DownloadForegroundTimeoutInstrumentedTest`, `DownloadForegroundTimeoutAdbInstrumentedTest`. Native-stop ordering inside `onTimeout` is a **gap**. |
+| `DownloadForegroundTimeoutPolicyTest.foregroundServiceImplementsTimeoutBeforeStopping`, `DownloadForegroundServiceTimeoutPolicyTest` (2) | `DownloadForegroundTimeoutInstrumentedTest`, `DownloadForegroundTimeoutAdbInstrumentedTest`. Persist/native-stop/`stopForeground`/`stopSelf` ordering is covered by `DownloadForegroundTimeoutInstrumentedTest.timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground` via the `DownloadForegroundTimeoutSequence` seam that `onTimeout` delegates to (the test does not instantiate the Service). |
 | `DownloadExecutionSchedulerPolicyTest.uidtJobCarriesOnlyDurableQueueIdentityInExtras` | `DownloadSchedulerExtrasInstrumentedTest` (real `PersistableBundle`) |
 | `DownloadExecutionSchedulerPolicyTest.invalidJobExtrasReturnAlreadyFinishedWithoutDoubleSettlement` | **gap** (see below) |
 | `DownloadNotificationPermissionPolicyTest.mainActivityRequestsPostNotificationsPermission` | `DownloadNotificationPermissionInstrumentedTest`, `NotificationPermissionStateInstrumentationTest` |
@@ -84,8 +84,7 @@ recorded here instead of being replaced by new fake tests:
    protected system broadcast that an app cannot send, and there is no getter.
 2. Release order (`player.release()` before `session.release()`) in `PlaybackSessionService.onDestroy`.
 3. `FLAG_IMMUTABLE` on the download notification action PendingIntents.
-4. Persist-before-native-stop-before-`stopForeground` ordering inside
-   `DownloadForegroundService.onTimeout` (persisting is covered; relative ordering is not).
+4. (Closed) Timeout ordering is now covered; see the table above. Not run on a device yet.
 5. `DownloadUserInitiatedJobService.onStartJob` returning `false` without `jobFinished` for a blank
    queue id. `JobParameters` cannot be constructed outside the framework.
 6. `MainActivity` running startup reconciliation before the first Library/Downloads reads. Force-stop

@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -71,6 +72,42 @@ class DownloadForegroundTimeoutInstrumentedTest {
         org.junit.Assert.assertTrue(xml.contains("name=\"$LAST_START_ID_KEY\" value=\"73\""))
         org.junit.Assert.assertTrue(xml.contains("name=\"$LAST_FOREGROUND_SERVICE_TYPE_KEY\" value=\"1\""))
         org.junit.Assert.assertTrue(xml.contains("name=\"$TIMEOUT_COUNT_KEY\" value=\"1\""))
+    }
+
+    @Test
+    fun timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground() {
+        preferences.edit().clear().commit()
+        val events = mutableListOf<String>()
+        val ownership = ForegroundWorkerOwnership()
+        assertTrue(ownership.tryBegin { events += "native-stop-signal" })
+
+        DownloadForegroundTimeoutSequence.run(
+            persist = {
+                DownloadForegroundTimeoutStore.persistTimeout(context, startId = 5, foregroundServiceType = 1)
+                // Durable on disk at the moment this step completes.
+                val xml = java.io.File(context.applicationInfo.dataDir, "shared_prefs/$PREFERENCES_NAME.xml").readText()
+                assertTrue(xml.contains("name=\"$LAST_START_ID_KEY\" value=\"5\""))
+            },
+            stopNativeWork = ownership::stop,
+            stopForeground = { events += "stopForeground" },
+            stopSelf = { events += "stopSelf" },
+            observer = { events += "done:${it.name}" },
+        )
+
+        assertEquals(
+            listOf(
+                "done:PersistState",
+                "native-stop-signal",
+                "done:StopNativeWork",
+                "stopForeground",
+                "done:StopForeground",
+                "stopSelf",
+                "done:StopSelf",
+            ),
+            events,
+        )
+        assertTrue(ownership.isStopped)
+        assertEquals(1, preferences.getInt(TIMEOUT_COUNT_KEY, 0))
     }
 
     private companion object {
