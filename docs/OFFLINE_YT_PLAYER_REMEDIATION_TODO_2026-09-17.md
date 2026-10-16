@@ -1283,21 +1283,23 @@ This checklist repairs the implementation and qualification gaps found during th
 
 **RMD-1803 fourth candidate matrix (2026-10-16; exact implementation SHA qualified, final freeze pending):** exact candidate `68757edb1e017b23698af76b6f36b664d94e317a` passed CI `38891921967` (Rust formatting/clippy/tests, Android lint/JVM tests/build, UniFFI Kotlin and Android ABI, remediation governance), CI evidence `38891922027`, deterministic fixture E2E `38891921921`, Supply chain `38891921913`, API-29 cold-start `38891921917`, API-35 foreground-service timeout/UIDT `38891921923`, and API-29 Android smoke `38891921944`. Smoke execution evidence confirms all required isolated classes/methods, all 12 pinned golden scenarios, and `ANDROID_GOLDEN_EVIDENCE_OK`. The manually dispatched exact-head API-29 real-network E2E `38892844599` passed airplane-mode pause/resume and emitted `WIFI_ONLY_METERED_QUALIFIED` for metered-Wi-Fi pause and unmetered-Wi-Fi resume. The run mapping is in `docs/RMD_1803_EXACT_HEAD_CLOSEOUT_AUDIT_2026-10-16.md`. These runs qualify exact implementation SHA `68757ed`; this evidence update itself creates a documentation-only head and must receive the final exact-head CI matrix before RMD-1803 is closed. RMD-1802 independent review, final freeze, merge/post-merge evidence, engineering closeout reconciliation, and the external service/legal gate remain open.
 
+**RMD-1803 final candidate qualification (2026-10-16):** frozen implementation/documentation candidate `a0913ee6c3173b4bba4cf295cf57d6740078fec3` passed the complete required matrix on that exact SHA: CI `38895603501` (Rust fmt/clippy/all-feature tests, Android lint/JVM/build, UniFFI bindings and both APK ABIs, remediation governance), CI evidence `38895603546`, deterministic fixture E2E `38895603565`, supply chain/advisory/license `38895603483`, API-29 cold-start/process-death `38895603520`, API-35 timeout callback/UIDT `38895603528`, API-29 required Android instrumentation/accessibility/layout/goldens `38895603522`, and API-29 real-network connectivity `38895608605`. Smoke evidence contains `ANDROID_GOLDEN_EVIDENCE_OK: 12 PNG/raster-digest pairs`; network evidence contains `WIFI_ONLY_METERED_QUALIFIED`. Full run links and scope are recorded in `docs/RMD_1803_EXACT_HEAD_CLOSEOUT_AUDIT_2026-10-16.md`. This closes RMD-1803's freeze, exact-head matrix, component confirmation, and run-recording subtasks for this candidate. Independent review, merge/post-merge verification, engineering definition of done, and the separate service-policy/legal release gate remain open.
+
 ### RMD-1803 — Exact-head full qualification
 
 **Interim exact-head evidence and golden-coverage audit (2026-10-12; NOT final candidate freeze):** `docs/RMD_1803_EXACT_HEAD_AND_GOLDEN_COVERAGE_AUDIT_2026-10-12.md` records all eight successful standard workflow runs on exact `master` implementation `03ae38b441cbf14108473efec85edb09b3decdd6`: CI `38316280118`, Android smoke `38316280138`, Android FGS timeout `38316280232`, Supply chain `38316280206`, CI evidence `38316280207`, Deterministic E2E fixture `38316280103`, Android cold start `38316280182`, and Android real-network E2E `38316280067`. The independently enumerated `ProductionComposeGoldenTest` has 12 executable, SHA-256-pinned raster methods; `GoldenCoveragePolicy.RequiredScenarios` is a **22-item target inventory**, not equivalent screenshot proof. Missing explicit per-surface/profile raster combinations and the unproven compact-device viewport of the named compact fixture are documented without inflating qualification. These passing runs qualify that historical exact SHA, not later documentation commits or unreviewed changes; RMD-1802 independent review, RMD-1803 final freeze, RMD-1804/1805, and external service/legal approval remain OPEN. No completion checkbox is changed by this evidence entry.
 
 
-- [ ] Freeze candidate SHA.
-- [ ] Run the complete required CI matrix on that exact SHA.
-- [ ] Confirm Rust/core tests pass.
-- [ ] Confirm Android JVM tests pass.
-- [ ] Confirm Android instrumentation/Compose tests pass.
-- [ ] Confirm screenshot/goldens pass.
-- [ ] Confirm deterministic fixture E2E passes.
-- [ ] Confirm packaging/UniFFI ABI checks pass.
-- [ ] Confirm dependency/license/advisory gates pass.
-- [ ] Record CI run IDs in a closeout audit.
+- [x] Freeze candidate SHA `a0913ee6c3173b4bba4cf295cf57d6740078fec3`.
+- [x] Run the complete required CI matrix on that exact SHA.
+- [x] Confirm Rust/core tests pass.
+- [x] Confirm Android JVM tests pass.
+- [x] Confirm Android instrumentation/Compose tests pass.
+- [x] Confirm screenshot/goldens pass.
+- [x] Confirm deterministic fixture E2E passes.
+- [x] Confirm packaging/UniFFI ABI checks pass.
+- [x] Confirm dependency/license/advisory gates pass.
+- [x] Record CI run IDs in [`RMD_1803_EXACT_HEAD_CLOSEOUT_AUDIT_2026-10-16.md`](RMD_1803_EXACT_HEAD_CLOSEOUT_AUDIT_2026-10-16.md).
 
 ### RMD-1804 — Merge and post-merge verification
 

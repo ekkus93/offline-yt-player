@@ -21,6 +21,25 @@ The smoke workflow verified each required isolated instrumentation invocation, a
 
 ## Remaining gates
 
-This audit does not close RMD-1801, RMD-1802, RMD-1803, RMD-1804, or RMD-1805. The implementation candidate still needs an independent Rust/Android production-path review, and the detailed TODO reconciliation remains open. PR #392 is still a draft and has not been merged. The service-policy/legal release gate remains separate and unapproved.
+The exact documentation head `a0913ee6c3173b4bba4cf295cf57d6740078fec3` has now passed the complete required matrix below. This closes the RMD-1803 qualification subtasks for that candidate; it does not close RMD-1801, RMD-1802, RMD-1804, or RMD-1805. The candidate still needs an independent Rust/Android production-path review, and the detailed TODO reconciliation remains open. PR #392 is still a draft and has not been merged. The service-policy/legal release gate remains separate and unapproved.
 
-This document is a documentation-only update after candidate `68757ed`. The updated documentation head must receive the final exact-head required matrix before RMD-1803 is checked complete. No checklist boxes are checked by this audit.
+## Final documentation-head matrix
+
+Candidate SHA: `a0913ee6c3173b4bba4cf295cf57d6740078fec3`.
+
+Every required workflow completed successfully against that exact SHA:
+
+| Qualification | Run | Result |
+| --- | ---: | --- |
+| CI: Rust fmt/clippy/tests, Android lint/JVM/build, UniFFI/ABI, governance | [38895603501](https://github.com/ekkus93/offline-yt-player/actions/runs/38895603501) | Passed |
+| CI evidence | [38895603546](https://github.com/ekkus93/offline-yt-player/actions/runs/38895603546) | Passed |
+| Deterministic fixture E2E | [38895603565](https://github.com/ekkus93/offline-yt-player/actions/runs/38895603565) | Passed |
+| Supply chain/advisory/license review | [38895603483](https://github.com/ekkus93/offline-yt-player/actions/runs/38895603483) | Passed |
+| Android cold start/process-death, API 29 | [38895603520](https://github.com/ekkus93/offline-yt-player/actions/runs/38895603520) | Passed |
+| Android FGS timeout callback and UIDT, API 35 | [38895603528](https://github.com/ekkus93/offline-yt-player/actions/runs/38895603528) | Passed |
+| Android smoke, required instrumentation, accessibility/layout, 12 golden rasters and digest exports, API 29 | [38895603522](https://github.com/ekkus93/offline-yt-player/actions/runs/38895603522) | Passed; emitted `ANDROID_GOLDEN_EVIDENCE_OK: 12 PNG/raster-digest pairs` |
+| Android real-network OS connectivity transitions, API 29 | [38895608605](https://github.com/ekkus93/offline-yt-player/actions/runs/38895608605) | Passed; emitted `WIFI_ONLY_METERED_QUALIFIED` |
+
+The CI run confirms Rust formatting, clippy, all-feature tests, Android lint/JVM/build, generated Kotlin binding consistency, APK native-library packaging for both supported ABIs, and governance checks. The smoke workflow executed the required Android instrumentation methods and verified golden evidence exports. The real-network workflow qualified airplane-mode pause/resume and metered-Wi-Fi pause/unmetered-Wi-Fi resume. This matrix qualifies only the exact candidate SHA shown above; the subsequent audit-only edit does not change production implementation.
+
+The final candidate matrix above qualifies exact SHA `a0913ee6c3173b4bba4cf295cf57d6740078fec3`; the detailed TODO records those results and marks only the RMD-1803 qualification subtasks complete. Subsequent closeout edits are documentation-only and do not change the qualified production implementation. RMD-1801, RMD-1802, RMD-1804, and RMD-1805 remain open pending independent review and merge/post-merge work.
