@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -50,7 +51,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
      * Runs only from the host-controlled OS connectivity lane. Normal smoke
      * deliberately skips it: changing real device network state requires adb
      * while instrumentation is still running. The production service and
-     * AndroidDownloadConnectivityObserver have no injected connectivity seam.
+     * AndroidDownloadConnectivityObserver use real Android network callbacks.
      */
     @Test
     fun hostDrivenOsConnectivityLossPausesAndRestoresForegroundTransfer() {
@@ -162,8 +163,20 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             .apply { mkdirs() }
         val network = AtomicReference(DownloadConnectivity.None)
         val observer = AndroidDownloadConnectivityObserver(context, network::set)
+        val serviceNetworkCallbacks = CopyOnWriteArrayList<DownloadConnectivity>()
+        DownloadForegroundService.connectivityObserverFactoryForTesting = { serviceContext, onChange ->
+            AndroidDownloadConnectivityObserver(
+                context = serviceContext,
+                onConnectivityChanged = { connectivity ->
+                    serviceNetworkCallbacks += connectivity
+                    onChange(connectivity)
+                },
+            ).also { it.start() }
+        }
         val jobId = "rmd-1506-wifi-metered"
-        val payload = ByteArray(8 * 1024 * 1024) { (it % 247).toByte() }
+        // Keep enough work queued for the host's real ConnectivityManager callback to
+        // reach the service before completion, even on fast software emulators.
+        val payload = ByteArray(24 * 1024 * 1024) { (it % 247).toByte() }
         val relativePath = "items/rmd-1506-wifi-metered/video.mp4"
         val partial = File(context.filesDir, "items/rmd-1506-wifi-metered/.video.mp4.partial")
         val finished = File(context.filesDir, relativePath)
@@ -207,7 +220,13 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 DownloadConnectivity.Metered,
                 network.get(),
             )
-            waitForState(jobId, CoreDownloadState.PAUSED)
+            waitForState(jobId, CoreDownloadState.PAUSED) {
+                "testNetwork=${network.get()} " +
+                    "serviceCallbacks=${serviceNetworkCallbacks.joinToString()} " +
+                    "requests=${server.requestCount.get()} bytesSent=${server.bytesSent.get()} " +
+                    "partial=${if (partial.isFile) partial.length() else 0L} " +
+                    "final=${if (finished.isFile) finished.length() else 0L}"
+            }
             assertTrue("metered Wi-Fi pause retains partial bytes", partial.length() > 0L)
             assertFalse("metered Wi-Fi pause cannot promote final bytes", finished.exists())
             signals.resolve("wifi-paused").writeText("real metered Wi-Fi paused WifiOnly durable transfer")
@@ -232,6 +251,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             signals.resolve("wifi-complete").writeText("real unmetered Wi-Fi resumed and completed Library item")
         } finally {
             observer.close()
+            DownloadForegroundService.connectivityObserverFactoryForTesting = null
             context.stopService(Intent(context, DownloadForegroundService::class.java))
             server.close()
         }

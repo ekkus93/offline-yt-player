@@ -3,6 +3,7 @@ package com.ekkus.offlineytplayer.downloads
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.database.sqlite.SQLiteDatabase
 import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
@@ -79,8 +80,14 @@ class Rmd1507NotificationControlInstrumentedTest {
         assertNotNull(actions["Pause"])
         assertNotNull(actions["Resume"])
         assertNotNull(actions["Cancel"])
-        listOf("Pause", "Resume", "Cancel").forEach { action ->
-            assertEquals("$action PendingIntent must be immutable", true, actions.getValue(action).actionIntent.isImmutable)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            listOf("Pause", "Resume", "Cancel").forEach { action ->
+                assertEquals(
+                    "$action PendingIntent must be immutable",
+                    true,
+                    actions.getValue(action).actionIntent.isImmutable,
+                )
+            }
         }
 
         actions.getValue("Pause").actionIntent.send()

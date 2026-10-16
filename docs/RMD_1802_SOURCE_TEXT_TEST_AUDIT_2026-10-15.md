@@ -160,3 +160,19 @@ The packaged runtime audio-becoming-noisy observer and posted notification Pendi
 checks described above have been added. Their source/test changes have not yet run in the API 29
 smoke workflow or on an exact-head candidate. Continue to leave final review, freeze, merge, and
 engineering-closeout items open.
+
+## 2026-10-16 first candidate qualification findings
+
+The first candidate `1b430ba02a8bfffcd0ed4c4bbb852f0675a60c35` passed the API 29 notification control
+path until the new direct `PendingIntent.isImmutable()` assertion called an API-31 method on API 29.
+The action PendingIntents are posted and exercised on API 29; direct immutability inspection is now
+gated to API 31+, where Android exposes that method. A local API 36 run with notifications granted
+passed the actual Pause/Resume/Cancel sequence.
+
+The same candidate's API 29 real-network run passed airplane-mode loss/pause/resume, then failed the
+follow-up Wi-Fi metered override: the independent observer reported `Metered`, but durable queue
+state stayed `DOWNLOADING` at 8,015,872 of 8,388,608 bytes. The Android test now captures the
+foreground service observer's callback sequence, fixture server request/byte counts, and partial/final
+asset lengths on that failure, and increases the fixture to 24 MiB to avoid a completion race. These
+are diagnostic/test robustness changes; the actual service callback behavior remains unresolved
+until a fresh API 29 real-network run passes or identifies a production fix.
