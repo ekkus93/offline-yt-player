@@ -872,6 +872,15 @@ mod tests {
         let choices = futures::executor::block_on(source.choices(&media))
             .expect("live YouTube format curation failed");
         assert!(!choices.is_empty());
+        let plan = futures::executor::block_on(source.download_plan(&media, &choices[0].choice_id))
+            .expect("live YouTube download plan failed");
+        assert_eq!(plan.source.media_id, video_id);
+        assert!(
+            plan.assets
+                .iter()
+                .any(|asset| asset.kind == MediaKind::Video && !asset.url.is_empty()),
+            "live plan must contain an executable video asset"
+        );
     }
 
     #[test]
