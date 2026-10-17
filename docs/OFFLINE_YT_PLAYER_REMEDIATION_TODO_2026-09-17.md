@@ -158,9 +158,9 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Register it in the production `SourceRegistry`.
 - [x] Support the URL forms documented by the original strategy decision.
 - [x] Resolve canonical source identity.
-- [ ] Resolve real title/duration/thumbnail metadata through a successful production `resolve` call. (The current live response cannot complete resolution.)
-- [ ] Discover available media formats from a supported real video. (Current watch responses expose format descriptors without direct media URLs.)
-- [ ] Produce executable provider-neutral download plans for a supported real video. (Live stream resolution is pending.)
+- [x] Resolve real title/duration/thumbnail metadata through a successful production `resolve` call. (Passed on the owner's self-hosted runner at `0a28d64`, run 39057396928; see RMD-304 evidence.)
+- [x] Discover available media formats from a supported real video. (Innertube `android` fallback yields a direct combined `itag 18` stream; same run.)
+- [x] Produce executable provider-neutral download plans for a supported real video. (The live smoke now builds a plan with an executable video asset; same run.)
 - [x] Discover subtitles where supported.
 - [x] Apply strict response/metadata bounds.
 
@@ -186,7 +186,7 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Document its policy/legal prerequisites.
 - [x] Record expected failure behavior when provider structure changes.
 - [ ] Run the isolated smoke against a user-authorized public YouTube video ID and record the exact SHA and workflow run. Requires the release owner to confirm the test input is authorized and the service-policy/legal prerequisites have been reviewed.
-- [ ] Resolve the observed live delivery gap while preserving provider bounds and the separate policy/legal release gate: the GitHub runner receives `LOGIN_REQUIRED`, and local `OK` responses expose no direct media URLs.
+- [x] Resolve the observed live delivery gap while preserving provider bounds and the separate policy/legal release gate: local `OK` responses exposed no direct media URLs, now resolved by the bounded Innertube `android` fallback (`f4e2073`). Known limitation, not resolved: GitHub-hosted runners still receive `LOGIN_REQUIRED` from both the watch page and Innertube (run 39055507985); qualification therefore uses the owner's self-hosted runner. No cookies, tokens, or credentials were added.
 
 **Acceptance:** OYP-703 can only be considered repaired when the production registry can resolve a supported real URL; fixture-only resolution is insufficient.
 
