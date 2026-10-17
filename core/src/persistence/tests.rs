@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::domain::MediaKind;
 use tempfile::tempdir;
