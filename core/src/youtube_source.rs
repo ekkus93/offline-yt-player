@@ -18,6 +18,33 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 use std::io::Read;
 
+const INNERTUBE_PLAYER_URL: &str = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
+const INNERTUBE_ANDROID_CLIENT_NUMBER: &str = "3";
+const INNERTUBE_ANDROID_CLIENT_VERSION: &str = "21.26.364";
+const INNERTUBE_ANDROID_USER_AGENT: &str =
+    "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip";
+
+// The request body for the Innertube `android` client. It carries only the public client
+// identity and the video ID: no cookies, tokens, or credentials.
+fn innertube_android_request(video_id: &str) -> String {
+    serde_json::json!({
+        "context": {"client": {
+            "clientName": "ANDROID",
+            "clientVersion": INNERTUBE_ANDROID_CLIENT_VERSION,
+            "androidSdkVersion": 30,
+            "osName": "Android",
+            "osVersion": "11",
+            "userAgent": INNERTUBE_ANDROID_USER_AGENT,
+            "hl": "en",
+            "gl": "US"
+        }},
+        "videoId": video_id,
+        "contentCheckOk": true,
+        "racyCheckOk": true
+    })
+    .to_string()
+}
+
 /// Narrow fail-closed production YouTube adapter described by the extraction ADR.
 #[derive(Debug, Clone)]
 pub struct YouTubeSource {
@@ -40,9 +67,48 @@ impl Default for YouTubeSource {
 impl YouTubeSource {
     fn fetch(&self, url: &str) -> Result<ExtractedYouTubeMedia, CoreError> {
         let recognized = recognize_youtube_video_url(url)?;
+        let watch = self.fetch_watch_page(&recognized.canonical_url);
+        match watch {
+            // The watch page can answer with sign-in gating or with only
+            // `serverAbrStreamingUrl`. Both leave nothing the downloader can fetch, so ask
+            // the Innertube player endpoint as the Android app does. Report the original
+            // watch-page error if that also fails.
+            Err(error) if error.kind == ErrorKind::SourceChanged => self
+                .fetch_innertube_android(&recognized.video_id)
+                .map_err(|_| error),
+            other => other,
+        }
+    }
+
+    fn fetch_innertube_android(&self, video_id: &str) -> Result<ExtractedYouTubeMedia, CoreError> {
         let response = self
             .client
-            .get(&recognized.canonical_url)
+            .post(INNERTUBE_PLAYER_URL)
+            .header("Content-Type", "application/json")
+            .header("User-Agent", INNERTUBE_ANDROID_USER_AGENT)
+            .header("X-YouTube-Client-Name", INNERTUBE_ANDROID_CLIENT_NUMBER)
+            .header("X-YouTube-Client-Version", INNERTUBE_ANDROID_CLIENT_VERSION)
+            .body(innertube_android_request(video_id))
+            .send()
+            .map_err(network_error)?;
+        if !response.status().is_success() {
+            return Err(CoreError::new(
+                ErrorKind::HttpStatus,
+                "YouTube player endpoint returned a non-success HTTP status",
+                response.status().is_server_error(),
+            ));
+        }
+        ensure_provider_response_size("YouTube player", response.content_length(), 0)?;
+        let bytes = read_bounded_watch_body(response)?;
+        let player = serde_json::from_slice(&bytes)
+            .map_err(|_| source_changed("YouTube player endpoint response was malformed"))?;
+        parse_player(&player)
+    }
+
+    fn fetch_watch_page(&self, canonical_url: &str) -> Result<ExtractedYouTubeMedia, CoreError> {
+        let response = self
+            .client
+            .get(canonical_url)
             .header("User-Agent", "Mozilla/5.0 OfflineYTPlayer/1")
             .send()
             .map_err(network_error)?;
@@ -792,6 +858,52 @@ mod tests {
         let choices = futures::executor::block_on(source.choices(&media))
             .expect("live YouTube format curation failed");
         assert!(!choices.is_empty());
+    }
+
+    #[test]
+    fn innertube_android_request_names_only_the_video_and_public_client() {
+        let body: Value =
+            serde_json::from_str(&innertube_android_request("QLnP7oK--5Y")).expect("valid JSON");
+        assert_eq!(body["videoId"], "QLnP7oK--5Y");
+        assert_eq!(body["context"]["client"]["clientName"], "ANDROID");
+        let keys: Vec<_> = body.as_object().expect("object").keys().cloned().collect();
+        assert!(
+            keys.iter().all(|key| matches!(
+                key.as_str(),
+                "context" | "videoId" | "contentCheckOk" | "racyCheckOk"
+            )),
+            "request must not carry cookies, tokens, or credentials: {keys:?}"
+        );
+    }
+
+    #[test]
+    fn innertube_android_response_with_direct_combined_stream_resolves() {
+        let player = serde_json::json!({
+            "playabilityStatus": {"status": "OK"},
+            "videoDetails": {
+                "title": "Sample",
+                "lengthSeconds": "212",
+                "thumbnail": {"thumbnails": [{"url": "https://i.ytimg.com/vi/example/default.jpg"}]}
+            },
+            "streamingData": {
+                "formats": [{
+                    "itag": 18,
+                    "url": "https://media.example/videoplayback?itag=18",
+                    "mimeType": "video/mp4; codecs=\"avc1.42001E, mp4a.40.2\"",
+                    "contentLength": "5820740",
+                    "bitrate": 400000,
+                    "width": 640,
+                    "height": 360
+                }],
+                "adaptiveFormats": [{"itag": 137, "mimeType": "video/mp4; codecs=\"avc1.640028\""}],
+                "serverAbrStreamingUrl": "https://media.example/sabr?sig=SECRET_TOKEN"
+            }
+        });
+        let media = parse_player(&player).expect("direct combined stream resolves");
+        assert_eq!(media.streams.len(), 1);
+        assert_eq!(media.streams[0].id, "18");
+        assert_eq!(media.streams[0].audio_codec.as_deref(), Some("aac"));
+        assert_eq!(media.streams[0].video_codec.as_deref(), Some("h264"));
     }
 
     #[test]
