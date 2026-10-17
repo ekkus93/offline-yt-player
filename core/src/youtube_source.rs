@@ -311,6 +311,13 @@ fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError> {
         .pointer("/playabilityStatus/status")
         .and_then(Value::as_str)
         .unwrap_or("UNKNOWN");
+    if std::env::var_os("OYP_LIVE_YOUTUBE_VIDEO_ID").is_some() {
+        let category = match status {
+            "OK" | "ERROR" | "UNPLAYABLE" | "LOGIN_REQUIRED" | "LIVE_STREAM_OFFLINE" => status,
+            _ => "OTHER",
+        };
+        eprintln!("live smoke playability category: {category}");
+    }
     if status != "OK" {
         return Err(CoreError::new(
             ErrorKind::SourceChanged,
