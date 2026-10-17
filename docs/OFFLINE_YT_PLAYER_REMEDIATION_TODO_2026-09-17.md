@@ -158,9 +158,9 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Register it in the production `SourceRegistry`.
 - [x] Support the URL forms documented by the original strategy decision.
 - [x] Resolve canonical source identity.
-- [x] Resolve real title/duration/thumbnail metadata.
-- [x] Discover available media formats.
-- [x] Produce executable provider-neutral download plans.
+- [ ] Resolve real title/duration/thumbnail metadata through a successful production `resolve` call. (The current live response cannot complete resolution.)
+- [ ] Discover available media formats from a supported real video. (Current watch responses expose format descriptors without direct media URLs.)
+- [ ] Produce executable provider-neutral download plans for a supported real video. (Live stream resolution is pending.)
 - [x] Discover subtitles where supported.
 - [x] Apply strict response/metadata bounds.
 
@@ -186,10 +186,11 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Document its policy/legal prerequisites.
 - [x] Record expected failure behavior when provider structure changes.
 - [ ] Run the isolated smoke against a user-authorized public YouTube video ID and record the exact SHA and workflow run. Requires the release owner to confirm the test input is authorized and the service-policy/legal prerequisites have been reviewed.
+- [ ] Resolve the observed live delivery gap while preserving provider bounds and the separate policy/legal release gate: the GitHub runner receives `LOGIN_REQUIRED`, and local `OK` responses expose no direct media URLs.
 
 **Acceptance:** OYP-703 can only be considered repaired when the production registry can resolve a supported real URL; fixture-only resolution is insufficient.
 
-**Evidence (RMD-300):** RMD-301 through RMD-304 have production implementation and deterministic fixture coverage. RMD-303 tests in `core/tests/fixtures/youtube/` and `core/src/youtube_source.rs` cover bounded sanitized combined-A/V, split-A/V, unavailable/private/source-change, malformed, and oversized provider responses, including metadata, formats, subtitles, fail-closed provider status, and response-size enforcement. Production registration and provider isolation are in `core/src/source.rs::SourceRegistry::production`, `core/src/youtube.rs`, `core/src/youtube_source.rs`, and `core/src/youtube_extract.rs`; Android consumes provider-neutral source results through `GeneratedUniffiSourceAnalysisGateway`. The production adapter implements canonical source identity, bounded title/duration/thumbnail metadata, stream formats, provider-neutral download plans, subtitles, and structured diagnostics. Controlled live qualification is the ignored/manual `live_youtube_resolves_real_metadata_and_formats` test using only validated `OYP_LIVE_YOUTUBE_VIDEO_ID`; `docs/YOUTUBE_LIVE_QUALIFICATION.md` and `docs/YOUTUBE_POLICY_RELEASE_GATE.md` document its prerequisites and the separate, unapproved release gate. Historical deterministic qualification is recorded by PR #367 and `docs/RMD_300_YOUTUBE_SOURCE_RECONCILIATION_2026-09-20.md`. **The live test path has not been run:** RMD-300 acceptance remains open until the new RMD-304 run task completes with a user-authorized video ID; fixture-only success is not treated as real-source proof.
+**Evidence (RMD-300):** RMD-301 through RMD-304 have production implementation and deterministic fixture coverage. RMD-303 tests in `core/tests/fixtures/youtube/` and `core/src/youtube_source.rs` cover bounded sanitized combined-A/V, split-A/V, unavailable/private/source-change, malformed, and oversized provider responses, including metadata, formats, subtitles, fail-closed provider status, and response-size enforcement. Production registration and provider isolation are in `core/src/source.rs::SourceRegistry::production`, `core/src/youtube.rs`, `core/src/youtube_source.rs`, and `core/src/youtube_extract.rs`; Android consumes provider-neutral source results through `GeneratedUniffiSourceAnalysisGateway`. The production adapter implements canonical source identity, bounded title/duration/thumbnail metadata, stream formats, provider-neutral download plans, subtitles, and structured diagnostics. Controlled live qualification is the ignored/manual `live_youtube_resolves_real_metadata_and_formats` test using only validated `OYP_LIVE_YOUTUBE_VIDEO_ID`; `docs/YOUTUBE_LIVE_QUALIFICATION.md` and `docs/YOUTUBE_POLICY_RELEASE_GATE.md` document its prerequisites and the separate, unapproved release gate. Historical deterministic qualification is recorded by PR #367 and `docs/RMD_300_YOUTUBE_SOURCE_RECONCILIATION_2026-09-20.md`. **The live test has run and failed:** three user-supplied IDs failed on exact master `17607ca3adb6cc3d74b66ba20e9a60063d81e287` (runs `39019325565`, `39019774327`, `39020137212`); diagnostic branch run `39020325767` observed `LOGIN_REQUIRED` on the hosted runner. Local `OK` player responses for all three had format descriptors but no direct media URLs. The current adapter therefore cannot resolve these real videos, and fixture-only success is not real-source proof. See [`YOUTUBE_LIVE_QUALIFICATION.md`](YOUTUBE_LIVE_QUALIFICATION.md).
 
 ---
 
@@ -1055,6 +1056,8 @@ This checklist repairs the implementation and qualification gaps found during th
 - [x] Do not collapse this TODO.
 
 **RMD-1801 reconciliation (2026-10-16):** Reviewed the complete RMD-000 through RMD-1706 checklist against current master `cd624c4c411c476157fbab42a0cdf7c390c6657a`. All existing subtasks in those sections remain checked and their 49 milestone evidence entries cite production implementation paths and behavioral tests or exact-head workflow results. RMD-300 is the one newly explicit engineering qualification gap: the opt-in live YouTube test exists but has not been run against an authorized real video ID, so RMD-300 acceptance and the zero-unchecked-engineering-subtasks condition remain open. The implementation and full exact-head test evidence are in this TODO and [`RMD_1803_EXACT_HEAD_CLOSEOUT_AUDIT_2026-10-16.md`](RMD_1803_EXACT_HEAD_CLOSEOUT_AUDIT_2026-10-16.md); post-merge verification is in [`RMD_1804_POST_MERGE_QUALIFICATION_2026-10-16.md`](RMD_1804_POST_MERGE_QUALIFICATION_2026-10-16.md).
+
+**RMD-1801 update (2026-10-17):** The live smoke has now run and failed for three user-supplied videos. The findings above reopen the RMD-301 real-resolution, format, and plan subtasks; the 2026-10-16 reconciliation is historical rather than current completion evidence. Keep RMD-1801, RMD-G02, and RMD-1805 open until a real source resolves and the exact implementation head qualifies.
 
 ### RMD-1802 — Code review after remediation
 

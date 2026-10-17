@@ -311,19 +311,15 @@ fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError> {
         .pointer("/playabilityStatus/status")
         .and_then(Value::as_str)
         .unwrap_or("UNKNOWN");
-    if std::env::var_os("OYP_LIVE_YOUTUBE_VIDEO_ID").is_some() {
-        let category = match status {
-            "OK" | "ERROR" | "UNPLAYABLE" | "LOGIN_REQUIRED" | "LIVE_STREAM_OFFLINE" => status,
-            _ => "OTHER",
-        };
-        eprintln!("live smoke playability category: {category}");
-    }
     if status != "OK" {
-        return Err(CoreError::new(
-            ErrorKind::SourceChanged,
-            "YouTube reports this media is unavailable",
-            false,
-        ));
+        let message = match status {
+            "LOGIN_REQUIRED" => "YouTube requires sign-in for this request",
+            "ERROR" | "UNPLAYABLE" | "LIVE_STREAM_OFFLINE" => {
+                "YouTube did not make this media playable to this request"
+            }
+            _ => "YouTube returned an unrecognized playability status",
+        };
+        return Err(source_changed(message));
     }
     let details = v
         .get("videoDetails")
@@ -372,6 +368,11 @@ fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError> {
         if let Some(stream) = parse_stream(format)? {
             streams.push(stream);
         }
+    }
+    if streams.is_empty() {
+        return Err(source_changed(
+            "YouTube watch response exposed no direct media URLs",
+        ));
     }
     let subtitles = parse_subtitles(v)?;
     Ok(ExtractedYouTubeMedia {
@@ -701,6 +702,42 @@ mod tests {
     fn sanitized_unavailable_fixture_fails_closed() {
         let err = parse_player(&fixture("unavailable")).unwrap_err();
         assert_eq!(err.kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            crate::youtube_diagnostics::youtube_diagnostic(&err).code,
+            "youtube.playback_rejected"
+        );
+    }
+
+    #[test]
+    fn login_required_is_not_reported_as_video_unavailable() {
+        let player = serde_json::json!({
+            "playabilityStatus": {"status": "LOGIN_REQUIRED", "reason": "untrusted provider text"}
+        });
+        let err = parse_player(&player).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+        assert_eq!(err.message, "YouTube requires sign-in for this request");
+        let diagnostic = crate::youtube_diagnostics::youtube_diagnostic(&err);
+        assert_eq!(diagnostic.code, "youtube.login_required");
+        assert!(!diagnostic.user_message.contains("untrusted provider text"));
+    }
+
+    #[test]
+    fn sabr_only_response_does_not_fabricate_downloadable_formats() {
+        let player = serde_json::json!({
+            "playabilityStatus": {"status": "OK"},
+            "videoDetails": {"title": "Fixture", "lengthSeconds": "60"},
+            "streamingData": {
+                "adaptiveFormats": [{"itag": 137, "mimeType": "video/mp4", "width": 1280, "height": 720}],
+                "serverAbrStreamingUrl": "https://media.example/sabr?sig=SECRET_TOKEN"
+            }
+        });
+        let err = parse_player(&player).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+        assert_eq!(
+            err.message,
+            "YouTube watch response exposed no direct media URLs"
+        );
+        assert!(!err.message.contains("SECRET_TOKEN"));
     }
 
     #[test]
