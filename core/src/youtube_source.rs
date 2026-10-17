@@ -849,8 +849,22 @@ mod tests {
         );
         let url = format!("https://www.youtube.com/watch?v={video_id}");
         let source = YouTubeSource::default();
-        let media = futures::executor::block_on(source.resolve(&url))
-            .expect("live YouTube metadata resolution failed");
+        let media = match futures::executor::block_on(source.resolve(&url)) {
+            Ok(media) => media,
+            Err(error) => {
+                // Sanitized codes only: never provider text, URLs, or tokens.
+                let innertube = source
+                    .fetch_innertube_android(&video_id)
+                    .err()
+                    .map_or("ok", |e| {
+                        crate::youtube_diagnostics::youtube_diagnostic(&e).code
+                    });
+                panic!(
+                    "live YouTube metadata resolution failed: {} (innertube android: {innertube})",
+                    crate::youtube_diagnostics::youtube_diagnostic(&error).code
+                );
+            }
+        };
         assert_eq!(media.source.provider, "youtube");
         assert_eq!(media.source.media_id, video_id);
         assert!(!media.title.trim().is_empty());
