@@ -24,3 +24,9 @@ Thumbs.db
 *.aab
 *.apks
 *.log
+
+# Python bytecode caches
+__pycache__/
+
+# Serena local state
+.serena/
