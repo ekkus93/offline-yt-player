@@ -15,19 +15,19 @@ CI parity (docs/BUILDING.md; CI on Ubuntu 24.04 is the executable reference):
 - Python governance tests (stdlib unittest, from repo root): `python3 -m unittest tests/test_<name>.py`
 - UniFFI Kotlin bindings are checked by `:app:verifyUniffiKotlinBindings`; regenerate with `cargo build -p offline-yt-core && cargo run -p uniffi-bindgen -- generate target/debug/liboffline_yt_core.so --language kotlin --out-dir target/uniffi-kotlin`. See docs/ANDROID_RUST_FFI_BUILD.md.
 
-Setup: JDK 17, Android SDK `platforms;android-37.0` + `build-tools;37.0.0`, NDK `30.0.16248370` (Android-ABI build only), `rustup target add aarch64-linux-android`, Rust pinned to 1.98.1 by `rust-toolchain.toml`.
+Setup: JDK 17, Android SDK `platforms;android-37.0` + `build-tools;37.0.0`, NDK `30.0.16248370` (needed for any Android-ABI Rust build, including the smoke/cold-start/fgs/e2e workflows), `rustup target add aarch64-linux-android x86_64-linux-android` (emulator is x86_64), Rust pinned by `rust-toolchain.toml`.
 
 Required Android smoke tests run through `scripts/run_required_android_smoke.sh`: one class per fresh `connectedDebugAndroidTest` invocation, because bulk runs hit intermittent Compose SnapshotStateObserver cross-thread failures. Do not batch them. A local emulator is available for device tests.
+Before golden tests, run `python3 scripts/register_download_setup_golden_variant.py` (read-only; also disables emulator animations). A skipped smoke class counts as a failure (`scripts/assert_android_smoke_execution.py`).
 
 ## Style
 
-- No Kotlin formatter is configured; Rust uses plain rustfmt. `.editorconfig`: 4-space indent for kt/kts/rs, 2-space for yml/json/toml/md/xml.
-- Rust: `unsafe_code = "forbid"`; clippy warnings fail CI.
-- Commits: conventional commits with a lowercase scope (`fix(android): ...`, `test(android): ...`, `ci(android): ...`, `docs: ...`). Work is committed directly on `master`.
+- No Kotlin formatter is configured. A `PostToolUse` hook in `.claude/settings.json` runs rustfmt on edited `.rs` files. Indentation is defined in `.editorconfig`.
+- Commits: conventional commits with a lowercase scope (`fix(android): ...`, `test(android): ...`, `ci(android): ...`, `docs: ...`). Work is committed directly on `master`; do not create feature branches or PRs unless asked.
 
 ## Gotchas
 
-- `docs/OFFLINE_YT_PLAYER_REMEDIATION_TODO_2026-09-17.md` is the authoritative checklist. Never assume an unchecked item is done, and nothing counts as qualified without exact-head CI evidence. `scripts/check_remediation_closeout.py` fails while any `- [ ]` remains.
+- `docs/OFFLINE_YT_PLAYER_REMEDIATION_TODO_2026-09-17.md` (~240 KB, so grep it rather than reading it whole) is the authoritative checklist. Never assume an unchecked item is done, and nothing counts as qualified without exact-head CI evidence (every workflow job verifies `git rev-parse HEAD == $GITHUB_SHA`). `scripts/check_remediation_closeout.py` fails while any `- [ ]` remains.
 - Every `actions/upload-artifact` step must be guarded by `github.ref_type == 'tag'`, including failure evidence. Workflows that upload artifacts also trigger on `push.tags: ['**']`. Enforced by `tests/test_actions_artifact_tag_policy.py` (docs/CI_ARTIFACT_TAG_POLICY.md).
 - Reviewed screenshot hashes for `ProductionComposeGoldenTest` are pinned in the tracked Kotlin source. CI must not modify test source at runtime (`git diff --exit-code` enforces it). Golden evidence is exported via MediaStore before instrumentation teardown; the test fails if evidence is missing.
 - UI is portrait-only (ADR 0005): no landscape resources, rotate/fullscreen actions, horizontal scrolling, or controls that need scrolling. Only the Library and Downloads lists may scroll.
