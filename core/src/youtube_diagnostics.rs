@@ -3,7 +3,7 @@ use crate::domain::{CoreError, ErrorKind};
 /// Sanitized provider diagnostic intended for logs/support bundles.
 ///
 /// Deliberately emits a bounded code/message rather than reflecting the provider error text. The
-/// one message comparison below recognizes the adapter's own fixed unavailable-media sentinel; no
+/// fixed-message comparisons below recognize the adapter's own playability sentinels; no
 /// provider-controlled text is copied into the diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct YouTubeDiagnostic {
@@ -31,11 +31,20 @@ pub fn youtube_diagnostic(error: &CoreError) -> YouTubeDiagnostic {
             retryable: error.retryable,
         },
         ErrorKind::SourceChanged
-            if error.message == "YouTube reports this media is unavailable" =>
+            if error.message == "YouTube requires sign-in for this request" =>
         {
             YouTubeDiagnostic {
-                code: "youtube.unavailable_media",
-                user_message: "This YouTube video is unavailable or private.",
+                code: "youtube.login_required",
+                user_message: "YouTube requires sign-in for this request.",
+                retryable: false,
+            }
+        }
+        ErrorKind::SourceChanged
+            if error.message == "YouTube did not make this media playable to this request" =>
+        {
+            YouTubeDiagnostic {
+                code: "youtube.playback_rejected",
+                user_message: "YouTube did not make this video playable to the app.",
                 retryable: false,
             }
         }
@@ -72,7 +81,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unsupported_changed_network_and_unavailable_are_distinct() {
+    fn unsupported_changed_network_and_playability_failures_are_distinct() {
         let unsupported = youtube_diagnostic(&CoreError::new(
             ErrorKind::UnsupportedSource,
             "unsupported",
@@ -85,18 +94,25 @@ mod tests {
             "player signature changed",
             false,
         ));
-        let unavailable = youtube_diagnostic(&CoreError::new(
+        let login_required = youtube_diagnostic(&CoreError::new(
             ErrorKind::SourceChanged,
-            "YouTube reports this media is unavailable",
+            "YouTube requires sign-in for this request",
+            false,
+        ));
+        let playback_rejected = youtube_diagnostic(&CoreError::new(
+            ErrorKind::SourceChanged,
+            "YouTube did not make this media playable to this request",
             false,
         ));
         assert_eq!(unsupported.code, "youtube.unsupported_url");
         assert_eq!(network.code, "youtube.network_timeout");
         assert_eq!(changed.code, "youtube.source_changed");
-        assert_eq!(unavailable.code, "youtube.unavailable_media");
+        assert_eq!(login_required.code, "youtube.login_required");
+        assert_eq!(playback_rejected.code, "youtube.playback_rejected");
         assert!(network.retryable);
         assert!(!changed.retryable);
-        assert!(!unavailable.retryable);
+        assert!(!login_required.retryable);
+        assert!(!playback_rejected.retryable);
     }
 
     #[test]

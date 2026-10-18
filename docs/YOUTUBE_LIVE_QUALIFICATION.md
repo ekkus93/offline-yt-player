@@ -18,8 +18,24 @@ A failed live smoke must not be converted into fabricated metadata or fixture su
 
 - `youtube.unsupported_url`: invalid or unsupported input contract.
 - `youtube.network_unavailable` / `youtube.network_timeout` / `youtube.http_failure`: transport or HTTP failure.
-- `youtube.unavailable_media`: the selected video is unavailable/private.
+- `youtube.login_required`: YouTube required sign-in for this request. This does not establish that the video itself is private.
+- `youtube.playback_rejected`: YouTube did not make the video playable to this request.
 - `youtube.source_changed`: the provider response shape or delivery mechanism no longer matches the bounded parser; treat this as an adapter compatibility failure requiring engineering review/update rather than a generic retry loop.
 - `youtube.no_compatible_format`: metadata resolved but no supported downloadable format was found.
 
 Do not weaken parser bounds, log provider secrets, or add runtime-downloaded executables merely to make a live smoke pass. Record the exact SHA and workflow run ID when using this path as release-candidate evidence.
+
+## Current live qualification finding (2026-10-17)
+
+Three user-supplied video IDs failed the manual smoke on master `17607ca3adb6cc3d74b66ba20e9a60063d81e287`: runs [39019325565](https://github.com/ekkus93/offline-yt-player/actions/runs/39019325565), [39019774327](https://github.com/ekkus93/offline-yt-player/actions/runs/39019774327), and [39020137212](https://github.com/ekkus93/offline-yt-player/actions/runs/39020137212). A diagnostic rerun of the third ID on `9bc5746df0884fffdb2a1fc6a7b946beebd8b306` ([39020325767](https://github.com/ekkus93/offline-yt-player/actions/runs/39020325767)) observed `LOGIN_REQUIRED` in the GitHub runner's player response. The former parser mapped every non-`OK` status to “media unavailable,” concealing that result.
+
+Unauthenticated local watch-page requests for all three IDs returned `OK` and format descriptors, but no direct media URLs; each response offered `serverAbrStreamingUrl`. The adapter currently consumes only per-format direct URLs, so local resolution also fails. These observations establish an adapter compatibility gap and a runner-specific sign-in response, not that the videos are bad. Keep live qualification open until a supported real video resolves metadata and usable formats in the production adapter. Do not use fixture success as a substitute.
+
+## Self-hosted runner result (2026-10-17)
+
+The adapter now falls back to the bounded Innertube `android` player endpoint when the watch page is sign-in gated or offers only `serverAbrStreamingUrl`. The request carries only the video ID and the public client identity: no cookies, tokens, or credentials.
+
+- GitHub-hosted runner, `746075a`, run [39055507985](https://github.com/ekkus93/offline-yt-player/actions/runs/39055507985): failed with `youtube.login_required` from both the watch page and Innertube. Hosted datacenter IPs are sign-in gated; this is a known limitation, and the adapter does not try to evade it.
+- Owner's self-hosted runner (`runner=self-hosted`), `0a28d64bf2b1d21c166945c127c517b150c51bf8`, run [39057396928](https://github.com/ekkus93/offline-yt-player/actions/runs/39057396928): passed. The smoke resolved metadata, curated formats, and built a download plan with an executable video asset for the owner-supplied video.
+
+Dispatch with `-f runner=self-hosted` to use the owner's runner. This is engineering evidence only; it does not satisfy `docs/YOUTUBE_POLICY_RELEASE_GATE.md`, which remains the human policy/legal gate.
