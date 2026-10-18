@@ -23,7 +23,7 @@ concurrency:
 jobs:
   core-fixture-e2e:
     name: Core deterministic fixture E2E
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, offline-yt-player]
     steps:
       - uses: actions/checkout@v4
       - name: Exact commit

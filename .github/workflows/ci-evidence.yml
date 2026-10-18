@@ -17,7 +17,7 @@ concurrency:
 jobs:
   evidence-manifest:
     name: Candidate evidence manifest
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, offline-yt-player]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
