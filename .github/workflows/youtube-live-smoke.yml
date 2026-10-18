@@ -7,14 +7,6 @@ on:
         description: "Authorized public/test YouTube video ID (11 characters, no URL/query string)"
         required: true
         type: string
-      runner:
-        description: "Runner: github-hosted (datacenter IP, YouTube may require sign-in) or self-hosted (the owner's own machine)"
-        required: false
-        default: github-hosted
-        type: choice
-        options:
-          - github-hosted
-          - self-hosted
 
 permissions:
   contents: read
@@ -22,7 +14,7 @@ permissions:
 jobs:
   live-smoke:
     name: Manual YouTube live-source smoke
-    runs-on: ${{ inputs.runner == 'self-hosted' && fromJSON('["self-hosted","offline-yt-player"]') || 'ubuntu-24.04' }}
+    runs-on: [self-hosted, offline-yt-player]
     steps:
       - uses: actions/checkout@v4
       - name: Exact commit

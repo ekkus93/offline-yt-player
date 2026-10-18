@@ -17,7 +17,7 @@ concurrency:
 jobs:
   governance:
     name: Remediation governance
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, offline-yt-player]
     steps:
       - uses: actions/checkout@v4
       - name: Exact commit
@@ -41,7 +41,7 @@ jobs:
 
   rust:
     name: Rust fmt clippy test
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, offline-yt-player]
     steps:
       - uses: actions/checkout@v4
       - name: Exact commit
@@ -81,7 +81,7 @@ jobs:
 
   ffi:
     name: UniFFI Kotlin and Android ABI
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, offline-yt-player]
     steps:
       - uses: actions/checkout@v4
       - name: Exact commit
@@ -104,13 +104,13 @@ jobs:
         run: ./gradlew --no-daemon :app:verifyUniffiKotlinBindings
       - name: Build Android ABIs
         env:
-          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/30.0.16248370
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
-          CC_aarch64_linux_android: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
-          AR_aarch64_linux_android: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
-          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
-          CC_x86_64_linux_android: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
-          AR_x86_64_linux_android: /usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/30.0.16248370
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_HOME }}/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          CC_aarch64_linux_android: ${{ env.ANDROID_HOME }}/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          AR_aarch64_linux_android: ${{ env.ANDROID_HOME }}/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_HOME }}/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          CC_x86_64_linux_android: ${{ env.ANDROID_HOME }}/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          AR_x86_64_linux_android: ${{ env.ANDROID_HOME }}/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
         run: |
           cargo build -p offline-yt-core --target aarch64-linux-android
           cargo build -p offline-yt-core --target x86_64-linux-android
@@ -140,7 +140,7 @@ jobs:
 
   android:
     name: Android lint unit build
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, offline-yt-player]
     steps:
       - uses: actions/checkout@v4
       - name: Exact commit
@@ -164,12 +164,12 @@ jobs:
           rustup override set 1.98.1
           rustup target add aarch64-linux-android x86_64-linux-android
           sdkmanager "ndk;30.0.16248370"
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
-          export CC_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
-          export AR_aarch64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
-          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
-          export CC_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
-          export AR_x86_64_linux_android=/usr/local/lib/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export CC_aarch64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export AR_aarch64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export CC_x86_64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export AR_x86_64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           cargo build -p offline-yt-core --target aarch64-linux-android
           cargo build -p offline-yt-core --target x86_64-linux-android
       - name: Cache Gradle
