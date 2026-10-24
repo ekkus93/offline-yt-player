@@ -184,6 +184,22 @@ jobs:
         run: ./gradlew --version
       - name: Android qualification
         run: ./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest
+      # Narrow opt-in sideload exception. Ordinary master pushes never upload APK artifacts.
+      - name: Verify requested sideload APK
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, '[request-debug-apk]') }}
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          unzip -Z1 app/build/outputs/apk/debug/app-debug.apk | grep -Fx 'lib/arm64-v8a/liboffline_yt_core.so'
+          unzip -Z1 app/build/outputs/apk/debug/app-debug.apk | grep -Fx 'lib/arm64-v8a/libjnidispatch.so'
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload requested sideload APK
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, '[request-debug-apk]') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-yt-player-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3
       - name: Upload Android failure evidence
         if: failure() && github.ref_type == 'tag'
         uses: actions/upload-artifact@v4

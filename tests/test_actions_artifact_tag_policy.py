@@ -41,10 +41,24 @@ class ActionsArtifactTagPolicyTest(unittest.TestCase):
                         len(conditions), 1, "Upload step requires one explicit if"
                     )
                     if conditions:
-                        self.assertRegex(
-                            conditions[0], TAG_GUARD,
-                            "Actions artifacts may only upload from tagged refs",
+                        # The owner may explicitly request a short-lived sideload
+                        # build on master. Keep this exception restricted to one
+                        # named CI step and one exact commit-message trigger.
+                        requested_debug_apk = (
+                            workflow.name == "ci.yml"
+                            and lines[start].strip()
+                            == "- name: Upload requested sideload APK"
                         )
+                        if requested_debug_apk:
+                            self.assertEqual(
+                                conditions[0],
+                                "${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, '[request-debug-apk]') }}",
+                            )
+                        else:
+                            self.assertRegex(
+                                conditions[0], TAG_GUARD,
+                                "Actions artifacts may only upload from tagged refs",
+                            )
         self.assertGreater(uploads, 0, "No Actions artifact upload steps were checked")
 
 
