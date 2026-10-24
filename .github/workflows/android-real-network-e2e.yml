@@ -16,7 +16,7 @@ concurrency:
 jobs:
   api29-network-transition:
     name: API 29 host-controlled OS network loss and resume
-    runs-on: [self-hosted, offline-yt-player]
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

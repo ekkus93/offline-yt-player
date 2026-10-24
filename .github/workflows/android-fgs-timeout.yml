@@ -17,7 +17,7 @@ concurrency:
 jobs:
   api35-fgs-timeout:
     name: API 35 timeout callback and UIDT checks
-    runs-on: [self-hosted, offline-yt-player]
+    runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
