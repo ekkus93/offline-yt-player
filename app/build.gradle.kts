@@ -4,8 +4,8 @@ plugins {
 }
 
 val sourceRevision = providers.environmentVariable("GITHUB_SHA").orElse("local").get()
-val releaseVersionName = providers.environmentVariable("OYP_VERSION_NAME").orElse("0.1.0-dev").get()
-val releaseVersionCode = providers.environmentVariable("OYP_VERSION_CODE").orElse("1").get().toInt()
+val releaseVersionName = providers.environmentVariable("OYP_VERSION_NAME").orElse("0.1.1-dev").get()
+val releaseVersionCode = providers.environmentVariable("OYP_VERSION_CODE").orElse("2").get().toInt()
 val supportedAndroidTargets = mapOf(
     "arm64-v8a" to "aarch64-linux-android",
     "x86_64" to "x86_64-linux-android",

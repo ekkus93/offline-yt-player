@@ -1,6 +1,9 @@
 package com.ekkus.offlineytplayer.coregateway
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ekkus.offlineytplayer.core.FfiYouTubeSourceService
+import com.ekkus.offlineytplayer.core.FfiCancellationToken
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -13,10 +16,19 @@ import org.junit.runner.RunWith
 class GeneratedUniffiSourceGatewaySmokeTest {
     @Test
     fun packagedYouTubeResolverInitializesWithoutNetwork() {
+        // Kotlin's generated constructor is invoked directly. The old reflection
+        // erroneously searched for .new(), causing a permanent disabled Analyze.
+        FfiYouTubeSourceService().use { service ->
+            FfiCancellationToken().use { token ->
+                val result = service.resolve(
+                    "https://unsupported.invalid/watch?v=AACwyjlk8ko", token,
+                )
+                assertNotNull(result.error)
+            }
+        }
         GeneratedUniffiSourceAnalysisGateway.open().use { gateway ->
-            // open() fails on class loading, JNI ABI mismatch, constructor failure,
-            // generated-method mismatch, or failure of the native preflight.
-            check(gateway is AppSourceAnalysisGateway)
+            // Production bootstrap must pass the same native/UniFFI preflight.
+            assertNotNull(gateway)
         }
     }
 }

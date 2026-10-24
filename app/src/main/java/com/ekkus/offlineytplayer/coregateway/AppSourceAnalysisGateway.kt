@@ -2,8 +2,9 @@ package com.ekkus.offlineytplayer.coregateway
 
 import android.os.Looper
 import com.ekkus.offlineytplayer.SupportedUrlPolicy
+import com.ekkus.offlineytplayer.core.FfiCancellationToken
+import com.ekkus.offlineytplayer.core.FfiYouTubeSourceService
 import java.io.Closeable
-import java.lang.reflect.Method
 
 data class CoreSourceQualityChoice(
     val label: String,
@@ -48,7 +49,7 @@ interface AppSourceAnalysisGateway : Closeable {
 
 /** Production-only source analysis boundary backed by FfiYouTubeSourceService. */
 class GeneratedUniffiSourceAnalysisGateway private constructor(
-    private val sourceService: Any,
+    private val sourceService: FfiYouTubeSourceService,
 ) : AppSourceAnalysisGateway {
     override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> {
         check(Looper.myLooper() != Looper.getMainLooper()) {
@@ -63,11 +64,11 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
                     false,
                 ),
             )
-        val token = newGeneratedObject("com.ekkus.offlineytplayer.core.FfiCancellationToken", "new")
-        val resolved = callTwoArg(sourceService, "resolve", normalized, token)
+        val token = FfiCancellationToken()
+        val resolved = sourceService.resolve(normalized, token)
         readSourceError(resolved)?.let { return CoreGatewayResult(null, it) }
         val media = readSourceRequired(resolved, "media")
-        val choicesResult = callTwoArg(sourceService, "listChoices", normalized, token)
+        val choicesResult = sourceService.listChoices(normalized, token)
         readSourceError(choicesResult)?.let { return CoreGatewayResult(null, it) }
         val choices = readSourceList(choicesResult, "choices")
         val qualityOptions = disambiguateSourceQualityLabels(choices.map { choice ->
@@ -124,12 +125,15 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
             // MainActivity must prove that the shipped ABI and generated bindings can
             // actually execute a call, not just load a Kotlin class by reflection.
             System.loadLibrary("offline_yt_core")
-            val service = newGeneratedObject("com.ekkus.offlineytplayer.core.FfiYouTubeSourceService", "new")
-            val token = newGeneratedObject("com.ekkus.offlineytplayer.core.FfiCancellationToken", "new")
+            // UniFFI exports Rust #[uniffi::constructor] fn new() as a Kotlin
+            // public constructor, NOT a Java/Companion method called "new".
+            // Typed construction prevents this mismatch from ever compiling again.
+            val service = FfiYouTubeSourceService()
+            val token = FfiCancellationToken()
             // Deliberately unsupported host: Rust rejects it before any network
             // request, keeping production bootstrap and emulator smoke deterministic.
-            val probe = callTwoArg(
-                service, "resolve", "https://unsupported.invalid/watch?v=dQw4w9WgXcQ", token,
+            val probe = service.resolve(
+                "https://unsupported.invalid/watch?v=dQw4w9WgXcQ", token,
             )
             check(readSourceError(probe)?.kind?.contains("UNSUPPORTED", ignoreCase = true) == true) {
                 "Packaged YouTube resolver failed its native interop preflight"
@@ -219,24 +223,6 @@ internal fun disambiguateSourceSubtitleLabels(
 private fun canonicalSourceUrl(media: Any): String? {
     val source = readSourceNullable(media, "source") ?: return null
     return readSourceNullable(source, "canonicalUrl", "canonical_url") as String?
-}
-
-private fun newGeneratedObject(className: String, factoryName: String): Any {
-    val type = Class.forName(className)
-    type.methods.firstOrNull { it.name == factoryName && it.parameterTypes.isEmpty() }
-        ?.let { return it.invoke(null) ?: error("$className.$factoryName returned null") }
-    val companion = type.getDeclaredField("Companion").get(null)
-    val factory: Method = companion.javaClass.methods.firstOrNull {
-        it.name == factoryName && it.parameterTypes.isEmpty()
-    } ?: error("$className has no $factoryName() factory")
-    return factory.invoke(companion) ?: error("$className.$factoryName returned null")
-}
-
-private fun callTwoArg(target: Any, methodName: String, first: Any, second: Any): Any {
-    val method = target.javaClass.methods.firstOrNull {
-        it.name == methodName && it.parameterTypes.size == 2
-    } ?: error("Generated source service does not expose $methodName")
-    return method.invoke(target, first, second) ?: error("Generated source service returned null for $methodName")
 }
 
 private fun readSourceError(result: Any): CoreGatewayError? {
