@@ -8,6 +8,9 @@ set -eu
 
 for required_class in \
     com.ekkus.offlineytplayer.coregateway.GeneratedUniffiCoreGatewaySmokeTest \
+    com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceGatewaySmokeTest#packagedYouTubeResolverInitializesWithoutNetwork \
+    com.ekkus.offlineytplayer.ui.AddResolverAvailabilityInstrumentedTest#validYouTubeUrlCanShowUnavailableResolverError \
+    com.ekkus.offlineytplayer.ui.AddResolverAvailabilityInstrumentedTest#userUrlParametersAreCanonicalizedBeforeAnalysis \
     com.ekkus.offlineytplayer.Rmd1504ShareE2EInstrumentedTest \
     com.ekkus.offlineytplayer.Rmd1802SettingsObserverInstrumentedTest \
     com.ekkus.offlineytplayer.downloads.DownloadConnectivityObserverInstrumentedTest \

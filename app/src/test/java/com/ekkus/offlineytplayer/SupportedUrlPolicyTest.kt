@@ -29,6 +29,20 @@ class SupportedUrlPolicyTest {
     }
 
     @Test
+    fun recognizesReportedUserLinkWithAndWithoutTrackingParameters() {
+        val canonical = "https://www.youtube.com/watch?v=AACwyjlk8ko"
+        assertEquals(canonical, SupportedUrlPolicy.normalizeSupportedUrl("https://youtu.be/AACwyjlk8ko"))
+        assertEquals(
+            canonical,
+            SupportedUrlPolicy.normalizeSupportedUrl("https://youtu.be/AACwyjlk8ko?is=8sN66gt7NLpTjRGc"),
+        )
+        assertEquals(
+            canonical,
+            SupportedUrlPolicy.normalizeSupportedUrl("https://youtu.be/AACwyjlk8ko?si=8sN66gt7NLpTjRGc"),
+        )
+    }
+
+    @Test
     fun rejectsUnsupportedSchemesHostsAndYoutubePages() {
         val rejected = listOf(
             "file:///tmp/video.mp4",

@@ -120,9 +120,22 @@ class GeneratedUniffiSourceAnalysisGateway private constructor(
     override fun close() = Unit
 
     companion object {
-        fun open(): GeneratedUniffiSourceAnalysisGateway = GeneratedUniffiSourceAnalysisGateway(
-            newGeneratedObject("com.ekkus.offlineytplayer.core.FfiYouTubeSourceService", "new"),
-        )
+        fun open(): GeneratedUniffiSourceAnalysisGateway {
+            // MainActivity must prove that the shipped ABI and generated bindings can
+            // actually execute a call, not just load a Kotlin class by reflection.
+            System.loadLibrary("offline_yt_core")
+            val service = newGeneratedObject("com.ekkus.offlineytplayer.core.FfiYouTubeSourceService", "new")
+            val token = newGeneratedObject("com.ekkus.offlineytplayer.core.FfiCancellationToken", "new")
+            // Deliberately unsupported host: Rust rejects it before any network
+            // request, keeping production bootstrap and emulator smoke deterministic.
+            val probe = callTwoArg(
+                service, "resolve", "https://unsupported.invalid/watch?v=dQw4w9WgXcQ", token,
+            )
+            check(readSourceError(probe)?.kind?.contains("UNSUPPORTED", ignoreCase = true) == true) {
+                "Packaged YouTube resolver failed its native interop preflight"
+            }
+            return GeneratedUniffiSourceAnalysisGateway(service)
+        }
     }
 }
 

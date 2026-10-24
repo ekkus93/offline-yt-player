@@ -8,6 +8,15 @@ import org.junit.Test
 
 class AddWorkflowPolicyTest {
     @Test
+    fun analyzeRemainsActionableForNonblankInputEvenIfResolverStartupFailed() {
+        assertTrue(AddWorkflowPolicy.canAnalyze("https://youtu.be/AACwyjlk8ko", false, false))
+        assertTrue(AddWorkflowPolicy.canAnalyze("https://youtu.be/AACwyjlk8ko?is=test", false, false))
+        assertEquals(false, AddWorkflowPolicy.canAnalyze("   ", false, false))
+        assertEquals(false, AddWorkflowPolicy.canAnalyze("https://youtu.be/AACwyjlk8ko", true, false))
+        assertEquals(false, AddWorkflowPolicy.canAnalyze("https://youtu.be/AACwyjlk8ko", false, true))
+    }
+
+    @Test
     fun switchingFromUnavailableToExecutableQualityAndBackRecomputesReadiness() {
         val choices = mapOf("Preferred" to "", "Playable" to "format-720")
         val initial = AddWorkflowPolicy.selectedQuality(choices, "Preferred")

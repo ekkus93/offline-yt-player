@@ -10,6 +10,13 @@ internal data class ClipboardPasteDecision(
 internal data class ExecutableQualitySelection(val choiceId: String?, val readyForDownload: Boolean)
 
 internal object AddWorkflowPolicy {
+    /**
+     * Input/action readiness must never depend on resolver startup success.
+     * A failed resolver must leave Analyze clickable so it can report the failure.
+     */
+    fun canAnalyze(url: String, analyzing: Boolean, scheduling: Boolean): Boolean =
+        url.isNotBlank() && !analyzing && !scheduling
+
     /** Keep Download Setup readiness synchronized with the selected executable format. */
     fun selectedQuality(choiceIdsByLabel: Map<String, String?>, label: String): ExecutableQualitySelection {
         val choiceId = choiceIdsByLabel[label]

@@ -89,6 +89,7 @@ internal fun OfflineYTPlayerApp(
     ),
     downloadControlGateway: AppDownloadControlGateway? = null,
     sourceAnalysisGateway: AppSourceAnalysisGateway? = null,
+    sourceGatewayStartupError: String? = null,
     libraryDetailsGatewayProvider: () -> AppLibraryDetailsGateway? = { null },
     libraryMutationGatewayProvider: () -> AppLibraryMutationGateway? = { null },
     libraryRootPath: String? = null,
@@ -136,7 +137,7 @@ internal fun OfflineYTPlayerApp(
                 destinationStateHolder.SaveableStateProvider(destination.name) {
                     DestinationContent(
                         destination, padding, initialSharedUrl, libraryState, downloadsState,
-                        downloadControlGateway, sourceAnalysisGateway, libraryDetailsGatewayProvider,
+                        downloadControlGateway, sourceAnalysisGateway, sourceGatewayStartupError, libraryDetailsGatewayProvider,
                         libraryMutationGatewayProvider, libraryRootPath, onLibraryQueryChanged,
                         settingsSnapshot, onUpdateSettings,
                         { navigate(AppDestination.Add) }, { playbackAsset = it },
@@ -148,7 +149,7 @@ internal fun OfflineYTPlayerApp(
 }
 
 @OptIn(ExperimentalMaterial3Api::class) @Composable internal fun FixedRegionScaffold(title: String, destination: AppDestination, onDestinationSelected: (AppDestination) -> Unit, content: @Composable (PaddingValues) -> Unit) { Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets.safeDrawing, topBar = { TopAppBar(title = { Text(title) }) }, bottomBar = { NavigationBar { AppDestination.entries.forEach { item -> NavigationBarItem(selected = destination == item, onClick = { onDestinationSelected(item) }, icon = { Box(Modifier.sizeIn(minWidth = MidnightTransit.MinimumTouchTarget, minHeight = MidnightTransit.MinimumTouchTarget).semantics { contentDescription = item.accessibilityLabel }, contentAlignment = Alignment.Center) { Text(item.label.take(1)) } }, label = { Text(item.label) }) } } }, content = content) }
-@Composable private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?, libraryState: LibraryScreenState, downloadsState: DownloadsScreenState, downloadControlGateway: AppDownloadControlGateway?, sourceAnalysisGateway: AppSourceAnalysisGateway?, libraryDetailsGatewayProvider: () -> AppLibraryDetailsGateway?, libraryMutationGatewayProvider: () -> AppLibraryMutationGateway?, libraryRootPath: String?, onLibraryQueryChanged: (String) -> Unit, settingsSnapshot: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit, onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Unit) { Box(Modifier.fillMaxSize().padding(padding)) { when (destination) { AppDestination.Library -> LibraryScreen(onAdd, onPlay, libraryState, settingsSnapshot, onUpdateSettings, libraryDetailsGatewayProvider, libraryMutationGatewayProvider, libraryRootPath, onLibraryQueryChanged); AppDestination.Downloads -> DownloadsScreen(downloadsState, downloadControlGateway); AppDestination.Add -> AddScreen(PaddingValues(), initialSharedUrl, sourceAnalysisGateway, downloadControlGateway, settingsSnapshot); AppDestination.Settings -> SettingsScreen(PaddingValues(), settingsSnapshot, onUpdateSettings) } } }
+@Composable private fun DestinationContent(destination: AppDestination, padding: PaddingValues, initialSharedUrl: String?, libraryState: LibraryScreenState, downloadsState: DownloadsScreenState, downloadControlGateway: AppDownloadControlGateway?, sourceAnalysisGateway: AppSourceAnalysisGateway?, sourceGatewayStartupError: String?, libraryDetailsGatewayProvider: () -> AppLibraryDetailsGateway?, libraryMutationGatewayProvider: () -> AppLibraryMutationGateway?, libraryRootPath: String?, onLibraryQueryChanged: (String) -> Unit, settingsSnapshot: AppSettingsSnapshot, onUpdateSettings: (AppSettingsMutation.() -> Unit) -> Unit, onAdd: () -> Unit, onPlay: (LocalPlaybackAsset) -> Unit) { Box(Modifier.fillMaxSize().padding(padding)) { when (destination) { AppDestination.Library -> LibraryScreen(onAdd, onPlay, libraryState, settingsSnapshot, onUpdateSettings, libraryDetailsGatewayProvider, libraryMutationGatewayProvider, libraryRootPath, onLibraryQueryChanged); AppDestination.Downloads -> DownloadsScreen(downloadsState, downloadControlGateway); AppDestination.Add -> AddScreen(PaddingValues(), initialSharedUrl, sourceAnalysisGateway, sourceGatewayStartupError, downloadControlGateway, settingsSnapshot); AppDestination.Settings -> SettingsScreen(PaddingValues(), settingsSnapshot, onUpdateSettings) } } }
 @Composable
 private fun SettingsScreen(
     padding: PaddingValues,
@@ -288,6 +289,7 @@ private fun AddScreen(
     padding: PaddingValues,
     initialSharedUrl: String?,
     sourceGateway: AppSourceAnalysisGateway?,
+    sourceGatewayStartupError: String?,
     downloadControlGateway: AppDownloadControlGateway?,
     settings: AppSettingsSnapshot,
 ) {
@@ -338,6 +340,9 @@ private fun AddScreen(
     ) {
         Text("Download a supported video for offline playback.")
         Text("Settings: ${AddWorkflowPolicy.downloadSettingsSummary(settings.wifiOnlyDownloads, settings.maxConcurrentDownloads)}")
+        if (sourceGateway == null && sourceGatewayStartupError != null) {
+            Text(sourceGatewayStartupError)
+        }
         OutlinedTextField(
             value = url,
             onValueChange = {
@@ -375,7 +380,7 @@ private fun AddScreen(
                 onClick = {
                     val useCase = sourceAnalysisUseCase
                     if (useCase == null) {
-                        status = "Source resolver is unavailable."
+                        status = sourceGatewayStartupError ?: "YouTube resolver is not ready. Try reopening the app."
                         return@Button
                     }
                     cancelSupersededAnalysis()
@@ -465,7 +470,7 @@ private fun AddScreen(
                         status = null
                     }
                 },
-                enabled = url.isNotBlank() && sourceAnalysisUseCase != null && !analyzing && !scheduling,
+                enabled = AddWorkflowPolicy.canAnalyze(url, analyzing, scheduling),
                 modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget),
             ) { Text(if (analyzing) "Analyzing…" else "Analyze") }
         }

@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
     private var libraryDetailsGateway by mutableStateOf<AppLibraryDetailsGateway?>(null)
     private var libraryMutationGateway by mutableStateOf<AppLibraryMutationGateway?>(null)
     private var sourceAnalysisGateway by mutableStateOf<AppSourceAnalysisGateway?>(null)
+    private var sourceGatewayStartupError by mutableStateOf<String?>(null)
     private var downloadPresentationGateway: DownloadPresentationGateway? = null
     private var settingsStore: SharedPreferencesAppSettingsStore? = null
     private var settingsSubscription: SettingsSubscription? = null
@@ -106,6 +108,7 @@ class MainActivity : ComponentActivity() {
                 downloadsState = uiState.downloadsStateFlow.collectAsState().value,
                 downloadControlGateway = downloadControlGateway,
                 sourceAnalysisGateway = sourceAnalysisGateway,
+                sourceGatewayStartupError = sourceGatewayStartupError,
                 libraryDetailsGatewayProvider = { libraryDetailsGateway },
                 libraryMutationGatewayProvider = { libraryMutationGateway },
                 libraryRootPath = filesDir.absolutePath,
@@ -170,6 +173,12 @@ class MainActivity : ComponentActivity() {
                 MainActivityDependencyOverrides.createSourceAnalysis()
                     ?: GeneratedUniffiSourceAnalysisGateway.open()
             }
+            // A resolver startup failure previously became a permanent, silent,
+            // disabled Analyze button. Keep the exception in logcat (no user URL
+            // has been processed yet) and publish only its non-sensitive type.
+            sources.exceptionOrNull()?.let { failure ->
+                Log.e("OfflineYTPlayer", "YouTube source resolver initialization failed", failure)
+            }
             val presentations = runCatching { DownloadPresentationGateway.open(databasePath) }
             val openedCore = core.getOrNull()
             val startupFailure = openedCore?.reconcileStartupSafely()
@@ -216,6 +225,9 @@ class MainActivity : ComponentActivity() {
                 libraryDetailsGateway = details.getOrNull()
                 libraryMutationGateway = mutations.getOrNull()
                 sourceAnalysisGateway = sources.getOrNull()
+                sourceGatewayStartupError = sources.exceptionOrNull()?.let { failure ->
+                    "YouTube resolver failed to start (${failure.javaClass.simpleName}). Analyze is unavailable in this build."
+                }
                 downloadPresentationGateway = presentations.getOrNull()
                 coreGateway?.takeIf { startupFailure == null }?.let { gateway ->
                     stateRefresher = AppStateRefresher(
