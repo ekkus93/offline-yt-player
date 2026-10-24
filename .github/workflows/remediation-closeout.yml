@@ -9,7 +9,7 @@ permissions:
 jobs:
   detailed-todo-complete:
     name: Detailed remediation TODO complete
-    runs-on: [self-hosted, offline-yt-player]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Exact commit
