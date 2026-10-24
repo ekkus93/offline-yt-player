@@ -179,6 +179,17 @@ class MainActivity : ComponentActivity() {
             sources.exceptionOrNull()?.let { failure ->
                 Log.e("OfflineYTPlayer", "YouTube source resolver initialization failed", failure)
             }
+            // Publish the independent source resolver immediately. Holding it until
+            // core database reconciliation, library queries, or download metadata
+            // complete can strand Analyze on slower or damaged installations.
+            runOnUiThread {
+                if (!isDestroyed && !isFinishing) {
+                    sourceAnalysisGateway = sources.getOrNull()
+                    sourceGatewayStartupError = sources.exceptionOrNull()?.let { failure ->
+                        "YouTube resolver failed to start (${failure.javaClass.simpleName}). Analyze is unavailable in this build."
+                    }
+                }
+            }
             val presentations = runCatching { DownloadPresentationGateway.open(databasePath) }
             val openedCore = core.getOrNull()
             val startupFailure = openedCore?.reconcileStartupSafely()
