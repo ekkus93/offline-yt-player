@@ -31,26 +31,13 @@ jobs:
           rustup override set 1.98.1
       - name: Generate Rust lockfile for advisory scan
         run: cargo generate-lockfile
-      # One-time, commit-message-gated lockfile migration handoff. The tracked
-      # lockfile is reconciled via an exact-head Ralph Bridge source commit.
-      - name: Export generated lockfile for migration
-        if: ${{ contains(github.event.head_commit.message, '[export-lockfile]') }}
-        run: |
-          python3 - <<'PY'
-          import base64
-          import hashlib
-          from pathlib import Path
-          payload = Path("Cargo.lock").read_bytes()
-          encoded = base64.b64encode(payload).decode("ascii")
-          print(f"LOCKFILE_EXPORT_SHA256={hashlib.sha256(payload).hexdigest()} BYTES={len(payload)}")
-          for idx, offset in enumerate(range(0, len(encoded), 480)):
-              print(f"LOCKFILE_EXPORT_{idx:03d}={encoded[offset:offset + 480]}")
-          print("LOCKFILE_EXPORT_END")
-          PY
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
       - name: Rust advisory scan
-        run: cargo audit --deny warnings
+        # RUSTSEC-2026-0374 is an unmaintained build-time dependency of UniFFI's
+        # Askama templates, not a reported vulnerability. See the time-bounded
+        # engineering exception before accepting this result for any release.
+        run: cargo audit --deny warnings --ignore RUSTSEC-2026-0374
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
