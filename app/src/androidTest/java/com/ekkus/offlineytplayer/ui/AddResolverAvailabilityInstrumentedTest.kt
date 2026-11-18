@@ -28,7 +28,7 @@ class AddResolverAvailabilityInstrumentedTest {
         compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
         // The same startup diagnostic may appear in both the Add-screen status
         // and its actionable result panel. Require a visible match, not uniqueness.
-        compose.onAllNodesWithText(diagnostic).onFirst().assertIsDisplayed()
+        compose.onAllNodesWithText(diagnostic)[0].assertIsDisplayed()
     }
 
     @Test
