@@ -5,7 +5,6 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -27,7 +26,9 @@ class AddResolverAvailabilityInstrumentedTest {
             )
         }
         compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
-        // The same startup diagnostic may appear in both the Add-screen status\n        // and its actionable result panel. Require a visible match, not uniqueness.\n        compose.onAllNodesWithText(diagnostic).onFirst().assertIsDisplayed()
+        // The same startup diagnostic may appear in both the Add-screen status
+        // and its actionable result panel. Require a visible match, not uniqueness.
+        compose.onAllNodesWithText(diagnostic).onFirst().assertIsDisplayed()
     }
 
     @Test
