@@ -16,8 +16,14 @@ import org.junit.runner.RunWith
 class GeneratedUniffiSourceGatewaySmokeTest {
     @Test
     fun packagedYouTubeResolverInitializesWithoutNetwork() {
-        // Kotlin's generated constructor is invoked directly. The old reflection
-        // erroneously searched for .new(), causing a permanent disabled Analyze.
+        // Start through the same production path as MainActivity first: it explicitly
+        // loads the packaged Rust library before constructing generated UniFFI types.
+        // This avoids relying on incidental native-library loading from another test.
+        GeneratedUniffiSourceAnalysisGateway.open().use { gateway ->
+            assertNotNull(gateway)
+        }
+        // Exercise the generated Kotlin constructors directly as a second check.
+        // The old reflection erroneously searched for .new(), disabling Analyze.
         FfiYouTubeSourceService().use { service ->
             FfiCancellationToken().use { token ->
                 val result = service.resolve(
@@ -25,10 +31,6 @@ class GeneratedUniffiSourceGatewaySmokeTest {
                 )
                 assertNotNull(result.error)
             }
-        }
-        GeneratedUniffiSourceAnalysisGateway.open().use { gateway ->
-            // Production bootstrap must pass the same native/UniFFI preflight.
-            assertNotNull(gateway)
         }
     }
 }
