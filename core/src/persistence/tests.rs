@@ -359,3 +359,124 @@ fn detects_missing_and_wrong_sized_assets() {
         ErrorKind::CorruptAsset
     );
 }
+
+#[test]
+fn bundled_sqlite_file_reopen_preserves_durable_queue_and_foreign_keys() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("bundle-compat.sqlite3");
+    let queued = DurableDownloadSnapshot {
+        job_id: "reopen-job".into(),
+        state: DownloadState::RetryWait,
+        bytes_downloaded: 91,
+        total_bytes: Some(100),
+        attempt: 2,
+        retry_at_epoch_ms: Some(10_000),
+        last_error: None,
+    };
+    {
+        let store = LibraryStore::open(&path).unwrap();
+        assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+        store.save_download_snapshot(&queued).unwrap();
+        store.stage_asset("job-1", &item(true).assets[0]).unwrap();
+        store.promote_completed("job-1", &item(true)).unwrap();
+    }
+    let reopened = LibraryStore::open(&path).unwrap();
+    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
+    assert_eq!(reopened.load_download_snapshots().unwrap(), vec![queued]);
+    assert_eq!(reopened.get("item-1").unwrap(), Some(item(true)));
+    let guard = reopened.connection().unwrap();
+    let fk: i64 = guard
+        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(fk, 1, "every opened SQLite connection must enforce foreign keys");
+    assert!(
+        guard
+            .execute(
+                r#"INSERT INTO assets(item_id,asset_id,kind_json,relative_path,bytes)
+                   VALUES('missing-parent','orphan','"Video"','items/orphan',1)"#,
+                [],
+            )
+            .is_err(),
+        "an orphan media asset must be rejected by the foreign key"
+    );
+}
+
+#[test]
+fn failed_asset_insert_rolls_back_promotion_and_preserves_staging_after_reopen() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("rollback.sqlite3");
+    let store = LibraryStore::open(&path).unwrap();
+    let complete = item(true);
+    store.stage_asset("job-1", &complete.assets[0]).unwrap();
+    {
+        let connection = store.connection().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER injected_asset_failure BEFORE INSERT ON assets
+                 BEGIN SELECT RAISE(ABORT, 'injected SQLite asset error'); END;",
+            )
+            .unwrap();
+    }
+
+    assert_eq!(
+        store.promote_completed("job-1", &complete).unwrap_err().kind,
+        ErrorKind::Persistence
+    );
+    assert!(store.list(None).unwrap().is_empty());
+    assert_eq!(store.staged_job_ids().unwrap(), vec!["job-1"]);
+
+    drop(store);
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch("DROP TRIGGER injected_asset_failure")
+        .unwrap();
+    drop(connection);
+    let reopened = LibraryStore::open(&path).unwrap();
+    assert!(reopened.list(None).unwrap().is_empty());
+    assert_eq!(reopened.staged_job_ids().unwrap(), vec!["job-1"]);
+    reopened.promote_completed("job-1", &complete).unwrap();
+    assert_eq!(reopened.list(None).unwrap(), vec![complete]);
+    assert!(reopened.staged_job_ids().unwrap().is_empty());
+}
+
+#[test]
+fn future_schema_and_corrupt_file_fail_closed_without_destroying_user_data() {
+    let dir = tempdir().unwrap();
+    let future_path = dir.path().join("future.sqlite3");
+    let conn = rusqlite::Connection::open(&future_path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE schema_meta (id INTEGER PRIMARY KEY, version INTEGER NOT NULL);
+         INSERT INTO schema_meta(id,version) VALUES(1,999);",
+    )
+    .unwrap();
+    drop(conn);
+    assert_eq!(
+        LibraryStore::open(&future_path).unwrap_err().kind,
+        ErrorKind::Persistence
+    );
+    let conn = rusqlite::Connection::open(&future_path).unwrap();
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(version, 999, "migration may not downgrade an unknown future schema");
+    let table_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='library_items'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(table_count, 0, "failed migration must not create partial tables");
+    drop(conn);
+
+    let damaged = dir.path().join("corrupt.sqlite3");
+    let original = b"not a valid SQLite database file";
+    std::fs::write(&damaged, original).unwrap();
+    assert_eq!(
+        LibraryStore::open(&damaged).unwrap_err().kind,
+        ErrorKind::Persistence
+    );
+    assert_eq!(std::fs::read(&damaged).unwrap(), original);
+}
