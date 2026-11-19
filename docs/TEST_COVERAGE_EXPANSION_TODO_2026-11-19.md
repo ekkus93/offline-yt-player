@@ -18,32 +18,32 @@
 
 ## COV-000 — Baseline, inventory and scope (P0)
 
-- [ ] **COV-001** Record exact `master` SHA and latest full CI matrix; distinguish pre-existing qualifications from this track.
-- [ ] **COV-002** Inventory production Rust modules (`core/src`) and Android packages (`app/src/main`) and map current unit, fixture, integration and instrumentation tests.
+- [x] **COV-001** Record exact `master` SHA and latest full CI matrix; distinguish pre-existing qualifications from this track.
+- [x] **COV-002** Inventory production Rust modules (`core/src`) and Android packages (`app/src/main`) and map current unit, fixture, integration and instrumentation tests.
 - [ ] **COV-003** Map highest-risk uncovered *functions/branches*, not just file count, to COV-200–700. Explicitly note tests that already cover an edge case.
-- [ ] **COV-004** Document baseline CI job durations, test stability and artifact-upload restrictions before expanding emulator jobs.
-- [ ] **COV-005** Create `docs/TEST_COVERAGE_BASELINE_2026-11-19.md` (or a dated successor if run later), listing unknown metrics as **unmeasured** until actual reports exist.
+- [x] **COV-004** Document baseline CI job durations, test stability and artifact-upload restrictions before expanding emulator jobs.
+- [x] **COV-005** Create `docs/TEST_COVERAGE_BASELINE_2026-11-19.md` (or a dated successor if run later), listing unknown metrics as **unmeasured** until actual reports exist.
 
 **Acceptance:** committed inventory traces at least one measured or explicitly unmeasured finding to each risk area; no invented percentages.
 
-**Evidence:** _pending._
+**Evidence (COV-001/002/004/005):** `docs/TEST_COVERAGE_BASELINE_2026-11-19.md` inventories `core/src/lib.rs` Rust modules, Android packages and representative Rust/JVM/instrumentation tests; captures prior exact-head fully green SHA `355a955dd5bfcc1eff15f1dead4923c2fe0ea56b` and 8 workflow IDs/durations; and documents the tag-only artifact policy. Baseline created at `f590cc1f3a883b7fb358e291a5998f4891609dc4`, with numeric measurements verified at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e` (Rust run `44501336363`, main CI `44501336322`). This is module/package inventory, not complete per-function branch inventory; COV-003 remains open.
 
 ## COV-100 — Coverage measurement infrastructure (P0; implement first)
 
-- [ ] **COV-101** Pin `cargo-llvm-cov` and `llvm-tools-preview` compatible with the repository's Rust toolchain. Capture version and command in CI.
-- [ ] **COV-102** Add an isolated, reproducible Rust coverage job/script exercising the workspace; generate LCOV plus readable core-only line totals and supported region/branch metrics.
-- [ ] **COV-103** Confirm Rust denominator covers actual `core/src` logic, excluding tests, generated UniFFI bindings and external crates without silently hiding real source modules.
-- [ ] **COV-104** Evaluate/pin compatible Kotlin JVM coverage instrumentation (Kover or justified equivalent); wire `testDebugUnitTest` and produce validated machine-readable per-package results.
-- [ ] **COV-105** Confirm Android/JVM denominator excludes generated bindings/test code and includes key production `downloads`, UI-state and gateway logic.
+- [x] **COV-101** Pin `cargo-llvm-cov` and `llvm-tools-preview` compatible with the repository's Rust toolchain. Capture version and command in CI.
+- [x] **COV-102** Add an isolated, reproducible Rust coverage job/script exercising the workspace; generate LCOV plus readable core-only line totals and supported region/branch metrics.
+- [x] **COV-103** Confirm Rust denominator covers actual `core/src` logic, excluding tests, generated UniFFI bindings and external crates without silently hiding real source modules.
+- [x] **COV-104** Evaluate/pin compatible Kotlin JVM coverage instrumentation (Kover or justified equivalent); wire `testDebugUnitTest` and produce validated machine-readable per-package results.
+- [x] **COV-105** Confirm Android/JVM denominator excludes generated bindings/test code and includes key production `downloads`, UI-state and gateway logic.
 - [ ] **COV-106** Prototype Android instrumentation coverage on API 29 in a *separate* lane, verifying counters for a known app production path; if incompatible, document blocker and keep task open.
-- [ ] **COV-107** Publish bounded Rust/JVM totals with exact SHA and tool versions in logs and `GITHUB_STEP_SUMMARY`; preserve tag-only artifact uploads except existing narrowly permitted cases.
-- [ ] **COV-108** Add host-side tests validating coverage report parsing/denominators; missing/empty reports must be reported as errors or `unmeasured`, never 100%.
+- [x] **COV-107** Publish bounded Rust/JVM totals with exact SHA and tool versions in logs and `GITHUB_STEP_SUMMARY`; preserve tag-only artifact uploads except existing narrowly permitted cases.
+- [x] **COV-108** Add host-side tests validating coverage report parsing/denominators; missing/empty reports must be reported as errors or `unmeasured`, never 100%.
 - [ ] **COV-109** Record measured baseline per component/package/function. Keep thresholds **report-only** initially and document proposed (not enforced) Rust 85%, critical state 90%, Kotlin business logic 80% line goals.
 - [ ] **COV-110** Run exact-head standard CI plus coverage lane; record separate per-workflow evidence and verify no unauthorized artifact uploads or altered existing smoke acceptance.
 
 **Acceptance:** repeatable numeric Rust and JVM totals from production code, distinct Android instrumentation status, exact-SHA evidence, and no fake green report on missing data.
 
-**Evidence:** _pending._
+**Evidence (COV-101/102/103/104/105/107/108):** `.github/workflows/coverage-rust.yml`, `scripts/summarize_rust_coverage.py`, `tests/test_summarize_rust_coverage.py`, `app/build.gradle.kts` pinned Kover, `scripts/summarize_kotlin_coverage.py`, `tests/test_summarize_kotlin_coverage.py` and `.github/workflows/ci.yml`. At exact `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`, Rust coverage run `44501336363` completed with **8,125/9,129 = 89.00%** core/src measured lines (45 source files; branch coverage **unmeasured**). Main CI `44501336322` passed including coverage-parser tests and Kover Gradle task; Kotlin source packages `com.ekkus.offlineytplayer` excluding generated UniFFI `core` returned **1,435/3,796 = 37.80%** JVM source lines and **906/2,952 = 30.69%** branches. Both summaries print exact SHA and tool versions in the job output and summary; no new master artifacts. Detailed package breakdown in the baseline. COV-106/109/110 remain unchecked (instrumentation measurement, function-level classification, and full CI).
 
 ## COV-200 — YouTube source and Analyze resiliency (P0)
 
@@ -66,12 +66,12 @@
 - [ ] **COV-303** Exercise concurrent independent DB connections/workers racing to claim and settle the same job; verify a single authoritative winner.
 - [ ] **COV-304** Add cancel-vs-complete, pause-vs-retry, stale worker, and duplicate schedule races without nondeterministic sleeps; use barriers or test-controlled clocks.
 - [ ] **COV-305** Add repeated startup reconciliation/partial-staged-file tests, including missing assets, symlinks, stale lease and crash-between-checkpoint boundaries; prove idempotence and outside-root safety.
-- [ ] **COV-306** Add a bundled-SQLite upgrade regression smoke for `rusqlite 0.41.x`: file open/migrate, FK enforcement, transaction, snapshot persisted after reopen.
+- [x] **COV-306** Add a bundled-SQLite upgrade regression smoke for `rusqlite 0.41.x`: file open/migrate, FK enforcement, transaction, snapshot persisted after reopen.
 - [ ] **COV-307** Run new Rust tests under normal CI and coverage; document observed durable-state invariant and exact-head CI.
 
 **Acceptance:** no double promotion/completion, silent state loss or recovery escape; all fault injections are test-only.
 
-**Evidence:** _pending._
+**Evidence (COV-306):** `core/src/persistence/tests.rs::bundled_sqlite_file_reopen_preserves_durable_queue_and_foreign_keys` exercises `LibraryStore::open/migrate/save_download_snapshot/stage_asset/promote_completed` against a file-backed bundled SQLite database, reopens and checks saved queue/library, verifies `PRAGMA foreign_keys=ON` and rejects an orphan `assets` insert. The test is included in the passing Rust coverage lane `44501336363` at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e` and normal Rust CI `44501336322`; no arbitrary fixture claims about other migration versions.
 
 ## COV-400 — Android service, notification and API-level matrix (P1)
 
@@ -90,7 +90,7 @@
 
 ## COV-500 — HTTP resume, integrity and filesystem adversaries (P1)
 
-- [ ] **COV-501** Inventory `core/src/download/tests/transfer.rs` and `resume_limits.rs`; avoid re-adding existing 200/206/416, ENOSPC and body-disconnect cases.
+- [x] **COV-501** Inventory `core/src/download/tests/transfer.rs` and `resume_limits.rs`; avoid re-adding existing 200/206/416, ENOSPC and body-disconnect cases.
 - [ ] **COV-502** Add reproducible bounded property tests over Range/Content-Range, validators, content length and chunked/truncated response combinations using a local HTTP stub.
 - [ ] **COV-503** Assert unsafe combinations always restart or fail (never append unverifiable bytes); output failing seed/input for replay.
 - [ ] **COV-504** Inject mid-write disk failures, cancellation and malformed resume metadata; verify retained/removed partials match policy and no accepted corrupt SHA/length.
@@ -99,7 +99,7 @@
 
 **Acceptance:** zero accepted corrupt/resumed outputs across bounded adversarial cases; reproducible seeds in failures.
 
-**Evidence:** _pending._
+**Evidence (COV-501):** `core/src/download/tests/{transfer,resume_limits}.rs` and `docs/TEST_COVERAGE_BASELINE_2026-11-19.md` inventory existing 200/206/416, validator/restart, mid-body disconnect, ENOSPC and size-limit tests before designing new property tests. Inspected at `b46ba5c899eba4ae191afd4867d3762241f4a1d5`; relevant existing tests passed as part of the exact-head Rust coverage run `44501336363` at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`. COV-502 through COV-506 still need implementation.
 
 ## COV-600 — Media3 local playback lifecycle (P1)
 
@@ -152,6 +152,6 @@ This is a priority recommendation, not permission to skip independent work or ma
 ## Completion record
 
 - **Current baseline SHA at document creation:** `e946a24b9939c03a7f77f667705a1f888ae44771`.
-- **Implemented subtasks:** none in this new track.
-- **Coverage percentages:** unknown until COV-100.
-- **CI evidence for new test changes:** none yet; documentation-only commit must receive its own exact-head checks.
+- **Implemented subtasks:** COV-001, 002, 004, 005, 101, 102, 103, 104, 105, 107, 108, 306, 501; remaining tasks retain unchecked status.
+- **Coverage percentages (measured at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`):** Rust core 89.00% lines (branch unmeasured); Kotlin/JVM production code 37.80% lines and 30.69% branches; Android instrumentation still unmeasured.
+- **CI evidence for new test changes:** Rust coverage `44501336363` and main CI `44501336322` passed at exact `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`; other workflow statuses require recheck on the next head.

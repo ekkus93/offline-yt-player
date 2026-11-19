@@ -55,6 +55,65 @@ Android application paths examined: `app/src/main/java/com/ekkus/offlineytplayer
 3. Android instrumentation: separate API 29 JaCoCo/AGP prototype required to distinguish device coverage from JVM tests. **Unmeasured**.
 4. Proposed future thresholds (not CI gates): Rust 85% core line, critical durable state 90% line, Kotlin business logic 80% line. Do not enforce until baseline and stability are demonstrated.
 
+## Measured coverage results and exact-SHA evidence
+
+These **separate denominators** were produced by passing jobs on exact SHA
+`af38f8ffc31a27d6edd7111800f3a32c3fd1280e`:
+
+| Lane | Covered / measured production lines | Line % | Covered / measured branches | Evidence |
+| --- | ---: | ---: | ---: | --- |
+| Rust core (`core/src`) | 8,125 / 9,129 | **89.00%** | Unmeasured (LLVM LCOV has no BRDA data) | [Rust coverage run 44501336363](https://github.com/ekkus93/offline-yt-player/actions/runs/44501336363) |
+| Kotlin JVM business logic | 1,435 / 3,796 | **37.80%** | 906 / 2,952 (**30.69%**) | [CI / Kover run 44501336322](https://github.com/ekkus93/offline-yt-player/actions/runs/44501336322) |
+| Android on-device instrumentation | **Unmeasured** | — | **Unmeasured** | Pending COV-106; API 29 functional smoke is not line coverage |
+
+Kotlin production package line coverage from Kover 0.9.11 (XML and JSON validated; 
+Kotlin tests only):
+
+| Package | Covered / measured lines |
+| --- | ---: |
+| `com.ekkus.offlineytplayer.ui` | 272 / 1,347 (20.19%) |
+| `com.ekkus.offlineytplayer.coregateway` | 335 / 868 (38.59%) |
+| `com.ekkus.offlineytplayer.downloads` | 378 / 793 (47.67%) |
+| `com.ekkus.offlineytplayer` | 223 / 406 (54.93%) |
+| `com.ekkus.offlineytplayer.playback` | 101 / 177 (57.06%) |
+| `com.ekkus.offlineytplayer.settings` | 79 / 155 (50.97%) |
+| `com.ekkus.offlineytplayer.resilience` | 47 / 50 (94.00%) |
+
+Initial Rust baseline (before loopback HTTP/SQLite tests): `f590cc1f3a883b7fb358e291a5998f4891609dc4`,
+[Rust coverage run 44499021060](https://github.com/ekkus93/offline-yt-player/actions/runs/44499021060),
+8,090 / 9,123 = **88.68%**; 45 measured files. The subsequent 89.00% result
+measures the same scoped production Rust core after targeted regression tests.
+
+Largest measured Rust uncovered *files* in the 89.00% run (not function
+coverage):
+
+| File | Covered / measured executable lines |
+| --- | ---: |
+| `core/src/youtube_source.rs` | 91 / 282 |
+| `core/src/worker.rs` | 422 / 492 |
+| `core/src/ffi_download_control.rs` | Reported in LCOV; detailed function gaps not yet classified |
+| `core/src/persistence.rs` | Reported in LCOV; detailed function gaps not yet classified |
+
+The original `youtube_source.rs` measurement was 61/276; the local-watch
+HTTP tests and 408/429 retryability change improved it to 91/282 on the
+qualified commit. File-level totals and Kotlin package-level totals are a
+prioritization aid, **not** proof that every unexercised branch has been mapped.
+
+**Validated tool versions / execution:** Rust 1.98.1; `cargo-llvm-cov 0.9.1`;
+`llvm-tools-preview`; `cargo llvm-cov --workspace --all-features --lcov
+--output-path coverage/rust.lcov`; Kover Gradle Plugin 0.9.11,
+`./gradlew :app:koverXmlReportDebug`; `scripts/summarize_rust_coverage.py` and
+`scripts/summarize_kotlin_coverage.py`. Host-side parser tests reject
+malformed/empty reports and exclude test/generated source packages. They
+passed as part of the Rust coverage and CI governance jobs on the stated SHA.
+No master-push artifact was uploaded by these coverage jobs.
+
+**Remaining qualification on this SHA:** At the time of this checkpoint the
+API 29 smoke, API 35 FGS, cold-start, and real-network E2E runs were still
+pending. The main CI, Rust coverage, supply-chain, CI evidence, and
+deterministic fixture workflows passed. Recheck *all* workflows on the
+latest HEAD before checking COV-110 or COV-804.
+
 ## Updates
 
 Add exact source SHA, CI run link, tool versions, measured line/branch totals and uncovered file/function list here *only after the reporting workflow runs*. Do not equate an installed tool with a validated coverage baseline.
