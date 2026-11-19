@@ -557,7 +557,10 @@ fn provider_stream_reordering_preserves_media_id_and_stream_attributes() {
     let mut actual_formats = actual.streams;
     expected_formats.sort_by(|a, b| a.id.cmp(&b.id));
     actual_formats.sort_by(|a, b| a.id.cmp(&b.id));
-    assert_eq!(actual_formats, expected_formats);
+    assert_eq!(
+        serde_json::to_value(&actual_formats).unwrap(),
+        serde_json::to_value(&expected_formats).unwrap()
+    );
     assert_eq!(actual.title, expected.title);
     assert_eq!(actual.duration_ms, expected.duration_ms);
 }
