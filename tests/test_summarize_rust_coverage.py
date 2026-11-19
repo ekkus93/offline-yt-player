@@ -51,6 +51,34 @@ end_of_record
         self.assertEqual((result.lines_covered, result.lines_total), (2, 2))
         self.assertIsNone(result.branches_total)
 
+    def test_function_denominator_excludes_test_modules_and_reports_unexecuted(self):
+        fixture = (
+            "SF:core/src/youtube_source.rs\\n"
+            "DA:1,1\\n"
+            "FN:1,resolver\\nFNDA:0,resolver\\n"
+            "FN:4,parser\\nFNDA:4,parser\\n"
+            "end_of_record\\n"
+            "SF:core/src/youtube_source.rs\\nDA:1,1\\nFNDA:6,parser\\nend_of_record\\n"
+            "SF:core/src/youtube_source/tests.rs\\nDA:1,1\\nFNDA:1,test_case\\nend_of_record\\n"
+        )
+        result = parse_lcov(fixture)
+        self.assertEqual((result.functions_covered, result.functions_total), (1, 2))
+        self.assertEqual(result.to_dict()["function_percentage"], 50)
+        self.assertEqual(
+            result.uncovered_functions,
+            (("core/src/youtube_source.rs", "resolver"),),
+        )
+        self.assertIn("Unexecuted production functions", markdown_summary(result, "", "x"))
+
+    def test_malformed_fnda_fails_closed_and_absent_functions_remain_unmeasured(self):
+        fixture = "SF:core/src/download.rs\\nDA:1,1\\nend_of_record\\n"
+        self.assertIsNone(parse_lcov(fixture).functions_total)
+        for extra in ("FNDA:x,read", "FNDA:-1,read", "FNDA:1", "FNDA:1,"):
+            with self.subTest(extra=extra):
+                with self.assertRaises(CoverageError):
+                    parse_lcov("SF:core/src/download.rs\\nDA:1,1\\n" +
+                               extra + "\\nend_of_record\\n")
+
     def test_unmeasured_branch_is_not_100_percent(self):
         result = parse_lcov("SF:core/src/ffi.rs\nDA:3,1\nend_of_record\n")
         self.assertIsNone(result.to_dict()["branch_percentage"])

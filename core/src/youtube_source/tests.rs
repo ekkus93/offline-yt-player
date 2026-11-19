@@ -500,3 +500,64 @@ fn watch_page_malformed_and_valid_fixture_take_distinct_paths() {
         assert_eq!(media.streams.len(), 1);
     });
 }
+
+#[test]
+fn rejects_duplicate_provider_format_ids_instead_of_selecting_arbitrary_url() {
+    let mut response = fixture("combined");
+    let duplicate = response["streamingData"]["formats"][0].clone();
+    let mut conflicting = duplicate;
+    conflicting["url"] = serde_json::json!("https://media.example/unrelated.mp4");
+    response["streamingData"]["adaptiveFormats"] = serde_json::json!([conflicting]);
+    let err = parse_player(&response).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::SourceChanged);
+    assert_eq!(
+        err.message,
+        "YouTube watch response contained duplicate format identities"
+    );
+}
+
+#[test]
+fn provider_field_shape_matrix_fails_closed_without_false_metadata() {
+    for override_value in [
+        serde_json::Value::Null,
+        serde_json::json!(false),
+        serde_json::json!(["not video metadata"]),
+        serde_json::json!({"title": 42}),
+    ] {
+        let mut response = fixture("combined");
+        response["videoDetails"] = override_value;
+        let err = parse_player(&response).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+    }
+
+    for variant in [
+        serde_json::Value::Null,
+        serde_json::json!(false),
+        serde_json::json!({"formats": "not a list"}),
+        serde_json::json!({"formats": [null, {"mimeType": "video/mp4"}]}),
+    ] {
+        let mut response = fixture("combined");
+        response["streamingData"] = variant;
+        let err = parse_player(&response).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+    }
+}
+
+#[test]
+fn provider_stream_reordering_preserves_media_id_and_stream_attributes() {
+    let mut response = fixture("split");
+    let expected = parse_player(&response).unwrap();
+    response["streamingData"]["adaptiveFormats"]
+        .as_array_mut()
+        .unwrap()
+        .reverse();
+    let actual = parse_player(&response).unwrap();
+
+    let mut expected_formats = expected.streams;
+    let mut actual_formats = actual.streams;
+    expected_formats.sort_by(|a, b| a.id.cmp(&b.id));
+    actual_formats.sort_by(|a, b| a.id.cmp(&b.id));
+    assert_eq!(actual_formats, expected_formats);
+    assert_eq!(actual.title, expected.title);
+    assert_eq!(actual.duration_ms, expected.duration_ms);
+}

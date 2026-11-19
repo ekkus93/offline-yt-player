@@ -25,6 +25,9 @@ class CoverageSummary:
     branches_covered: int | None
     branches_total: int | None
     files: tuple[tuple[str, int, int], ...]
+    functions_covered: int | None
+    functions_total: int | None
+    uncovered_functions: tuple[tuple[str, str], ...]
 
     def to_dict(self) -> dict:
         return {
@@ -33,6 +36,16 @@ class CoverageSummary:
             "line_covered": self.lines_covered,
             "line_total": self.lines_total,
             "line_percentage": round(self.lines_covered * 100 / self.lines_total, 2),
+            "function_covered": self.functions_covered,
+            "function_total": self.functions_total,
+            "function_percentage": (
+                round(self.functions_covered * 100 / self.functions_total, 2)
+                if self.functions_total else None
+            ),
+            "uncovered_functions": [
+                {"file": path, "function": name}
+                for path, name in self.uncovered_functions
+            ],
             "branch_covered": self.branches_covered,
             "branch_total": self.branches_total,
             "branch_percentage": (
@@ -69,6 +82,7 @@ def core_relative_path(source: str) -> str | None:
 def parse_lcov(report: str) -> CoverageSummary:
     line_data: dict[str, dict[int, int]] = {}
     branch_data: dict[str, dict[tuple[int, str, str], int]] = {}
+    function_data: dict[str, dict[str, int]] = {}
     current: str | None = None
     seen_records = 0
     for line_number, raw in enumerate(report.splitlines(), 1):
@@ -81,6 +95,7 @@ def parse_lcov(report: str) -> CoverageSummary:
             if current is not None:
                 line_data.setdefault(current, {})
                 branch_data.setdefault(current, {})
+                function_data.setdefault(current, {})
         elif entry == "end_of_record":
             current = None
         elif entry.startswith("DA:") and current is not None:
@@ -95,6 +110,19 @@ def parse_lcov(report: str) -> CoverageSummary:
                 raise CoverageError(f"line {line_number}: invalid DA range")
             previous = line_data[current].get(line_no, 0)
             line_data[current][line_no] = max(previous, count)
+        elif entry.startswith("FNDA:") and current is not None:
+            fields = entry[5:].split(",", 1)
+            if len(fields) != 2 or not fields[1]:
+                raise CoverageError(f"line {line_number}: malformed FNDA")
+            try:
+                hits = int(fields[0])
+            except ValueError as exc:
+                raise CoverageError(f"line {line_number}: invalid FNDA count") from exc
+            if hits < 0:
+                raise CoverageError(f"line {line_number}: negative FNDA count")
+            function_data[current][fields[1]] = max(
+                function_data[current].get(fields[1], 0), hits
+            )
         elif entry.startswith("BRDA:") and current is not None:
             fields = entry[5:].split(",")
             if len(fields) != 4:
@@ -122,12 +150,25 @@ def parse_lcov(report: str) -> CoverageSummary:
     if total == 0:
         raise CoverageError("LCOV contains no production core/src executable lines")
     branches = [value for path in line_data for value in branch_data[path].values()]
+    functions = [
+        (path, name, hits)
+        for path in line_data
+        for name, hits in function_data[path].items()
+    ]
+    unexecuted = sorted(
+        ((path, name) for path, name, hits in functions if hits == 0),
+        key=lambda item: (item[0], item[1]),
+    )
     return CoverageSummary(
         lines_covered=sum(item[1] for item in files),
         lines_total=total,
         branches_covered=sum(hit > 0 for hit in branches) if branches else None,
         branches_total=len(branches) if branches else None,
         files=tuple(files),
+        functions_covered=sum(hits > 0 for _, _, hits in functions)
+        if functions else None,
+        functions_total=len(functions) if functions else None,
+        uncovered_functions=tuple(unexecuted),
     )
 
 
@@ -138,6 +179,11 @@ def markdown_summary(summary: CoverageSummary, commit: str, version: str) -> str
         f"({100 * summary.branches_covered / summary.branches_total:.2f}%)"
         if summary.branches_total else "unmeasured (not in this LCOV report)"
     )
+    function_text = (
+        f"{summary.functions_covered}/{summary.functions_total} "
+        f"({100 * summary.functions_covered / summary.functions_total:.2f}%)"
+        if summary.functions_total else "unmeasured (no FNDA in this LCOV)"
+    )
     rows = [
         "### Rust core test coverage (report only)",
         f"- Exact source SHA: " + (commit if commit else "local / not in GitHub Actions"),
@@ -147,6 +193,7 @@ def markdown_summary(summary: CoverageSummary, commit: str, version: str) -> str
         f"- Line coverage: **{summary.lines_covered}/{summary.lines_total} "
         f"({percent:.2f}%)** across {len(summary.files)} measured files.",
         f"- Branch coverage: **{branch}**.",
+        f"- Function coverage: **{function_text}**.",
         "- The denominator is instrumented executable lines; files not present in "
         "LCOV are **unmeasured**, not implicitly 100% covered.",
         "- No threshold is enforced during baseline collection.",
@@ -156,6 +203,15 @@ def markdown_summary(summary: CoverageSummary, commit: str, version: str) -> str
     ]
     for name, covered, total in summary.files[:12]:
         rows.append(f"| `{name}` | {covered}/{total} |")
+    if summary.uncovered_functions:
+        rows.extend([
+            "",
+            "| Unexecuted production functions (sample) |",
+            "| --- |",
+        ])
+        for path, name in summary.uncovered_functions[:20]:
+            safe = name.replace("|", "\\|").replace("`", "'")
+            rows.append(f"| `{path}` :: `{safe}` |")
     return "\n".join(rows) + "\n"
 
 

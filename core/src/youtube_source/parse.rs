@@ -75,6 +75,14 @@ pub(super) fn parse_player(v: &Value) -> Result<ExtractedYouTubeMedia, CoreError
     let mut streams = Vec::new();
     for format in formats {
         if let Some(stream) = parse_stream(format)? {
+            if streams
+                .iter()
+                .any(|existing: &ExtractedStream| existing.id == stream.id)
+            {
+                return Err(source_changed(
+                    "YouTube watch response contained duplicate format identities",
+                ));
+            }
             streams.push(stream);
         }
     }
