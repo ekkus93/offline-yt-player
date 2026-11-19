@@ -1,0 +1,55 @@
+name: Rust coverage (report only)
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+    tags: ['**']
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+# Bind concurrency to the exact tested SHA so unrelated master changes do not
+# cancel a still-running exact-commit report.
+concurrency:
+  group: rust-coverage-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  rust-coverage:
+    name: Rust core LCOV
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Set up pinned Rust and LLVM tools
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup component add llvm-tools-preview --toolchain 1.98.1
+      - name: Install pinned cargo-llvm-cov
+        run: |
+          cargo install cargo-llvm-cov --version 0.9.1 --locked
+          cargo llvm-cov --version
+      - name: Validate coverage parser
+        run: python3 -m unittest tests/test_summarize_rust_coverage.py
+      - name: Measure workspace tests with instrumented Rust
+        env:
+          CARGO_TARGET_DIR: target/coverage-rust
+        run: |
+          mkdir -p coverage
+          cargo llvm-cov --workspace --all-features --lcov --output-path coverage/rust.lcov
+          test -s coverage/rust.lcov
+      - name: Print scoped production Rust coverage
+        run: |
+          python3 scripts/summarize_rust_coverage.py coverage/rust.lcov \
+            --sha "$GITHUB_SHA" \
+            --tool-version "$(cargo llvm-cov --version)" \
+            --json-out coverage/rust-core-summary.json | tee -a "$GITHUB_STEP_SUMMARY"
+          test -s coverage/rust-core-summary.json
+      # Reports are printed as bounded text; do not upload artifacts on master.
