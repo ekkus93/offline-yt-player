@@ -101,7 +101,7 @@ impl YouTubeSource {
             return Err(CoreError::new(
                 ErrorKind::HttpStatus,
                 "YouTube player endpoint returned a non-success HTTP status",
-                response.status().is_server_error(),
+                provider_http_status_retryable(response.status()),
             ));
         }
         ensure_provider_response_size("YouTube player", response.content_length(), 0)?;
@@ -122,7 +122,7 @@ impl YouTubeSource {
             return Err(CoreError::new(
                 ErrorKind::HttpStatus,
                 "YouTube returned a non-success HTTP status",
-                response.status().is_server_error(),
+                provider_http_status_retryable(response.status()),
             ));
         }
         ensure_provider_response_size("YouTube watch", response.content_length(), 0)?;
@@ -364,6 +364,14 @@ fn asset(
 }
 fn source_changed(message: &str) -> CoreError {
     CoreError::new(ErrorKind::SourceChanged, message, false)
+}
+
+fn provider_http_status_retryable(status: reqwest::StatusCode) -> bool {
+    status.is_server_error()
+        || matches!(
+            status,
+            reqwest::StatusCode::REQUEST_TIMEOUT | reqwest::StatusCode::TOO_MANY_REQUESTS
+        )
 }
 
 fn network_error(_: reqwest::Error) -> CoreError {

@@ -408,3 +408,85 @@ fn rejects_malformed_caption_track() {
         ErrorKind::SourceChanged
     );
 }
+
+/// Local loopback HTTP fixture: exercises the production watch-page network
+/// path without contacting YouTube or accepting untrusted provider credentials.
+fn with_local_watch_response(
+    status: u16,
+    body: &[u8],
+    advertised_bytes: Option<usize>,
+    assert_response: impl FnOnce(&YouTubeSource, &str),
+) {
+    use std::io::{Read as _, Write as _};
+    use std::net::TcpListener;
+    use std::time::Duration;
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("local fixture socket");
+    let addr = listener.local_addr().expect("local fixture address");
+    let bytes = body.to_vec();
+    let server = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().expect("one loopback request");
+        socket
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("set fixture timeout");
+        let mut request = [0_u8; 2048];
+        socket.read(&mut request).expect("read fixture request");
+        let headers = format!(
+            "HTTP/1.1 {status} Fixture\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            advertised_bytes.unwrap_or(bytes.len())
+        );
+        socket.write_all(headers.as_bytes()).expect("write headers");
+        socket.write_all(&bytes).expect("write fixture body");
+    });
+    assert_response(&YouTubeSource::default(), &format!("http://{addr}/watch"));
+    server.join().expect("fixture thread");
+}
+
+#[test]
+fn watch_page_http_status_classifies_retryability_without_leaking_body() {
+    for (status, retryable) in [
+        (403_u16, false),
+        (404, false),
+        (408, true),
+        (429, true),
+        (500, true),
+        (503, true),
+    ] {
+        with_local_watch_response(
+            status,
+            b"secret_token=SHOULD_NOT_LEAK",
+            None,
+            |source, url| {
+                let err = source.fetch_watch_page(url).unwrap_err();
+                assert_eq!(err.kind, ErrorKind::HttpStatus, "status {status}");
+                assert_eq!(err.retryable, retryable, "status {status}");
+                assert!(!err.message.contains("SHOULD_NOT_LEAK"));
+            },
+        );
+    }
+}
+
+#[test]
+fn watch_page_with_truncated_body_returns_retryable_network_error() {
+    with_local_watch_response(200, b"short", Some(999), |source, url| {
+        let err = source.fetch_watch_page(url).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::NetworkUnavailable);
+        assert!(err.retryable);
+        assert!(!err.message.contains("short"));
+    });
+}
+
+#[test]
+fn watch_page_malformed_and_valid_fixture_take_distinct_paths() {
+    with_local_watch_response(200, b"<html>no player marker</html>", None, |source, url| {
+        let err = source.fetch_watch_page(url).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::SourceChanged);
+        assert!(!err.retryable);
+    });
+    let html = format!("<script>ytInitialPlayerResponse = {};</script>", fixture("combined"));
+    with_local_watch_response(200, html.as_bytes(), None, |source, url| {
+        let media = source.fetch_watch_page(url).expect("valid local watch fixture");
+        assert_eq!(media.title, "Sanitized Combined Fixture");
+        assert_eq!(media.streams.len(), 1);
+    });
+}
