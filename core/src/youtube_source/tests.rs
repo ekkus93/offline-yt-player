@@ -430,7 +430,7 @@ fn with_local_watch_response(
             .set_read_timeout(Some(Duration::from_secs(5)))
             .expect("set fixture timeout");
         let mut request = [0_u8; 2048];
-        socket.read(&mut request).expect("read fixture request");
+        assert!(socket.read(&mut request).expect("read fixture request") > 0);
         let headers = format!(
             "HTTP/1.1 {status} Fixture\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             advertised_bytes.unwrap_or(bytes.len())
