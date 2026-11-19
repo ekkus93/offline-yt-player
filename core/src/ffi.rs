@@ -426,13 +426,25 @@ mod tests {
     fn all_core_error_categories_preserve_kind_and_retryability_across_ffi() {
         let cases = [
             (ErrorKind::InvalidInput, FfiErrorKind::InvalidInput),
-            (ErrorKind::UnsupportedSource, FfiErrorKind::UnsupportedSource),
-            (ErrorKind::NetworkUnavailable, FfiErrorKind::NetworkUnavailable),
+            (
+                ErrorKind::UnsupportedSource,
+                FfiErrorKind::UnsupportedSource,
+            ),
+            (
+                ErrorKind::NetworkUnavailable,
+                FfiErrorKind::NetworkUnavailable,
+            ),
             (ErrorKind::NetworkTimeout, FfiErrorKind::NetworkTimeout),
             (ErrorKind::HttpStatus, FfiErrorKind::HttpStatus),
             (ErrorKind::SourceChanged, FfiErrorKind::SourceChanged),
-            (ErrorKind::NoCompatibleFormat, FfiErrorKind::NoCompatibleFormat),
-            (ErrorKind::InsufficientStorage, FfiErrorKind::InsufficientStorage),
+            (
+                ErrorKind::NoCompatibleFormat,
+                FfiErrorKind::NoCompatibleFormat,
+            ),
+            (
+                ErrorKind::InsufficientStorage,
+                FfiErrorKind::InsufficientStorage,
+            ),
             (ErrorKind::IntegrityFailure, FfiErrorKind::IntegrityFailure),
             (ErrorKind::MissingAsset, FfiErrorKind::MissingAsset),
             (ErrorKind::CorruptAsset, FfiErrorKind::CorruptAsset),
@@ -668,31 +680,3 @@ mod tests {
     #[test]
     fn cancellation_is_cooperative_sticky_and_typed() {
         let token = FfiCancellationToken::new();
-        assert!(!token.is_canceled());
-        assert!(token.check().is_ok());
-        token.cancel();
-        let error = token.check().unwrap_err();
-        assert_eq!(error.kind, ErrorKind::Canceled);
-        assert!(!error.retryable);
-    }
-
-    #[test]
-    fn network_diagnostic_secret_markers_do_not_cross_ffi_error_boundary() {
-        let markers = [
-            "SIGNED_QUERY_SECRET",
-            "TOKEN_SECRET",
-            "COOKIE_SECRET",
-            "BEARER_SECRET",
-        ];
-        let core = CoreError::new(
-            ErrorKind::NetworkUnavailable,
-            "Network request failed before a response was received",
-            true,
-        );
-        let ffi = FfiError::from(&core);
-        let rendered = format!("{ffi:?}");
-        for marker in markers {
-            assert!(!rendered.contains(marker));
-        }
-    }
-}

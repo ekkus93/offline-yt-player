@@ -3,7 +3,10 @@ package com.ekkus.offlineytplayer.coregateway
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ekkus.offlineytplayer.core.FfiYouTubeSourceService
 import com.ekkus.offlineytplayer.core.FfiCancellationToken
+import com.ekkus.offlineytplayer.core.FfiErrorKind
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -14,6 +17,32 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class GeneratedUniffiSourceGatewaySmokeTest {
+    @Test
+    fun repeatedNativeResolverOpenCloseAndPreCanceledRequestsDoNotLeakState() {
+        // Startup must load the native library through the actual Android app
+        // gateway before invoking generated UniFFI constructors.
+        repeat(12) { iteration ->
+            GeneratedUniffiSourceAnalysisGateway.open().use { gateway ->
+                assertNotNull(gateway)
+            }
+            FfiYouTubeSourceService().use { service ->
+                FfiCancellationToken().use { token ->
+                    token.cancel()
+                    val resolved = service.resolve(
+                        "https://www.youtube.com/watch?v=AACwyjlk8ko", token,
+                    )
+                    assertNull("iteration=$iteration", resolved.media)
+                    assertEquals(
+                        "iteration=$iteration",
+                        FfiErrorKind.CANCELED,
+                        resolved.error?.kind,
+                    )
+                    assertEquals(false, resolved.error?.retryable)
+                }
+            }
+        }
+    }
+
     @Test
     fun packagedYouTubeResolverInitializesWithoutNetwork() {
         // Start through the same production path as MainActivity first: it explicitly
