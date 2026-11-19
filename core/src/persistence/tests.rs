@@ -565,7 +565,9 @@ fn independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item() 
         last_error: None,
     };
     owner.save_download_snapshot(&previous).unwrap();
-    owner.stage_asset(&previous.job_id, &complete.assets[0]).unwrap();
+    owner
+        .stage_asset(&previous.job_id, &complete.assets[0])
+        .unwrap();
     drop(owner);
 
     let rendezvous = Arc::new(Barrier::new(3));
