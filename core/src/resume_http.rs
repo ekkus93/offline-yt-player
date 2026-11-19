@@ -31,12 +31,13 @@ fn header_u64(headers: &HeaderMap, name: reqwest::header::HeaderName) -> Option<
 }
 
 fn content_range_total(headers: &HeaderMap) -> Option<u64> {
-    headers
-        .get(CONTENT_RANGE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.rsplit_once('/'))
-        .and_then(|(_, total)| (total != "*").then_some(total))
-        .and_then(|total| total.parse::<u64>().ok())
+    let raw = headers.get(CONTENT_RANGE)?.to_str().ok()?;
+    let (range, total) = raw.strip_prefix("bytes ")?.split_once('/')?;
+    let (first, last) = range.split_once('-')?;
+    let first: u64 = first.parse().ok()?;
+    let last: u64 = last.parse().ok()?;
+    let total: u64 = total.parse().ok()?;
+    (first <= last && last < total).then_some(total)
 }
 
 #[cfg(test)]
@@ -87,5 +88,93 @@ mod tests {
         let representation = representation_from_headers("https://fixture.invalid/media", &headers);
         assert_eq!(representation.total_bytes, None);
         assert!(!representation.has_remote_validator());
+    }
+
+    #[test]
+    fn malformed_content_ranges_never_report_a_trustworthy_total() {
+        let mut headers = HeaderMap::new();
+        for malformed in [
+            "bogus/100",
+            "bytes */100",
+            "bytes 90-40/100",
+            "bytes 0-100/100",
+            "bytes 0-99/*",
+            "bytes -99/100",
+            "bytes 0-z/100",
+            "bytes 0-99/0",
+        ] {
+            headers.insert(CONTENT_RANGE, HeaderValue::from_str(malformed).unwrap());
+            assert_eq!(
+                content_range_total(&headers),
+                None,
+                "malformed content range {malformed}"
+            );
+        }
+        headers.insert(CONTENT_RANGE, HeaderValue::from_static("bytes 3-99/100"));
+        assert_eq!(content_range_total(&headers), Some(100));
+    }
+
+    #[test]
+    fn seeded_remote_validator_matrix_never_appends_unproven_partial_bytes() {
+        use crate::resume::{
+            ResumeRepresentation, prepare_partial_reuse, save_resume_representation,
+        };
+        let root = tempfile::tempdir().unwrap();
+        let mut seed: u64 = 0xC0FF_EE5A_26D1;
+        let url = "https://fixture.invalid/resume";
+        for case in 0..128 {
+            // Fixed xorshift seed: every CI failure identifies a reproducible input.
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let etag = match seed % 4 {
+                0 => None,
+                1 => Some("\"v1\""),
+                2 => Some("\"v2\""),
+                _ => Some("W/\"v1\""),
+            };
+            let total = match (seed >> 4) % 3 {
+                0 => None,
+                1 => Some(100_u64),
+                _ => Some(101_u64),
+            };
+            let mut headers = HeaderMap::new();
+            if let Some(value) = etag {
+                headers.insert(ETAG, HeaderValue::from_str(value).unwrap());
+            }
+            headers.insert(
+                LAST_MODIFIED,
+                HeaderValue::from_static("Wed, 16 Sep 2026 00:00:00 GMT"),
+            );
+            if let Some(bytes) = total {
+                headers.insert(
+                    CONTENT_RANGE,
+                    HeaderValue::from_str(&format!("bytes 40-99/{bytes}")).unwrap(),
+                );
+            }
+            let current = representation_from_headers(url, &headers);
+            let partial = root.path().join(format!("case-{case}.partial"));
+            std::fs::write(&partial, b"unverified partial bytes").unwrap();
+            let stored = ResumeRepresentation {
+                url: url.into(),
+                etag: Some("\"v1\"".into()),
+                last_modified: None,
+                total_bytes: Some(100),
+            };
+            save_resume_representation(&partial, &stored).unwrap();
+            let reused = prepare_partial_reuse(&partial, &current).unwrap();
+            let expected = etag == Some("\"v1\"") && total != Some(101);
+            assert_eq!(
+                reused, expected,
+                "seed=0x{seed:016x}, case={case}, etag={etag:?}, total={total:?}"
+            );
+            assert_eq!(partial.exists(), expected);
+            if expected {
+                assert_eq!(
+                    std::fs::read(&partial).unwrap(),
+                    b"unverified partial bytes"
+                );
+            }
+        }
     }
 }
