@@ -388,7 +388,10 @@ fn bundled_sqlite_file_reopen_preserves_durable_queue_and_foreign_keys() {
     let fk: i64 = guard
         .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(fk, 1, "every opened SQLite connection must enforce foreign keys");
+    assert_eq!(
+        fk, 1,
+        "every opened SQLite connection must enforce foreign keys"
+    );
     assert!(
         guard
             .execute(
@@ -419,7 +422,10 @@ fn failed_asset_insert_rolls_back_promotion_and_preserves_staging_after_reopen()
     }
 
     assert_eq!(
-        store.promote_completed("job-1", &complete).unwrap_err().kind,
+        store
+            .promote_completed("job-1", &complete)
+            .unwrap_err()
+            .kind,
         ErrorKind::Persistence
     );
     assert!(store.list(None).unwrap().is_empty());
@@ -460,7 +466,10 @@ fn future_schema_and_corrupt_file_fail_closed_without_destroying_user_data() {
             row.get(0)
         })
         .unwrap();
-    assert_eq!(version, 999, "migration may not downgrade an unknown future schema");
+    assert_eq!(
+        version, 999,
+        "migration may not downgrade an unknown future schema"
+    );
     let table_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE name='library_items'",
@@ -468,7 +477,10 @@ fn future_schema_and_corrupt_file_fail_closed_without_destroying_user_data() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(table_count, 0, "failed migration must not create partial tables");
+    assert_eq!(
+        table_count, 0,
+        "failed migration must not create partial tables"
+    );
     drop(conn);
 
     let damaged = dir.path().join("corrupt.sqlite3");
