@@ -73,16 +73,15 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
           script: >-
-            sh -c 'mkdir -p app/build/reports/apiCompatibility;
-            status=0;
+            mkdir -p app/build/reports/apiCompatibility;
             ./gradlew --no-daemon connectedDebugAndroidTest
             -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceGatewaySmokeTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest
-            > app/build/reports/apiCompatibility/test.log 2>&1 || status=$?;
-            if [ "$status" -ne 0 ]; then
-              tail -n 160 app/build/reports/apiCompatibility/test.log || true;
-              python3 scripts/summarize_android_test_failures.py || true;
-            fi;
-            exit "$status"'
+            > app/build/reports/apiCompatibility/test.log 2>&1
+      - name: Print API matrix test failures
+        if: failure()
+        run: |
+          tail -n 160 app/build/reports/apiCompatibility/test.log || true
+          python3 scripts/summarize_android_test_failures.py || true
       - name: Require exact API instrumented test execution
         run: |
           echo "Executed API ${{ matrix.api }} instrumentation for SHA $GITHUB_SHA"

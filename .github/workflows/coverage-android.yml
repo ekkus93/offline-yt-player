@@ -71,17 +71,16 @@ jobs:
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
           script: >-
-            sh -c 'mkdir -p app/build/reports/androidCoverage;
-            status=0;
+            mkdir -p app/build/reports/androidCoverage;
             ./gradlew --no-daemon :app:createDebugAndroidTestCoverageReport
             -PoypAndroidTestCoverage=true
             -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.AddResolverAvailabilityInstrumentedTest
-            > app/build/reports/androidCoverage/gradle.log 2>&1 || status=$?;
-            if [ "$status" -ne 0 ]; then
-              tail -n 180 app/build/reports/androidCoverage/gradle.log || true;
-              python3 scripts/summarize_android_test_failures.py || true;
-            fi;
-            exit "$status"'
+            > app/build/reports/androidCoverage/gradle.log 2>&1
+      - name: Print Android coverage test failures
+        if: failure()
+        run: |
+          tail -n 180 app/build/reports/androidCoverage/gradle.log || true
+          python3 scripts/summarize_android_test_failures.py || true
       - name: Require actual AndroidTest execution and positive UI coverage
         run: |
           python3 scripts/assert_android_smoke_execution.py \
