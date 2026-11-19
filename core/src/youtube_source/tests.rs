@@ -478,14 +478,24 @@ fn watch_page_with_truncated_body_returns_retryable_network_error() {
 
 #[test]
 fn watch_page_malformed_and_valid_fixture_take_distinct_paths() {
-    with_local_watch_response(200, b"<html>no player marker</html>", None, |source, url| {
-        let err = source.fetch_watch_page(url).unwrap_err();
-        assert_eq!(err.kind, ErrorKind::SourceChanged);
-        assert!(!err.retryable);
-    });
-    let html = format!("<script>ytInitialPlayerResponse = {};</script>", fixture("combined"));
+    with_local_watch_response(
+        200,
+        b"<html>no player marker</html>",
+        None,
+        |source, url| {
+            let err = source.fetch_watch_page(url).unwrap_err();
+            assert_eq!(err.kind, ErrorKind::SourceChanged);
+            assert!(!err.retryable);
+        },
+    );
+    let html = format!(
+        "<script>ytInitialPlayerResponse = {};</script>",
+        fixture("combined")
+    );
     with_local_watch_response(200, html.as_bytes(), None, |source, url| {
-        let media = source.fetch_watch_page(url).expect("valid local watch fixture");
+        let media = source
+            .fetch_watch_page(url)
+            .expect("valid local watch fixture");
         assert_eq!(media.title, "Sanitized Combined Fixture");
         assert_eq!(media.streams.len(), 1);
     });

@@ -142,7 +142,7 @@ def markdown_summary(summary: CoverageSummary, commit: str, version: str) -> str
         "### Rust core test coverage (report only)",
         f"- Exact source SHA: " + (commit if commit else "local / not in GitHub Actions"),
         f"- cargo-llvm-cov version: {version}",
-        f"- Scope: production \`core/src/**/*.rs\` executable lines, "
+        f"- Scope: production `core/src/**/*.rs` executable lines, "
         "excluding tests and generated/third-party sources.",
         f"- Line coverage: **{summary.lines_covered}/{summary.lines_total} "
         f"({percent:.2f}%)** across {len(summary.files)} measured files.",
@@ -155,7 +155,7 @@ def markdown_summary(summary: CoverageSummary, commit: str, version: str) -> str
         "| --- | ---: |",
     ]
     for name, covered, total in summary.files[:12]:
-        rows.append(f"| \`{name}\` | {covered}/{total} |")
+        rows.append(f"| `{name}` | {covered}/{total} |")
     return "\n".join(rows) + "\n"
 
 

@@ -146,8 +146,8 @@ def summary_markdown(value: KotlinCoverage, sha: str, version: str) -> str:
         "### Android JVM business-logic coverage (Kover; report only)",
         f"- Exact source SHA: {sha or 'local / not in GitHub Actions'}",
         f"- Kover version: {version}",
-        "- Scope: production \`com.ekkus.offlineytplayer\` Kotlin/Java source files "
-        "excluding generated \`core\` UniFFI/JNA bindings, tests and generated Android classes.",
+        "- Scope: production `com.ekkus.offlineytplayer` Kotlin/Java source files "
+        "excluding generated `core` UniFFI/JNA bindings, tests and generated Android classes.",
         f"- Line coverage: **{value.line_covered}/{value.line_total} ({pct:.2f}%)**.",
         f"- Branch coverage: **{branch}**.",
         "- Android instrumentation execution is **not included** in these JVM numbers.",
@@ -156,7 +156,7 @@ def summary_markdown(value: KotlinCoverage, sha: str, version: str) -> str:
         "| Production package | Covered / measured lines |",
         "| --- | ---: |",
     ]
-    lines.extend(f"| \`{n}\` | {c}/{t} |" for n, c, t in value.packages[:14])
+    lines.extend(f"| `{n}` | {c}/{t} |" for n, c, t in value.packages[:14])
     return "\n".join(lines) + "\n"
 
 
