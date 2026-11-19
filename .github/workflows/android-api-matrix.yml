@@ -1,0 +1,92 @@
+name: Android API compatibility matrix
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+    tags: ['**']
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-api-matrix-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  api-compatibility:
+    name: Android API ${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 33, 34]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Android SDK command-line tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: "false"
+      - name: Build pinned Rust Android ABIs
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup target add aarch64-linux-android x86_64-linux-android
+          sdkmanager "ndk;30.0.16248370" "platforms;android-37.0" "build-tools;37.0.0"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export CC_aarch64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export AR_aarch64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export CC_x86_64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export AR_x86_64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          cargo build -p offline-yt-core --target aarch64-linux-android
+          cargo build -p offline-yt-core --target x86_64-linux-android
+      - name: Exercise real Android platform and native behavior
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
+          script: >-
+            sh -c 'mkdir -p app/build/reports/apiCompatibility;
+            status=0;
+            ./gradlew --no-daemon connectedDebugAndroidTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceGatewaySmokeTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest
+            > app/build/reports/apiCompatibility/test.log 2>&1 || status=$?;
+            if [ "$status" -ne 0 ]; then
+              tail -n 160 app/build/reports/apiCompatibility/test.log || true;
+              python3 scripts/summarize_android_test_failures.py || true;
+            fi;
+            exit "$status"'
+      - name: Require exact API instrumented test execution
+        run: |
+          echo "Executed API ${{ matrix.api }} instrumentation for SHA $GITHUB_SHA"
+          python3 scripts/assert_android_smoke_execution.py \
+            --results-dir app/build/outputs/androidTest-results/connected \
+            --required-class com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest \
+            --required-class com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceGatewaySmokeTest \
+            --required-class com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest \
+            --required-class com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest \
+            --required-test com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest#targetPackageIsInstalled \
+            --required-test com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest#timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground
+          {
+            echo "### Android API ${{ matrix.api }} compatibility"
+            echo "- Source SHA: $GITHUB_SHA"
+            echo "- Runtime: Android API ${{ matrix.api }}, x86_64 GitHub-hosted emulator"
+            echo "- Tested runtime, native source gateway, FGS timeout and notification permission state"
+            echo "- UIDT scheduling and physical Samsung A54 remain separate acceptance gaps."
+          } >> "$GITHUB_STEP_SUMMARY"
+      # No artifact upload on ordinary master pushes.
