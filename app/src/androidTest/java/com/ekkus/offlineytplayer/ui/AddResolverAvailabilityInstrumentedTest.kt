@@ -1,6 +1,15 @@
 package com.ekkus.offlineytplayer.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
+import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
+import com.ekkus.offlineytplayer.coregateway.CoreSourceQualityChoice
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -47,5 +56,68 @@ class AddResolverAvailabilityInstrumentedTest {
         compose.runOnIdle {
             assertEquals(listOf("https://www.youtube.com/watch?v=AACwyjlk8ko"), source.analyzedUrls)
         }
+    }
+
+    @Test
+    fun secondAnalyzeTapIsBlockedWhileSourceResolutionIsInFlight() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val analyzeCalls = AtomicInteger()
+        val source = object : AppSourceAnalysisGateway {
+            override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> {
+                analyzeCalls.incrementAndGet()
+                started.countDown()
+                check(release.await(15, TimeUnit.SECONDS)) {
+                    "Controlled source resolution was not released"
+                }
+                return CoreGatewayResult(
+                    value = CoreSourceAnalysis(
+                        sourceUrl = sourceUrl,
+                        title = "Controlled Analyze fixture",
+                        durationMs = 10_000,
+                        thumbnailUrl = null,
+                        qualityLabel = "720p",
+                        estimatedBytes = 42,
+                        qualityOptions = listOf(
+                            CoreSourceQualityChoice(
+                                label = "720p",
+                                estimatedBytes = 42,
+                                choiceId = "format:fixture",
+                                separateAudio = false,
+                            ),
+                        ),
+                        subtitleOptions = emptyList(),
+                        audioOptions = emptyList(),
+                        containerOptions = listOf("mp4"),
+                    ),
+                    error = null,
+                )
+            }
+
+            override fun close() = Unit
+        }
+        compose.setContent {
+            OfflineYTPlayerApp(
+                initialSharedUrl = "https://www.youtube.com/watch?v=AACwyjlk8ko&t=5s",
+                sourceAnalysisGateway = source,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
+        }
+        try {
+            compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
+            assertTrue("Analyze never entered the source gateway", started.await(10, TimeUnit.SECONDS))
+            compose.onNodeWithText("Analyze").assertIsNotEnabled()
+            compose.runOnIdle { assertEquals(1, analyzeCalls.get()) }
+        } finally {
+            release.countDown()
+        }
+        compose.waitUntil(10_000) {
+            runCatching {
+                compose.onNodeWithText("Controlled Analyze fixture", substring = true)
+                    .assertIsDisplayed()
+            }.isSuccess
+        }
+        compose.runOnIdle { assertEquals(1, analyzeCalls.get()) }
     }
 }
