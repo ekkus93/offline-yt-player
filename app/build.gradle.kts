@@ -93,6 +93,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Only the dedicated API 29 instrumentation coverage job enables bytecode
+    // coverage. Keep regular smoke APKs and release builds uninstrumented.
+    buildTypes {
+        getByName("debug") {
+            enableAndroidTestCoverage =
+                providers.gradleProperty("oypAndroidTestCoverage").orNull == "true"
+        }
+    }
+
     sourceSets.getByName("main").jniLibs.srcDir(generatedJniLibsDir)
     // AGP 9 built-in Kotlin ignores .kt directories registered as Java sources.
     sourceSets.getByName("main").kotlin.directories += generatedUniffiKotlinDir.absolutePath

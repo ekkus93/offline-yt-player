@@ -1,0 +1,84 @@
+name: Android instrumentation coverage (report only)
+
+on:
+  push:
+    branches: [master, "ralph/**"]
+    tags: ['**']
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-instrumentation-coverage-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  android-coverage:
+    name: API 29 AndroidTest JaCoCo
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact commit
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Android SDK command-line tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: "false"
+      - name: Install pinned Rust Android native libraries
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup override set 1.98.1
+          rustup target add aarch64-linux-android x86_64-linux-android
+          sdkmanager "ndk;30.0.16248370" "platforms;android-37.0" "build-tools;37.0.0"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export CC_aarch64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          export AR_aarch64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export CC_x86_64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          export AR_x86_64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          cargo build -p offline-yt-core --target aarch64-linux-android
+          cargo build -p offline-yt-core --target x86_64-linux-android
+      - name: Check coverage XML validation contract
+        run: python3 -m unittest tests/test_summarize_android_instrumentation_coverage.py
+      - name: Measure real UI code path on API 29 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
+          script: >-
+            sh -c 'mkdir -p app/build/reports/androidCoverage;
+            status=0;
+            ./gradlew --no-daemon :app:createDebugAndroidTestCoverageReport
+            -PoypAndroidTestCoverage=true
+            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.ui.AddResolverAvailabilityInstrumentedTest
+            > app/build/reports/androidCoverage/gradle.log 2>&1 || status=$?;
+            if [ "$status" -ne 0 ]; then
+              tail -n 180 app/build/reports/androidCoverage/gradle.log || true;
+              python3 scripts/summarize_android_test_failures.py || true;
+            fi;
+            exit "$status"'
+      - name: Require actual AndroidTest execution and positive UI coverage
+        run: |
+          python3 scripts/assert_android_smoke_execution.py \
+            --results-dir app/build/outputs/androidTest-results/connected \
+            --required-class com.ekkus.offlineytplayer.ui.AddResolverAvailabilityInstrumentedTest \
+            --required-test com.ekkus.offlineytplayer.ui.AddResolverAvailabilityInstrumentedTest#userUrlParametersAreCanonicalizedBeforeAnalysis \
+            --required-test com.ekkus.offlineytplayer.ui.AddResolverAvailabilityInstrumentedTest#validYouTubeUrlCanShowUnavailableResolverError
+          report=$(find app/build/reports/coverage/androidTest/debug/connected -type f -name '*.xml' -print -quit)
+          test -n "$report"
+          python3 scripts/summarize_android_instrumentation_coverage.py "$report" \
+            --sha "$GITHUB_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+      # No Actions artifact uploads on ordinary master pushes.
