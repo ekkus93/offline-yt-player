@@ -203,6 +203,126 @@ mod tests {
         }])
     }
 
+    struct ControlledResolutionSource {
+        inner: DirectFixtureSource,
+        started: std::sync::mpsc::Sender<()>,
+        release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl MediaSource for ControlledResolutionSource {
+        fn id(&self) -> &'static str {
+            "controlled-fixture"
+        }
+
+        fn can_handle(&self, url: &str) -> bool {
+            self.inner.can_handle(url)
+        }
+
+        fn resolve<'a>(&'a self, url: &'a str) -> crate::SourceFuture<'a, crate::MediaInfo> {
+            Box::pin(async move {
+                self.calls.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                self.started.send(()).expect("notify test source entry");
+                // Model a blocking source request on a dedicated worker thread;
+                // cancellation is observed after the operation unblocks.
+                {
+                    let release = self.release.lock().expect("source release lock");
+                    release
+                        .recv_timeout(std::time::Duration::from_secs(10))
+                        .expect("bounded fixture operation must be released");
+                }
+                self.inner.resolve(url).await
+            })
+        }
+
+        fn choices<'a>(
+            &'a self,
+            media: &'a crate::MediaInfo,
+        ) -> crate::SourceFuture<'a, Vec<crate::QualityChoice>> {
+            self.inner.choices(media)
+        }
+
+        fn download_plan<'a>(
+            &'a self,
+            media: &'a crate::MediaInfo,
+            choice_id: &'a str,
+        ) -> crate::SourceFuture<'a, crate::DownloadPlan> {
+            self.inner.download_plan(media, choice_id)
+        }
+    }
+
+    #[test]
+    fn canceled_source_boundary_before_dispatch_never_starts_work() {
+        let (started, observed) = std::sync::mpsc::channel();
+        let (_release, receiver) = std::sync::mpsc::channel();
+        let source = ControlledResolutionSource {
+            inner: DirectFixtureSource::with_entries([(
+                "https://fixture.invalid/video".into(),
+                FixtureMedia {
+                    media_id: "video".into(),
+                    title: "Fixture".into(),
+                    duration_ms: 1_000,
+                    media_url: "https://fixture.invalid/media".into(),
+                    thumbnail_url: None,
+                    bytes: None,
+                },
+            )]),
+            started,
+            release: std::sync::Mutex::new(receiver),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        };
+        let cancel = FfiCancellationToken::new();
+        cancel.cancel();
+        let failure = resolve_source(&source, "https://fixture.invalid/video", &cancel)
+            .expect_err("pre-cancellation must fail closed");
+        assert_eq!(failure.kind, ErrorKind::Canceled);
+        assert_eq!(source.calls.load(std::sync::atomic::Ordering::Acquire), 0);
+        assert!(observed.try_recv().is_err());
+    }
+
+    #[test]
+    fn in_flight_cancellation_disallows_completion_after_blocked_source_returns() {
+        let (started, entered) = std::sync::mpsc::channel();
+        let (release, unblock) = std::sync::mpsc::channel();
+        let source = Arc::new(ControlledResolutionSource {
+            inner: DirectFixtureSource::with_entries([(
+                "https://fixture.invalid/video".into(),
+                FixtureMedia {
+                    media_id: "video".into(),
+                    title: "Fixture".into(),
+                    duration_ms: 1_000,
+                    media_url: "https://fixture.invalid/media".into(),
+                    thumbnail_url: None,
+                    bytes: None,
+                },
+            )]),
+            started,
+            release: std::sync::Mutex::new(unblock),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        });
+        let token = FfiCancellationToken::new();
+        let worker_token = Arc::clone(&token);
+        let worker_source = Arc::clone(&source);
+        let worker = std::thread::spawn(move || {
+            resolve_source(
+                worker_source.as_ref(),
+                "https://fixture.invalid/video",
+                &worker_token,
+            )
+        });
+        entered
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("source must enter controlled operation");
+        token.cancel();
+        assert!(token.is_canceled());
+        release.send(()).expect("release blocked source");
+        let result = worker.join().expect("worker must terminate");
+        let error = result.expect_err("canceled operation must never complete successfully");
+        assert_eq!(error.kind, ErrorKind::Canceled);
+        assert!(!error.retryable);
+        assert_eq!(source.calls.load(std::sync::atomic::Ordering::Acquire), 1);
+    }
+
     #[test]
     fn resolves_and_lists_choices_through_coarse_ffi_records() {
         let service = service();
