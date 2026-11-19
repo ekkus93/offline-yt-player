@@ -423,6 +423,114 @@ mod tests {
     use crate::{Compatibility, MediaFormat, SourceIdentity, StreamRole, VideoFormat};
 
     #[test]
+    fn all_core_error_categories_preserve_kind_and_retryability_across_ffi() {
+        let cases = [
+            (ErrorKind::InvalidInput, FfiErrorKind::InvalidInput),
+            (ErrorKind::UnsupportedSource, FfiErrorKind::UnsupportedSource),
+            (ErrorKind::NetworkUnavailable, FfiErrorKind::NetworkUnavailable),
+            (ErrorKind::NetworkTimeout, FfiErrorKind::NetworkTimeout),
+            (ErrorKind::HttpStatus, FfiErrorKind::HttpStatus),
+            (ErrorKind::SourceChanged, FfiErrorKind::SourceChanged),
+            (ErrorKind::NoCompatibleFormat, FfiErrorKind::NoCompatibleFormat),
+            (ErrorKind::InsufficientStorage, FfiErrorKind::InsufficientStorage),
+            (ErrorKind::IntegrityFailure, FfiErrorKind::IntegrityFailure),
+            (ErrorKind::MissingAsset, FfiErrorKind::MissingAsset),
+            (ErrorKind::CorruptAsset, FfiErrorKind::CorruptAsset),
+            (ErrorKind::Persistence, FfiErrorKind::Persistence),
+            (ErrorKind::Canceled, FfiErrorKind::Canceled),
+            (ErrorKind::Internal, FfiErrorKind::Internal),
+        ];
+        for (core_kind, expected) in cases {
+            for retryable in [false, true] {
+                let core = CoreError::new(core_kind.clone(), "sanitized fixture", retryable);
+                let mapped = FfiError::from(&core);
+                assert_eq!(mapped.kind, expected, "core kind {core_kind:?}");
+                assert_eq!(mapped.retryable, retryable);
+                assert_eq!(mapped.message, "sanitized fixture");
+            }
+        }
+    }
+
+    #[test]
+    fn ffi_records_preserve_optional_and_maximum_unsigned_values() {
+        let snapshot = DurableDownloadSnapshot {
+            job_id: "max-uint".into(),
+            state: DownloadState::RetryWait,
+            bytes_downloaded: u64::MAX,
+            total_bytes: Some(u64::MAX),
+            attempt: u32::MAX,
+            retry_at_epoch_ms: Some(u64::MAX),
+            last_error: None,
+        };
+        let mapped = FfiDurableDownloadSnapshot::from(&snapshot);
+        assert_eq!(mapped.job_id, "max-uint");
+        assert_eq!(mapped.state, FfiDownloadState::RetryWait);
+        assert_eq!(mapped.bytes_downloaded, u64::MAX);
+        assert_eq!(mapped.total_bytes, Some(u64::MAX));
+        assert_eq!(mapped.attempt, u32::MAX);
+        assert_eq!(mapped.retry_at_epoch_ms, Some(u64::MAX));
+        assert_eq!(mapped.last_error, None);
+
+        let choice = QualityChoice {
+            choice_id: "format:audio-1".into(),
+            label: "Audio".into(),
+            estimated_bytes: Some(u64::MAX),
+            video_height: None,
+            audio_only: true,
+            compatibility: Compatibility::RequiresSeparateAssets,
+        };
+        let mapped = FfiQualityChoice::from(&choice);
+        assert_eq!(mapped.choice_id, choice.choice_id);
+        assert_eq!(mapped.estimated_bytes, Some(u64::MAX));
+        assert_eq!(mapped.video_height, None);
+        assert!(mapped.audio_only);
+        assert!(mapped.separate_audio);
+    }
+
+    #[test]
+    fn same_label_audio_choices_keep_distinct_format_ids_through_ffi() {
+        let audio_format = |id: &str| MediaFormat {
+            format_id: id.into(),
+            container: "m4a".into(),
+            mime_type: Some("audio/mp4".into()),
+            role: StreamRole::AudioOnly,
+            bitrate_bps: Some(128_000),
+            content_length: None,
+            video: None,
+            audio: Some(crate::AudioFormat {
+                codec: "aac".into(),
+                bitrate_bps: Some(128_000),
+                channels: Some(2),
+                language: None,
+            }),
+            compatible_direct_play: true,
+        };
+        let media = MediaInfo {
+            source: SourceIdentity {
+                provider: "youtube".into(),
+                media_id: "fixture-media".into(),
+                canonical_url: None,
+            },
+            title: "Offline fixture".into(),
+            duration_ms: None,
+            thumbnail_url: None,
+            formats: vec![audio_format("format-a"), audio_format("format-b")],
+            subtitles: Vec::new(),
+        };
+        let converted = FfiMediaSummary::from(&media);
+        assert_eq!(converted.duration_ms, None);
+        assert_eq!(converted.source.canonical_url, None);
+        assert_eq!(converted.audio_options.len(), 2);
+        assert_eq!(converted.audio_options[0].format_id, "format-a");
+        assert_eq!(converted.audio_options[1].format_id, "format-b");
+        assert_eq!(
+            converted.audio_options[0].label,
+            converted.audio_options[1].label
+        );
+        assert!(converted.container_options.is_empty());
+    }
+
+    #[test]
     fn representative_types_round_trip_through_ffi_records() {
         let media = MediaInfo {
             source: SourceIdentity {
