@@ -1,7 +1,7 @@
 package com.ekkus.offlineytplayer.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertDoesNotExist
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
@@ -107,7 +107,9 @@ class AddResolverAvailabilityInstrumentedTest {
         try {
             compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
             assertTrue("Analyze never entered the source gateway", started.await(10, TimeUnit.SECONDS))
-            compose.onNodeWithText("Analyze").assertIsNotEnabled()
+            // This UI replaces Analyze during the in-flight request rather than disabling it.
+            // There is no second tappable Analyze action until resolution completes.
+            compose.onNodeWithText("Analyze").assertDoesNotExist()
             compose.runOnIdle { assertEquals(1, analyzeCalls.get()) }
         } finally {
             release.countDown()

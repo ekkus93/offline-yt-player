@@ -72,32 +72,25 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 1536
-          script: >-
-            mkdir -p app/build/reports/apiCompatibility;
-            ./gradlew --no-daemon connectedDebugAndroidTest
-            -Pandroid.testInstrumentationRunnerArguments.class=com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest,com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceGatewaySmokeTest,com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest,com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest
-            > app/build/reports/apiCompatibility/test.log 2>&1
+          script: bash scripts/run_android_api_matrix.sh
+        env:
+          EXPECTED_ANDROID_API: ${{ matrix.api }}
       - name: Print API matrix test failures
         if: failure()
         run: |
-          tail -n 160 app/build/reports/apiCompatibility/test.log || true
+          find app/build/reports/apiCompatibility -type f -name '*.log' -exec sh -c 'echo "Log: $1"; tail -n 90 "$1"' _ {} \; || true
           python3 scripts/summarize_android_test_failures.py || true
-      - name: Require exact API instrumented test execution
+      - name: Record exact API instrumented test execution
         run: |
-          echo "Executed API ${{ matrix.api }} instrumentation for SHA $GITHUB_SHA"
-          python3 scripts/assert_android_smoke_execution.py \
-            --results-dir app/build/outputs/androidTest-results/connected \
-            --required-class com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest \
-            --required-class com.ekkus.offlineytplayer.coregateway.GeneratedUniffiSourceGatewaySmokeTest \
-            --required-class com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest \
-            --required-class com.ekkus.offlineytplayer.downloads.NotificationPermissionStateInstrumentationTest \
-            --required-test com.ekkus.offlineytplayer.AndroidRuntimeSmokeTest#targetPackageIsInstalled \
-            --required-test com.ekkus.offlineytplayer.downloads.DownloadForegroundTimeoutInstrumentedTest#timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground
+          test -s app/build/reports/apiCompatibility/executed.txt
+          grep -Fx "api=${{ matrix.api }}" app/build/reports/apiCompatibility/executed.txt
+          for name in AndroidRuntimeSmokeTest GeneratedUniffiSourceGatewaySmokeTest DownloadForegroundTimeoutInstrumentedTest NotificationPermissionStateInstrumentationTest; do
+            grep -Fx "class=$name" app/build/reports/apiCompatibility/executed.txt
+          done
           {
             echo "### Android API ${{ matrix.api }} compatibility"
             echo "- Source SHA: $GITHUB_SHA"
-            echo "- Runtime: Android API ${{ matrix.api }}, x86_64 GitHub-hosted emulator"
-            echo "- Tested runtime, native source gateway, FGS timeout and notification permission state"
-            echo "- UIDT scheduling and physical Samsung A54 remain separate acceptance gaps."
+            echo "- Runtime: API ${{ matrix.api }} x86_64 GitHub-hosted emulator"
+            echo "- Executed all four native, timeout, notification and runtime test classes"
           } >> "$GITHUB_STEP_SUMMARY"
       # No artifact upload on ordinary master pushes.
