@@ -492,3 +492,127 @@ fn future_schema_and_corrupt_file_fail_closed_without_destroying_user_data() {
     );
     assert_eq!(std::fs::read(&damaged).unwrap(), original);
 }
+
+#[test]
+fn independent_sqlite_worker_connections_race_for_one_authoritative_claim() {
+    use std::sync::{Arc, Barrier};
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("worker-claim-race.sqlite3");
+    let owner = LibraryStore::open(&path).unwrap();
+    let queued = DurableDownloadSnapshot {
+        job_id: "shared-race".into(),
+        state: DownloadState::Queued,
+        bytes_downloaded: 0,
+        total_bytes: Some(100),
+        attempt: 0,
+        retry_at_epoch_ms: None,
+        last_error: None,
+    };
+    owner.save_download_snapshot(&queued).unwrap();
+    drop(owner);
+
+    let rendezvous = Arc::new(Barrier::new(3));
+    let mut handles = Vec::new();
+    for worker in 1..=2_u64 {
+        let database = path.clone();
+        let gate = Arc::clone(&rendezvous);
+        handles.push(std::thread::spawn(move || {
+            let store = LibraryStore::open(&database).unwrap();
+            let previous = store.load_download_snapshots().unwrap().remove(0);
+            let mut claim = previous.clone();
+            claim.state = DownloadState::Resolving;
+            claim.bytes_downloaded = worker;
+            claim.attempt = 1;
+            gate.wait();
+            store
+                .replace_download_snapshot_if_unchanged(&previous, &claim)
+                .unwrap()
+        }));
+    }
+    rendezvous.wait();
+    let successes = handles
+        .into_iter()
+        .filter(|worker| worker.join().unwrap())
+        .count();
+    assert_eq!(successes, 1, "only one SQLite connection may claim the job");
+    let observed = LibraryStore::open(&path)
+        .unwrap()
+        .load_download_snapshots()
+        .unwrap();
+    assert_eq!(observed.len(), 1);
+    assert_eq!(observed[0].state, DownloadState::Resolving);
+    assert_eq!(observed[0].attempt, 1);
+    assert!((1..=2).contains(&observed[0].bytes_downloaded));
+}
+
+#[test]
+fn independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item() {
+    use std::sync::{Arc, Barrier};
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("completion-cancel-race.sqlite3");
+    let owner = LibraryStore::open(&path).unwrap();
+    let complete = item(true);
+    let previous = DurableDownloadSnapshot {
+        job_id: complete.item_id.clone(),
+        state: DownloadState::Verifying,
+        bytes_downloaded: 100,
+        total_bytes: Some(100),
+        attempt: 1,
+        retry_at_epoch_ms: None,
+        last_error: None,
+    };
+    owner.save_download_snapshot(&previous).unwrap();
+    owner.stage_asset(&previous.job_id, &complete.assets[0]).unwrap();
+    drop(owner);
+
+    let rendezvous = Arc::new(Barrier::new(3));
+    let completion_gate = Arc::clone(&rendezvous);
+    let cancel_gate = Arc::clone(&rendezvous);
+    let completion_path = path.clone();
+    let cancel_path = path.clone();
+    let completed_from = previous.clone();
+    let canceled_from = previous.clone();
+
+    let complete_handle = std::thread::spawn(move || {
+        let store = LibraryStore::open(&completion_path).unwrap();
+        let mut completed = completed_from.clone();
+        completed.state = DownloadState::Completed;
+        completion_gate.wait();
+        store
+            .promote_completed_if_unchanged(
+                &completed_from.job_id,
+                &complete,
+                &completed_from,
+                &completed,
+            )
+            .unwrap()
+    });
+    let cancel_handle = std::thread::spawn(move || {
+        let store = LibraryStore::open(&cancel_path).unwrap();
+        let mut canceled = canceled_from.clone();
+        canceled.state = DownloadState::Canceled;
+        cancel_gate.wait();
+        store
+            .replace_download_snapshot_if_unchanged(&canceled_from, &canceled)
+            .unwrap()
+    });
+    rendezvous.wait();
+    let completed = complete_handle.join().unwrap();
+    let canceled = cancel_handle.join().unwrap();
+    assert_ne!(completed, canceled, "exactly one terminal transition wins");
+
+    let after = LibraryStore::open(&path).unwrap();
+    let stored = after.load_download_snapshots().unwrap();
+    assert_eq!(stored.len(), 1);
+    if completed {
+        assert_eq!(stored[0].state, DownloadState::Completed);
+        assert_eq!(after.list(None).unwrap(), vec![item(true)]);
+        assert!(after.staged_job_ids().unwrap().is_empty());
+    } else {
+        assert_eq!(stored[0].state, DownloadState::Canceled);
+        assert!(after.list(None).unwrap().is_empty());
+        assert_eq!(after.staged_job_ids().unwrap(), vec!["item-1"]);
+    }
+}
