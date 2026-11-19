@@ -47,7 +47,7 @@
 
 ## COV-200 — YouTube source and Analyze resiliency (P0)
 
-- [ ] **COV-201** Extend sanitized `youtube_source` / `youtube_extract` fixtures for missing/null/mismatched, duplicated and reordered provider fields, with exact valid/invalid outcomes.
+- [x] **COV-201** Extend sanitized `youtube_source` / `youtube_extract` fixtures for missing/null/mismatched, duplicated and reordered provider fields, with exact valid/invalid outcomes.
 - [ ] **COV-202** Add 403/404/429/5xx and truncated body fixture tests; verify typed permanent/retryable classification, timeouts, bounds and no erroneous `Unavailable` success.
 - [ ] **COV-203** Add option-ID fidelity tests across duplicate quality labels, split A/V, audio and subtitle choices, including provider-neutral download plan mapping.
 - [ ] **COV-204** Exercise source resolution canceled before start and during controlled simulated blocking I/O; assert no stuck worker, duplicate request or false completion.
@@ -59,11 +59,13 @@
 
 **Evidence:** _pending._
 
+**Evidence (COV-201):** Production `core/src/youtube_source/parse.rs::{parse_player,parse_stream}` and `core/src/youtube_source/tests.rs::{provider_field_shape_matrix_fails_closed_without_false_metadata,rejects_duplicate_provider_format_ids_instead_of_selecting_arbitrary_url,provider_stream_reordering_preserves_media_id_and_stream_attributes}` reject missing/wrong-shaped, duplicated and reordered sanitized provider data without live external requests. Exact-head Rust LCOV workflow `44505561276` at `a31ea408bbd5dfe01ed5684372c82f5e525214d5` passed, executing `cargo test --workspace --all-features`; deterministic fixture run `44505561262` also passed. Remaining COV-200 acceptance is unchecked.
+
 ## COV-300 — SQLite durability, worker races and startup repair (P0)
 
 - [ ] **COV-301** Add file-backed SQLite transaction fault tests for enqueue, claim, stage, promote, cancellation, and completion boundaries, including reopen/recovery assertions.
 - [ ] **COV-302** Cover future schema version, malformed/corrupt DB, foreign-key/orphan data and failed migration; verify fail-closed errors and no destructive fallback.
-- [ ] **COV-303** Exercise concurrent independent DB connections/workers racing to claim and settle the same job; verify a single authoritative winner.
+- [x] **COV-303** Exercise concurrent independent DB connections/workers racing to claim and settle the same job; verify a single authoritative winner.
 - [ ] **COV-304** Add cancel-vs-complete, pause-vs-retry, stale worker, and duplicate schedule races without nondeterministic sleeps; use barriers or test-controlled clocks.
 - [ ] **COV-305** Add repeated startup reconciliation/partial-staged-file tests, including missing assets, symlinks, stale lease and crash-between-checkpoint boundaries; prove idempotence and outside-root safety.
 - [x] **COV-306** Add a bundled-SQLite upgrade regression smoke for `rusqlite 0.41.x`: file open/migrate, FK enforcement, transaction, snapshot persisted after reopen.
@@ -72,6 +74,8 @@
 **Acceptance:** no double promotion/completion, silent state loss or recovery escape; all fault injections are test-only.
 
 **Evidence (COV-306):** `core/src/persistence/tests.rs::bundled_sqlite_file_reopen_preserves_durable_queue_and_foreign_keys` exercises `LibraryStore::open/migrate/save_download_snapshot/stage_asset/promote_completed` against a file-backed bundled SQLite database, reopens and checks saved queue/library, verifies `PRAGMA foreign_keys=ON` and rejects an orphan `assets` insert. The test is included in the passing Rust coverage lane `44501336363` at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e` and normal Rust CI `44501336322`; no arbitrary fixture claims about other migration versions.
+
+**Evidence (COV-303):** Production `LibraryStore` snapshot compare-and-swap and atomic promotion in `core/src/persistence/{snapshots}.rs` and `core/src/persistence.rs` are exercised by `core/src/persistence/tests.rs::{independent_sqlite_worker_connections_race_for_one_authoritative_claim,independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item}` with two independent connections and synchronization barriers, requiring exactly one claim or terminal transition and library/staging consistency. Exact-head Rust coverage `44505561276` and deterministic fixture `44505561262` passed at `a31ea408bbd5dfe01ed5684372c82f5e525214d5`. Other fault-phase and job-scheduling races remain open.
 
 ## COV-400 — Android service, notification and API-level matrix (P1)
 
@@ -92,7 +96,7 @@
 
 - [x] **COV-501** Inventory `core/src/download/tests/transfer.rs` and `resume_limits.rs`; avoid re-adding existing 200/206/416, ENOSPC and body-disconnect cases.
 - [ ] **COV-502** Add reproducible bounded property tests over Range/Content-Range, validators, content length and chunked/truncated response combinations using a local HTTP stub.
-- [ ] **COV-503** Assert unsafe combinations always restart or fail (never append unverifiable bytes); output failing seed/input for replay.
+- [x] **COV-503** Assert unsafe combinations always restart or fail (never append unverifiable bytes); output failing seed/input for replay.
 - [ ] **COV-504** Inject mid-write disk failures, cancellation and malformed resume metadata; verify retained/removed partials match policy and no accepted corrupt SHA/length.
 - [ ] **COV-505** Check no path traversal, symlink escape, excessive writes or unbounded memory from generated inputs; retain minimized adversarial fixtures.
 - [ ] **COV-506** Run deterministic tests repeatedly in CI; record coverage delta, exact-head Rust job and accepted invariants.
@@ -100,6 +104,8 @@
 **Acceptance:** zero accepted corrupt/resumed outputs across bounded adversarial cases; reproducible seeds in failures.
 
 **Evidence (COV-501):** `core/src/download/tests/{transfer,resume_limits}.rs` and `docs/TEST_COVERAGE_BASELINE_2026-11-19.md` inventory existing 200/206/416, validator/restart, mid-body disconnect, ENOSPC and size-limit tests before designing new property tests. Inspected at `b46ba5c899eba4ae191afd4867d3762241f4a1d5`; relevant existing tests passed as part of the exact-head Rust coverage run `44501336363` at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`. COV-502 through COV-506 still need implementation.
+
+**Evidence (COV-503):** `core/src/resume_http.rs::{seeded_remote_validator_matrix_never_appends_unproven_partial_bytes,malformed_content_ranges_never_report_a_trustworthy_total}` exercise production representation extraction, `ResumeRepresentation::matches`, sidecar saving and `prepare_partial_reuse` across 128 repeatable validator/size combinations and invalid Content-Range values. Failures include seed/case data. Rust coverage `44505561276` and deterministic fixture E2E `44505561262` passed at `a31ea408bbd5dfe01ed5684372c82f5e525214d5`. The broader HTTP 200/206/416 property matrix and injected filesystem failures remain unchecked.
 
 ## COV-600 — Media3 local playback lifecycle (P1)
 
@@ -152,6 +158,6 @@ This is a priority recommendation, not permission to skip independent work or ma
 ## Completion record
 
 - **Current baseline SHA at document creation:** `e946a24b9939c03a7f77f667705a1f888ae44771`.
-- **Implemented subtasks:** COV-001, 002, 004, 005, 101, 102, 103, 104, 105, 107, 108, 306, 501; remaining tasks retain unchecked status.
+- **Implemented subtasks:** COV-001, 002, 004, 005, 101, 102, 103, 104, 105, 107, 108, 306, 501; COV-201, 303, 503; remaining tasks retain unchecked status.
 - **Coverage percentages (measured at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`):** Rust core 89.00% lines (branch unmeasured); Kotlin/JVM production code 37.80% lines and 30.69% branches; Android instrumentation still unmeasured.
 - **CI evidence for new test changes:** Rust coverage `44501336363` and main CI `44501336322` passed at exact `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`; other workflow statuses require recheck on the next head.

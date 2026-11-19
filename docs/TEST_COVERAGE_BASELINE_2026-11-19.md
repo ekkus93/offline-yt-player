@@ -114,6 +114,20 @@ pending. The main CI, Rust coverage, supply-chain, CI evidence, and
 deterministic fixture workflows passed. Recheck *all* workflows on the
 latest HEAD before checking COV-110 or COV-804.
 
+
+## Additional exact-commit regression coverage checkpoint
+
+At implementation SHA `a31ea408bbd5dfe01ed5684372c82f5e525214d5`, Rust LCOV workflow [44505561276](https://github.com/ekkus93/offline-yt-player/actions/runs/44505561276) passed:
+
+- Rust scoped production executable lines: **8,200 / 9,204 = 89.09%**, across 45 measured files.
+- Raw LLVM function symbols: **895 / 1,506 = 59.43%**. **These are not a reliable count of distinct named Rust source functions**: the LCOV FNDA identifiers are compiler-mangled and may represent repeated instantiations and closures. Do not enforce this as a function threshold until symbols are demangled/deduplicated and source methods mapped to risks.
+- Branch coverage remains **unmeasured** by this LCOV mode.
+- Tests added for missing/wrong-shaped/duplicate provider IDs, 408/429 retry classification, file-backed SQLite rollback and two connection races, malformed Content-Range parsing and seeded sidecar validator rules.
+- Deterministic fixture E2E [44505561262](https://github.com/ekkus93/offline-yt-player/actions/runs/44505561262) also passed.
+- The Android workflow matrix and Kover remeasurement at this exact SHA were still running at checkpoint time; an earlier 37.80% Kotlin/JVM baseline remains the last verified measurement. **Do not infer final 9/9 success**.
+
+The coverage TODO checks COV-201, 303 and 503 based on their individual Rust tests; tasks requiring broader provider error cases, API matrix and on-device instrumentation remain open.
+
 ## Updates
 
 Add exact source SHA, CI run link, tool versions, measured line/branch totals and uncovered file/function list here *only after the reporting workflow runs*. Do not equate an installed tool with a validated coverage baseline.
