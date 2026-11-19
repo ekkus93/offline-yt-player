@@ -11,6 +11,9 @@ import unittest
 
 WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 RUNS_ON = re.compile(r"^\s+runs-on:\s*(.+)$", re.MULTILINE)
+# Exact GitHub-hosted runner labels only; never permit arbitrary expressions,
+# self-hosted arrays, larger private runner labels or unreviewed runner pools.
+ALLOWED_HOSTED_UBUNTU = frozenset({"ubuntu-latest", "ubuntu-24.04"})
 
 
 class HostedCIRunnerPolicyTest(unittest.TestCase):
@@ -25,7 +28,7 @@ class HostedCIRunnerPolicyTest(unittest.TestCase):
             for value in values:
                 count += 1
                 with self.subTest(workflow=file.name, runner=value):
-                    self.assertEqual(value.strip(), "ubuntu-latest")
+                    self.assertIn(value.strip(), ALLOWED_HOSTED_UBUNTU)
         self.assertGreater(count, 0)
 
 
