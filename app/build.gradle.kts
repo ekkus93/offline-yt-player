@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    // JVM tests only; on-device Android instrumentation is a separate measurement.
+    id("org.jetbrains.kotlinx.kover") version "0.9.11"
 }
 
 val sourceRevision = providers.environmentVariable("GITHUB_SHA").orElse("local").get()
@@ -145,4 +147,20 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.compose.ui.test.junit4)
+}
+
+kover {
+    reports {
+        filters {
+            excludes {
+                // Generated UniFFI/JNA Kotlin code is not hand-maintained app logic.
+                classes(
+                    "com.ekkus.offlineytplayer.core.*",
+                    "*.BuildConfig",
+                    "*.R",
+                    "*.R$*",
+                )
+            }
+        }
+    }
 }

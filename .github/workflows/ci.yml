@@ -28,6 +28,8 @@ jobs:
         run: python3 -m unittest tests/test_check_remediation_closeout.py
       - name: Instrumentation execution guard tests
         run: python3 -m unittest tests/test_assert_android_smoke_execution.py
+      - name: Coverage report parsing tests
+        run: python3 -m unittest tests/test_summarize_rust_coverage.py tests/test_summarize_kotlin_coverage.py
       - name: Required Android smoke driver contract tests
         run: python3 -m unittest tests/test_run_required_android_smoke.py
       - name: Exact-head Compose golden preflight tests
@@ -186,6 +188,15 @@ jobs:
         run: ./gradlew --version
       - name: Android qualification
         run: ./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest
+      - name: Kotlin JVM business-logic coverage (report only)
+        run: |
+          ./gradlew --no-daemon :app:koverXmlReportDebug
+          report=$(find app/build/reports/kover -type f -name '*.xml' -print -quit)
+          test -n "$report"
+          python3 scripts/summarize_kotlin_coverage.py "$report" \
+            --sha "$GITHUB_SHA" --plugin-version 0.9.11 \
+            --json-out app/build/reports/kover/app-jvm-summary.json | tee -a "$GITHUB_STEP_SUMMARY"
+          test -s app/build/reports/kover/app-jvm-summary.json
       # Narrow opt-in sideload exception. Ordinary master pushes never upload APK artifacts.
       - name: Verify requested sideload APK
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, '[request-debug-apk]') }}
