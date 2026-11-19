@@ -13,10 +13,14 @@ concurrency:
   group: android-real-network-e2e-${{ github.sha }}
   cancel-in-progress: true
 
+# Emulator jobs on Ubuntu 24.04 need KVM access or explicit software TCG fallback.
+env:
+  ANDROID_I_WANT_MY_TCG: "yes"
+
 jobs:
   api29-network-transition:
     name: API 29 host-controlled OS network loss and resume
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +50,14 @@ jobs:
           export AR_x86_64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           cargo build -p offline-yt-core --target aarch64-linux-android
           cargo build -p offline-yt-core --target x86_64-linux-android
+      - name: Enable Android emulator KVM when available
+        run: |
+          if test -e /dev/kvm; then
+            sudo chmod a+rw /dev/kvm
+            ls -l /dev/kvm
+          else
+            echo "KVM device unavailable; emulator TCG fallback explicitly permitted"
+          fi
       - name: Toggle real Android network while foreground download is active
         uses: reactivecircus/android-emulator-runner@v2
         with:

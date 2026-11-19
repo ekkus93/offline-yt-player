@@ -14,10 +14,14 @@ concurrency:
   group: android-instrumentation-coverage-${{ github.sha }}
   cancel-in-progress: true
 
+# Emulator jobs on Ubuntu 24.04 need KVM access or explicit software TCG fallback.
+env:
+  ANDROID_I_WANT_MY_TCG: "yes"
+
 jobs:
   android-coverage:
     name: API 29 AndroidTest JaCoCo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +54,14 @@ jobs:
           cargo build -p offline-yt-core --target x86_64-linux-android
       - name: Check coverage XML validation contract
         run: python3 -m unittest tests/test_summarize_android_instrumentation_coverage.py
+      - name: Enable Android emulator KVM when available
+        run: |
+          if test -e /dev/kvm; then
+            sudo chmod a+rw /dev/kvm
+            ls -l /dev/kvm
+          else
+            echo "KVM device unavailable; emulator TCG fallback explicitly permitted"
+          fi
       - name: Measure real UI code path on API 29 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
