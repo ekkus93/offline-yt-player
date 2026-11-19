@@ -533,7 +533,8 @@ fn independent_sqlite_worker_connections_race_for_one_authoritative_claim() {
     rendezvous.wait();
     let successes = handles
         .into_iter()
-        .filter(|worker| worker.join().unwrap())
+        .map(|worker| worker.join().unwrap())
+        .filter(|won| *won)
         .count();
     assert_eq!(successes, 1, "only one SQLite connection may claim the job");
     let observed = LibraryStore::open(&path)
