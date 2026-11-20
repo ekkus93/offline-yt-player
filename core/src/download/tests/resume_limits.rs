@@ -370,11 +370,9 @@ fn seeded_local_http_resume_matrix_never_accepts_unverified_appends() {
             let mut reply = if mode == 3 {
                 TinyResponse::from_data(served.clone()).with_status_code(StatusCode(200))
             } else if mode == 4 {
-                TinyResponse::from_data(Vec::<u8>::new())
-                    .with_status_code(StatusCode(416))
+                TinyResponse::from_data(Vec::<u8>::new()).with_status_code(StatusCode(416))
             } else {
-                TinyResponse::from_data(served[cutoff..].to_vec())
-                    .with_status_code(StatusCode(206))
+                TinyResponse::from_data(served[cutoff..].to_vec()).with_status_code(StatusCode(206))
             };
             if mode == 4 {
                 reply.add_header(
@@ -398,11 +396,7 @@ fn seeded_local_http_resume_matrix_never_accepts_unverified_appends() {
             }
             if mode == 6 {
                 reply.add_header(
-                    Header::from_bytes(
-                        b"Last-Modified",
-                        b"Wed, 16 Sep 2026 00:00:00 GMT",
-                    )
-                    .unwrap(),
+                    Header::from_bytes(b"Last-Modified", b"Wed, 16 Sep 2026 00:00:00 GMT").unwrap(),
                 );
             } else if mode != 4 {
                 let etag: &[u8] = match mode {
@@ -418,13 +412,14 @@ fn seeded_local_http_resume_matrix_never_accepts_unverified_appends() {
                     .unwrap()
                     .expect("fresh request after untrustworthy response");
                 assert!(
-                    !fresh.headers().iter().any(|header| header.field.equiv("Range")),
+                    !fresh
+                        .headers()
+                        .iter()
+                        .any(|header| header.field.equiv("Range")),
                     "case {case} mode {mode}: unsafe 206/416 must restart from byte zero"
                 );
                 let mut full = TinyResponse::from_data(served);
-                full.add_header(
-                    Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap(),
-                );
+                full.add_header(Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap());
                 fresh.respond(full).unwrap();
             }
         });
@@ -478,7 +473,10 @@ fn seeded_local_http_resume_matrix_never_accepts_unverified_appends() {
             "seed=0x{seed:016x} case={case} mode={mode}"
         );
         assert_eq!(result.sha256, checksum);
-        assert!(!partial.exists(), "successful completion must clear partial");
+        assert!(
+            !partial.exists(),
+            "successful completion must clear partial"
+        );
         assert_eq!(load_resume_representation(&partial).unwrap(), None);
     }
 }
