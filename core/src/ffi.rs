@@ -676,7 +676,6 @@ mod tests {
         assert!(!ffi.retryable);
     }
 
-
     #[test]
     fn ffi_library_list_get_delete_and_corrupt_schema_return_typed_results() {
         use crate::{LocalAsset, MediaKind};
@@ -740,7 +739,10 @@ mod tests {
         assert_eq!(get_failure.error.unwrap().kind, FfiErrorKind::Persistence);
         let delete_failure = service.library_delete("ffi-library-item".into());
         assert!(!delete_failure.deleted);
-        assert_eq!(delete_failure.error.unwrap().kind, FfiErrorKind::Persistence);
+        assert_eq!(
+            delete_failure.error.unwrap().kind,
+            FfiErrorKind::Persistence
+        );
         assert_eq!(ffi_core_identity(), crate::core_identity());
     }
 
