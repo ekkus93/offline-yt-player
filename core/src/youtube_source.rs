@@ -261,7 +261,7 @@ fn plan_download_assets_from_fresh_media(
     subtitle_track_id: Option<&str>,
     audio_format_id: Option<&str>,
 ) -> Result<DownloadPlan, CoreError> {
-    let fresh = normalize_extracted_media(canonical, &extracted)?;
+    let fresh = normalize_extracted_media(canonical, extracted)?;
     let video = fresh
         .formats
         .iter()
@@ -301,9 +301,7 @@ fn plan_download_assets_from_fresh_media(
                 .filter(|format| {
                     format.role == StreamRole::AudioOnly && format.compatible_direct_play
                 })
-                .max_by_key(|format| {
-                    (format.bitrate_bps.unwrap_or(0), format.format_id.clone())
-                })
+                .max_by_key(|format| (format.bitrate_bps.unwrap_or(0), format.format_id.clone()))
                 .ok_or_else(|| {
                     CoreError::new(
                         ErrorKind::NoCompatibleFormat,

@@ -212,7 +212,8 @@ fn split_audio_and_subtitle_track_ids_map_to_fresh_provider_neutral_assets() {
     let url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
     let media = normalize_extracted_media(url, &extracted).expect("normalize split media");
     assert_eq!(
-        media.formats
+        media
+            .formats
             .iter()
             .find(|format| format.format_id == "140")
             .expect("AAC audio option")
@@ -220,7 +221,8 @@ fn split_audio_and_subtitle_track_ids_map_to_fresh_provider_neutral_assets() {
         "m4a"
     );
     assert!(
-        media.formats
+        media
+            .formats
             .iter()
             .find(|format| format.format_id == "140")
             .unwrap()
@@ -247,19 +249,13 @@ fn split_audio_and_subtitle_track_ids_map_to_fresh_provider_neutral_assets() {
         explicit.assets[0].relative_path,
         "items/dQw4w9WgXcQ/video.mp4"
     );
-    assert_eq!(
-        explicit.assets[0].url,
-        "https://media.example/video.mp4"
-    );
+    assert_eq!(explicit.assets[0].url, "https://media.example/video.mp4");
     assert_eq!(explicit.assets[1].asset_id, "audio");
     assert_eq!(
         explicit.assets[1].relative_path,
         "items/dQw4w9WgXcQ/audio.m4a"
     );
-    assert_eq!(
-        explicit.assets[1].url,
-        "https://media.example/audio.m4a"
-    );
+    assert_eq!(explicit.assets[1].url, "https://media.example/audio.m4a");
     assert_eq!(explicit.assets[1].mime_type.as_deref(), Some("audio/mp4"));
     assert_eq!(explicit.assets[2].asset_id, "subtitle:en:.en");
     assert_eq!(
