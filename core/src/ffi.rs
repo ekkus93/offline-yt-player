@@ -769,7 +769,6 @@ mod tests {
         assert!(!error.retryable);
     }
 
-
     #[test]
     fn all_ffi_error_variants_redact_untrusted_private_diagnostics() {
         let marker = "PRIVATE_FFI_DIAGNOSTIC_TOKEN_706";
@@ -781,7 +780,10 @@ mod tests {
             format!("Proxy-Authorization: Basic {marker}"),
             format!("Authorization: Bearer {marker}\\n  {marker}"),
             format!("GET https%3A%2F%2Fcdn.fixture.invalid%2Ffile%3Fsig%3D{marker}"),
-            format!("https://cdn.fixture.invalid/video?sig={marker}{}", "x".repeat(100_000)),
+            format!(
+                "https://cdn.fixture.invalid/video?sig={marker}{}",
+                "x".repeat(100_000)
+            ),
         ];
         for kind in [
             ErrorKind::NetworkUnavailable,
@@ -801,8 +803,14 @@ mod tests {
                     "sensitive diagnostic was not redacted: {:?}",
                     mapped.message
                 );
-                assert!(mapped.message.len() < 1024, "test diagnostic must stay bounded");
-                assert_eq!(mapped.kind, FfiError::from(&CoreError::new(kind.clone(), "ok", true)).kind);
+                assert!(
+                    mapped.message.len() < 1024,
+                    "test diagnostic must stay bounded"
+                );
+                assert_eq!(
+                    mapped.kind,
+                    FfiError::from(&CoreError::new(kind.clone(), "ok", true)).kind
+                );
             }
         }
         let safe = CoreError::new(ErrorKind::NetworkUnavailable, "network unavailable", true);
