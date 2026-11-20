@@ -52,6 +52,14 @@ jobs:
           export AR_x86_64_linux_android=$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           cargo build -p offline-yt-core --target aarch64-linux-android
           cargo build -p offline-yt-core --target x86_64-linux-android
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
       - name: Enable Android emulator KVM when available
         run: |
           if test -e /dev/kvm; then

@@ -54,6 +54,14 @@ jobs:
           cargo build -p offline-yt-core --target x86_64-linux-android
       - name: Prebuild Android instrumentation APKs before emulator startup
         run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
       - name: Enable Android emulator KVM when available
         run: |
           if test -e /dev/kvm; then
