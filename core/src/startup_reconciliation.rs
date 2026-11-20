@@ -641,11 +641,17 @@ mod tests {
         // The next real startup may legitimately requeue the latest worker
         // lease, but must retain its attempt and download checkpoint.
         let fresh = LibraryStore::open(&path).unwrap();
-        assert_eq!(reconcile_startup_downloads(&fresh).unwrap().jobs_requeued, 1);
+        assert_eq!(
+            reconcile_startup_downloads(&fresh).unwrap().jobs_requeued,
+            1
+        );
         let recovered = fresh.load_download_snapshots().unwrap().remove(0);
         assert_eq!(recovered.state, DownloadState::Queued);
         assert_eq!(recovered.attempt, reclaimed.attempt);
         assert_eq!(recovered.bytes_downloaded, reclaimed.bytes_downloaded);
-        assert_eq!(reconcile_startup_downloads(&fresh).unwrap().jobs_requeued, 0);
+        assert_eq!(
+            reconcile_startup_downloads(&fresh).unwrap().jobs_requeued,
+            0
+        );
     }
 }
