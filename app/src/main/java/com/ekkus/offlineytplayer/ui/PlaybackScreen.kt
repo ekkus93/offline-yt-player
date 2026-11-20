@@ -100,7 +100,10 @@ internal fun PortraitPlayerScreen(
                     mediaReady = active.playbackState == androidx.media3.common.Player.STATE_READY
                     // PlaybackException messages may include local paths or provider-derived
                     // metadata. Surface only a fixed actionable message, not raw diagnostics.
-                    playbackError = if (active.playerError != null) {
+                    // Only persisted Library items have a managed file and a
+                    // meaningful recovery action. Untracked UI previews may
+                    // use intentionally absent fixture paths (raster goldens).
+                    playbackError = if (validated.itemId != null && active.playerError != null) {
                         "Unable to play local media. Check the downloaded file and try again."
                     } else null
                     displayedPositionMs = active.currentPosition.coerceAtLeast(0L)

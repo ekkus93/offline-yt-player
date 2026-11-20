@@ -756,6 +756,7 @@ class PlaybackSessionBehaviorInstrumentedTest {
                     asset = LocalPlaybackAsset(
                         videoPath = file.absolutePath,
                         title = "Offline error fixture",
+                        itemId = "cov604-local-library",
                     ),
                     settings = AppSettingsSnapshot(),
                     onUpdateSettings = {},
