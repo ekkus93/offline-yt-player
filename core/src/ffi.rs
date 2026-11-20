@@ -499,6 +499,79 @@ mod tests {
         assert!(mapped.separate_audio);
     }
 
+
+    #[test]
+    fn zero_unsigned_fields_preserve_presence_and_bounded_text_across_ffi_records() {
+        let zero = DurableDownloadSnapshot {
+            job_id: "zero-values".into(),
+            state: DownloadState::Queued,
+            bytes_downloaded: 0,
+            total_bytes: Some(0),
+            attempt: 0,
+            retry_at_epoch_ms: Some(0),
+            last_error: Some(CoreError::new(ErrorKind::InvalidInput, "sanitized error", false)),
+        };
+        let mapped = FfiDurableDownloadSnapshot::from(&zero);
+        assert_eq!(mapped.bytes_downloaded, 0);
+        assert_eq!(mapped.total_bytes, Some(0));
+        assert_eq!(mapped.attempt, 0);
+        assert_eq!(mapped.retry_at_epoch_ms, Some(0));
+        assert_eq!(mapped.last_error.unwrap().kind, FfiErrorKind::InvalidInput);
+
+        let quality = QualityChoice {
+            choice_id: "format:zero".into(),
+            label: "Unknown size".into(),
+            estimated_bytes: Some(0),
+            video_height: None,
+            audio_only: false,
+            compatibility: Compatibility::Preferred,
+        };
+        let mapped = FfiQualityChoice::from(&quality);
+        assert_eq!(mapped.estimated_bytes, Some(0));
+        assert_eq!(mapped.video_height, None);
+        assert!(!mapped.separate_audio);
+
+        let title = "T".repeat(crate::MAX_PROVIDER_TITLE_CHARS);
+        let media = MediaInfo {
+            source: SourceIdentity {
+                provider: "fixture".into(),
+                media_id: "zero".into(),
+                canonical_url: None,
+            },
+            title: title.clone(),
+            duration_ms: Some(0),
+            thumbnail_url: None,
+            formats: Vec::new(),
+            subtitles: Vec::new(),
+        };
+        let summary = FfiMediaSummary::from(&media);
+        assert_eq!(summary.title, title);
+        assert_eq!(summary.title.chars().count(), crate::MAX_PROVIDER_TITLE_CHARS);
+        assert_eq!(summary.duration_ms, Some(0));
+        assert_eq!(summary.source.canonical_url, None);
+        assert_eq!(summary.thumbnail_url, None);
+        assert!(summary.audio_options.is_empty());
+        assert!(summary.subtitle_options.is_empty());
+        assert!(summary.container_options.is_empty());
+
+        let item = LibraryItem {
+            item_id: "zero".into(),
+            source: media.source,
+            display_title: summary.title,
+            duration_ms: None,
+            quality_label: "Fixture".into(),
+            assets: Vec::new(),
+            created_at_epoch_ms: 0,
+            playback_position_ms: 0,
+            completed: false,
+        };
+        let result = FfiLibraryItem::from(&item);
+        assert_eq!(result.created_at_epoch_ms, 0);
+        assert_eq!(result.playback_position_ms, 0);
+        assert_eq!(result.duration_ms, None);
+        assert!(!result.completed);
+    }
+
     #[test]
     fn same_label_audio_choices_keep_distinct_format_ids_through_ffi() {
         let audio_format = |id: &str| MediaFormat {
