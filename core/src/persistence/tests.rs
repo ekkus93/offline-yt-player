@@ -647,7 +647,9 @@ fn failed_initial_migration_rolls_back_ddl_and_preserves_user_tables_after_reope
         assert_eq!(failure.kind, ErrorKind::Persistence, "attempt {attempt}");
         let connection = rusqlite::Connection::open(&path).unwrap();
         let version: i64 = connection
-            .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| row.get(0))
+            .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(version, 0, "attempt {attempt}: no premature schema bump");
         let marker: String = connection
