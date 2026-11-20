@@ -337,3 +337,148 @@ fn range_416_for_completed_partial_restarts_from_zero() {
     assert!(!result.resumed);
     assert_eq!(fs::read(path).unwrap(), body);
 }
+#[test]
+fn seeded_local_http_resume_matrix_never_accepts_unverified_appends() {
+    use sha2::Digest as _;
+
+    // Seven response modes x four deterministic input offsets. Every case
+    // transfers through the production HTTP engine, not a range-parser stub.
+    let body = b"abcdefghijklmnopqrstuvwxyz0123456789".to_vec();
+    let checksum = format!("{:x}", sha2::Sha256::digest(&body));
+    let mut seed = 0xD0C0_20A6_5021_u64;
+    for case in 0..28 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let cutoff = (seed as usize % (body.len() - 2)).max(1);
+        let mode = case % 7;
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/media", server.server_addr());
+        let served = body.clone();
+        let server_thread = thread::spawn(move || {
+            let range = server
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .expect("fixture first request");
+            let expected_range = format!("bytes={cutoff}-");
+            assert!(
+                range.headers().iter().any(|header| {
+                    header.field.equiv("Range") && header.value.as_str() == expected_range
+                }),
+                "case {case} mode {mode}: expected ranged request {expected_range}"
+            );
+            let mut reply = if mode == 3 {
+                TinyResponse::from_data(served.clone()).with_status_code(StatusCode(200))
+            } else if mode == 4 {
+                TinyResponse::from_data(Vec::<u8>::new())
+                    .with_status_code(StatusCode(416))
+            } else {
+                TinyResponse::from_data(served[cutoff..].to_vec())
+                    .with_status_code(StatusCode(206))
+            };
+            if mode == 4 {
+                reply.add_header(
+                    Header::from_bytes(
+                        b"Content-Range",
+                        format!("bytes */{}", served.len()).as_bytes(),
+                    )
+                    .unwrap(),
+                );
+            } else if mode != 3 {
+                let range_header = match mode {
+                    // Offset matches but advertised end fails to cover the tail.
+                    2 => format!("bytes {cutoff}-{}/{}", served.len() - 2, served.len()),
+                    // A forged start offset cannot authorize an append.
+                    5 => format!("bytes {}-{}/{}", cutoff - 1, served.len() - 1, served.len()),
+                    _ => format!("bytes {cutoff}-{}/{}", served.len() - 1, served.len()),
+                };
+                reply.add_header(
+                    Header::from_bytes(b"Content-Range", range_header.as_bytes()).unwrap(),
+                );
+            }
+            if mode == 6 {
+                reply.add_header(
+                    Header::from_bytes(
+                        b"Last-Modified",
+                        b"Wed, 16 Sep 2026 00:00:00 GMT",
+                    )
+                    .unwrap(),
+                );
+            } else if mode != 4 {
+                let etag: &[u8] = match mode {
+                    1 => b"\"changed\"",
+                    _ => b"\"fixture-v1\"",
+                };
+                reply.add_header(Header::from_bytes(b"ETag", etag).unwrap());
+            }
+            range.respond(reply).unwrap();
+            if matches!(mode, 1 | 2 | 4 | 5) {
+                let fresh = server
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .expect("fresh request after untrustworthy response");
+                assert!(
+                    !fresh.headers().iter().any(|header| header.field.equiv("Range")),
+                    "case {case} mode {mode}: unsafe 206/416 must restart from byte zero"
+                );
+                let mut full = TinyResponse::from_data(served);
+                full.add_header(
+                    Header::from_bytes(b"ETag", b"\"fixture-v1\"").unwrap(),
+                );
+                fresh.respond(full).unwrap();
+            }
+        });
+
+        let temp = tempfile::tempdir().unwrap();
+        let final_path = temp.path().join("items/one/video.mp4");
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        let partial = partial_path(&final_path);
+        fs::write(&partial, &body[..cutoff]).unwrap();
+        save_resume_representation(
+            &partial,
+            &ResumeRepresentation {
+                url: url.clone(),
+                etag: if mode == 6 {
+                    None
+                } else {
+                    Some("\"fixture-v1\"".into())
+                },
+                last_modified: if mode == 6 {
+                    Some("Wed, 16 Sep 2026 00:00:00 GMT".into())
+                } else {
+                    None
+                },
+                total_bytes: Some(body.len() as u64),
+            },
+        )
+        .unwrap();
+        let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+        let result = engine
+            .transfer(
+                &TransferRequest {
+                    url,
+                    relative_path: "items/one/video.mp4".into(),
+                    expected_bytes: Some(body.len() as u64),
+                    expected_sha256: Some(checksum.clone()),
+                },
+                &AtomicBool::new(false),
+            )
+            .unwrap_or_else(|error| {
+                panic!("seed=0x{seed:016x} case={case} mode={mode} cutoff={cutoff}: {error:?}")
+            });
+        server_thread.join().unwrap();
+        assert_eq!(
+            result.resumed,
+            matches!(mode, 0 | 6),
+            "seed=0x{seed:016x} case={case} mode={mode} cutoff={cutoff}"
+        );
+        assert_eq!(
+            fs::read(&final_path).unwrap(),
+            body,
+            "seed=0x{seed:016x} case={case} mode={mode}"
+        );
+        assert_eq!(result.sha256, checksum);
+        assert!(!partial.exists(), "successful completion must clear partial");
+        assert_eq!(load_resume_representation(&partial).unwrap(), None);
+    }
+}
