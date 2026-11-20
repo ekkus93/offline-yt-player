@@ -159,7 +159,7 @@ impl FfiCoreService {
         LibraryStore::open(&database_path)
             .map(|library| Arc::new(Self { library }))
             .map_err(|error| FfiCoreServiceOpenError::Persistence {
-                details: error.message,
+                details: crate::security::redact_sensitive(&error.message),
             })
     }
 
@@ -395,7 +395,9 @@ impl From<&CoreError> for FfiError {
                 ErrorKind::Canceled => FfiErrorKind::Canceled,
                 ErrorKind::Internal => FfiErrorKind::Internal,
             },
-            message: value.message.clone(),
+            // No CoreError diagnostic may leave UniFFI with credential-bearing
+            // headers, signed query strings, or oversized untrusted text.
+            message: crate::security::redact_sensitive(&value.message),
             retryable: value.retryable,
         }
     }
@@ -765,6 +767,46 @@ mod tests {
         let error = token.check().unwrap_err();
         assert_eq!(error.kind, ErrorKind::Canceled);
         assert!(!error.retryable);
+    }
+
+
+    #[test]
+    fn all_ffi_error_variants_redact_untrusted_private_diagnostics() {
+        let marker = "PRIVATE_FFI_DIAGNOSTIC_TOKEN_706";
+        let diagnostics = [
+            format!("Authorization: Bearer {marker}"),
+            format!("Cookie: session={marker}"),
+            format!("GET https://cdn.fixture.invalid/video?sig={marker}#fragment"),
+            format!("https://user:{marker}@cdn.fixture.invalid/asset"),
+            format!("Proxy-Authorization: Basic {marker}"),
+            format!("Authorization: Bearer {marker}\\n  {marker}"),
+            format!("GET https%3A%2F%2Fcdn.fixture.invalid%2Ffile%3Fsig%3D{marker}"),
+            format!("https://cdn.fixture.invalid/video?sig={marker}{}", "x".repeat(100_000)),
+        ];
+        for kind in [
+            ErrorKind::NetworkUnavailable,
+            ErrorKind::NetworkTimeout,
+            ErrorKind::HttpStatus,
+            ErrorKind::SourceChanged,
+            ErrorKind::Persistence,
+            ErrorKind::Internal,
+        ] {
+            for diagnostic in &diagnostics {
+                let raw = CoreError::new(kind.clone(), diagnostic, true);
+                let mapped = FfiError::from(&raw);
+                assert_eq!(mapped.retryable, raw.retryable);
+                assert!(!mapped.message.contains(marker));
+                assert!(
+                    mapped.message.contains("REDACTED"),
+                    "sensitive diagnostic was not redacted: {:?}",
+                    mapped.message
+                );
+                assert!(mapped.message.len() <= crate::security::MAX_DIAGNOSTIC_CHARS);
+                assert_eq!(mapped.kind, FfiError::from(&CoreError::new(kind.clone(), "ok", true)).kind);
+            }
+        }
+        let safe = CoreError::new(ErrorKind::NetworkUnavailable, "network unavailable", true);
+        assert_eq!(FfiError::from(&safe).message, "network unavailable");
     }
 
     #[test]
