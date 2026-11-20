@@ -37,7 +37,7 @@ jobs:
           cargo install cargo-llvm-cov --version 0.9.1 --locked
           cargo llvm-cov --version
       - name: Validate coverage parser
-        run: python3 -m unittest tests/test_summarize_rust_coverage.py
+        run: python3 -m unittest tests/test_summarize_rust_coverage.py tests/test_summarize_rust_named_functions.py
       - name: Measure workspace tests with instrumented Rust
         env:
           CARGO_TARGET_DIR: target/coverage-rust
@@ -52,4 +52,10 @@ jobs:
             --tool-version "$(cargo llvm-cov --version)" \
             --json-out coverage/rust-core-summary.json | tee -a "$GITHUB_STEP_SUMMARY"
           test -s coverage/rust-core-summary.json
+      - name: Print conservative Rust named-function evidence
+        run: |
+          python3 scripts/summarize_rust_named_functions.py coverage/rust.lcov \
+            --source-root "." --sha "$GITHUB_SHA" \
+            --json-out coverage/rust-named-function-evidence.json | tee -a "$GITHUB_STEP_SUMMARY"
+          test -s coverage/rust-named-function-evidence.json
       # Reports are printed as bounded text; do not upload artifacts on master.
