@@ -64,6 +64,7 @@ internal fun PortraitPlayerScreen(
     var controller by remember(asset) { mutableStateOf<MediaController?>(null) }
     var displayedTitle by remember(asset) { mutableStateOf(validated.title) }
     var mediaReady by remember(asset) { mutableStateOf(false) }
+    var playbackError by remember(asset) { mutableStateOf<String?>(null) }
     var displayedPositionMs by remember(asset) { mutableLongStateOf(validated.startPositionMs) }
 
     DisposableEffect(context, validated.videoPath, validated.audioPath, validated.subtitleTracks, validated.audioTracks, validated.startPositionMs, validated.itemId, settings.rememberPlaybackPosition) {
@@ -97,6 +98,11 @@ internal fun PortraitPlayerScreen(
                 if (disposed) return
                 acquiredController?.let { active ->
                     mediaReady = active.playbackState == androidx.media3.common.Player.STATE_READY
+                    // PlaybackException messages may include local paths or provider-derived
+                    // metadata. Surface only a fixed actionable message, not raw diagnostics.
+                    playbackError = if (active.playerError != null) {
+                        "Unable to play local media. Check the downloaded file and try again."
+                    } else null
                     displayedPositionMs = active.currentPosition.coerceAtLeast(0L)
                     displayedTitle = active.currentMediaItem?.mediaMetadata?.title?.toString()
                         ?.takeIf { it.isNotBlank() } ?: validated.title
@@ -113,6 +119,7 @@ internal fun PortraitPlayerScreen(
         AndroidView(modifier = Modifier.fillMaxWidth().aspectRatio(PlayerLayoutPolicy.VideoAspectRatio), factory = { viewContext -> PlayerView(viewContext).apply { layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT); useController = false; player = controller } }, update = { it.player = controller })
         Text(if (controller == null) "Connecting to playback session…" else "Offline local playback")
         if (mediaReady) Text("Position ${formatPlaybackPosition(displayedPositionMs)}")
+        playbackError?.let { Text(it) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = { controller?.seekBack() }, enabled = controller != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("-10s") }
             Button(onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } }, enabled = controller != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Play/Pause") }

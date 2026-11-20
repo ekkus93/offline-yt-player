@@ -728,6 +728,66 @@ class PlaybackSessionBehaviorInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun missingOfflineMediaReportsSafePlayerErrorAndNeverSwitchesToRemoteUri() {
+        val absent = File(context.cacheDir, "cov604-missing-media.mp4")
+        absent.delete()
+        assertLocalPlaybackFailureIsVisible(absent)
+    }
+
+    @Test
+    fun corruptOfflineMediaReportsSafePlayerErrorAndNeverClaimsReady() {
+        val corrupt = File(context.cacheDir, "cov604-corrupt-media.mp4")
+        corrupt.writeBytes("NOT A REAL MP4\nPRIVATE_LOCAL_FILE_DETAILS".toByteArray())
+        try {
+            assertLocalPlaybackFailureIsVisible(corrupt)
+        } finally {
+            corrupt.delete()
+        }
+    }
+
+    private fun assertLocalPlaybackFailureIsVisible(file: File) {
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            compose.setContent {
+                PortraitPlayerScreen(
+                    asset = LocalPlaybackAsset(
+                        videoPath = file.absolutePath,
+                        title = "Offline error fixture",
+                    ),
+                    settings = AppSettingsSnapshot(),
+                    onUpdateSettings = {},
+                    onBack = {},
+                    positionGatewayFactory = { RecordingPositionGateway() },
+                )
+            }
+            compose.waitUntil(15_000) {
+                runCatching {
+                    compose.onNodeWithText(
+                        "Unable to play local media. Check the downloaded file and try again.",
+                    ).assertIsDisplayed()
+                }.isSuccess
+            }
+            instrumentation.runOnMainSync {
+                assertTrue(
+                    "player must report an actual Media3 error, not an invented UI warning",
+                    observer.playerError != null,
+                )
+                assertEquals(
+                    "file",
+                    observer.currentMediaItem?.localConfiguration?.uri?.scheme,
+                )
+                assertFalse(observer.playbackState == androidx.media3.common.Player.STATE_READY)
+            }
+            compose.onNodeWithText("PRIVATE_LOCAL_FILE_DETAILS", substring = true)
+                .assertDoesNotExist()
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+        }
+    }
+
     private class RecordingPositionGateway : AppPlaybackPositionGateway {
         data class Call(val itemId: String, val positionMs: Long, val durationMs: Long?)
 
