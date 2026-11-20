@@ -599,9 +599,15 @@ mod tests {
                 store.staged_job_ids().unwrap(),
                 vec!["item-1".to_owned(), "stage-without-queue".to_owned()]
             );
-            assert_eq!(std::fs::read(&partial).unwrap(), b"verifiable partial bytes");
+            assert_eq!(
+                std::fs::read(&partial).unwrap(),
+                b"verifiable partial bytes"
+            );
             assert_eq!(std::fs::read(&resume).unwrap(), b"checkpoint sidecar");
-            assert_eq!(std::fs::read(&orphan_partial).unwrap(), b"unclaimed fixture");
+            assert_eq!(
+                std::fs::read(&orphan_partial).unwrap(),
+                b"unclaimed fixture"
+            );
         }
     }
 }
