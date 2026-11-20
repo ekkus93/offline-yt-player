@@ -54,6 +54,14 @@ jobs:
           cargo build -p offline-yt-core --target x86_64-linux-android
       - name: Check coverage XML validation contract
         run: python3 -m unittest tests/test_summarize_android_instrumentation_coverage.py
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
       - name: Enable Android emulator KVM when available
         run: |
           if test -e /dev/kvm; then
@@ -90,6 +98,6 @@ jobs:
             --required-test com.ekkus.offlineytplayer.ui.AddResolverAvailabilityInstrumentedTest#validYouTubeUrlCanShowUnavailableResolverError
           report=$(find app/build/reports/coverage/androidTest/debug/connected -type f -name '*.xml' -print -quit)
           test -n "$report"
-          python3 scripts/summarize_android_instrumentation_coverage.py "$report" \
+          python3 -m scripts.summarize_android_instrumentation_coverage "$report" \
             --sha "$GITHUB_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
       # No Actions artifact uploads on ordinary master pushes.
