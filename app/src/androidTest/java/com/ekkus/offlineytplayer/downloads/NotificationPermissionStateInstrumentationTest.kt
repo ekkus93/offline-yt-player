@@ -59,9 +59,30 @@ class NotificationPermissionStateInstrumentationTest {
         // Denied and granted phases open the same on-disk queue in isolated
         // instrumentation processes; a permission change must not discard it.
         System.loadLibrary("offline_yt_core")
+        if (phase == "denied") {
+            // Start from an isolated fixture. The next phase must see this
+            // same durable row, not silently create another after a reset.
+            listOf("", "-wal", "-shm").forEach { suffix ->
+                File(database.absolutePath + suffix).delete()
+            }
+        }
+        if (phase == "granted") {
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val oldQueue = core.listDownloadQueue()
+                assertEquals(null, oldQueue.error)
+                assertEquals(
+                    "previous denied phase must leave a queued job on disk",
+                    jobId,
+                    requireNotNull(oldQueue.value).single().jobId,
+                )
+            }
+        }
         GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { gateway ->
             val result = gateway.enqueue(jobId)
             assertEquals(null, result.error)
+            if (phase != null) {
+                assertEquals("only the first permission phase may enqueue", phase == "denied", result.value)
+            }
         }
         GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
             val queue = core.listDownloadQueue()

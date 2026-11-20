@@ -789,6 +789,100 @@ class PlaybackSessionBehaviorInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun transientAudioFocusCompetitionPausesAndRestoresLocalMedia3Playback() {
+        val audio = createLocalWaveFixture()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val controller = MediaController.Builder(context, token)
+            .buildAsync().get(10, TimeUnit.SECONDS)
+        val audioManager = context.getSystemService(AudioManager::class.java)
+        val focusRequest = android.media.AudioFocusRequest.Builder(
+            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE,
+        )
+            .setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+            )
+            .setOnAudioFocusChangeListener { _ -> }
+            .build()
+        try {
+            instrumentation.runOnMainSync {
+                controller.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
+                controller.prepare()
+                controller.play()
+            }
+            waitForControllerState(controller) {
+                playbackState == androidx.media3.common.Player.STATE_READY && isPlaying
+            }
+            assertEquals(
+                "fixture competitor must acquire platform audio focus",
+                AudioManager.AUDIOFOCUS_REQUEST_GRANTED,
+                audioManager.requestAudioFocus(focusRequest),
+            )
+            waitForControllerState(controller) {
+                !isPlaying
+            }
+            instrumentation.runOnMainSync {
+                assertEquals("file", controller.currentMediaItem?.localConfiguration?.uri?.scheme)
+            }
+            assertEquals(
+                AudioManager.AUDIOFOCUS_REQUEST_GRANTED,
+                audioManager.abandonAudioFocusRequest(focusRequest),
+            )
+            instrumentation.runOnMainSync { controller.play() }
+            waitForControllerState(controller) {
+                playbackState == androidx.media3.common.Player.STATE_READY &&
+                    isPlaying &&
+                    currentMediaItem?.localConfiguration?.uri?.scheme == "file"
+            }
+        } finally {
+            audioManager.abandonAudioFocusRequest(focusRequest)
+            instrumentation.runOnMainSync { controller.release() }
+            audio.delete()
+        }
+    }
+
+    @Test
+    fun rapidPausePlaySeekCommandsConvergeToOneOfflineSessionState() {
+        val audio = createLocalWaveFixture()
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val controller = MediaController.Builder(context, token)
+            .buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            instrumentation.runOnMainSync {
+                controller.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
+                controller.prepare()
+                controller.play()
+            }
+            waitForControllerState(controller) {
+                playbackState == androidx.media3.common.Player.STATE_READY && isPlaying
+            }
+            instrumentation.runOnMainSync {
+                repeat(16) { index ->
+                    controller.pause()
+                    controller.seekTo(1_000L * (index + 1))
+                    controller.play()
+                    controller.pause()
+                }
+            }
+            waitForControllerState(controller) {
+                playbackState == androidx.media3.common.Player.STATE_READY &&
+                    !playWhenReady &&
+                    currentPosition in 15_000L..17_000L
+            }
+            instrumentation.runOnMainSync {
+                assertEquals("file", controller.currentMediaItem?.localConfiguration?.uri?.scheme)
+                assertFalse(controller.isPlaying)
+            }
+        } finally {
+            instrumentation.runOnMainSync { controller.release() }
+            audio.delete()
+        }
+    }
+
     private class RecordingPositionGateway : AppPlaybackPositionGateway {
         data class Call(val itemId: String, val positionMs: Long, val durationMs: Long?)
 
