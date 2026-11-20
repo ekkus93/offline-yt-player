@@ -650,6 +650,82 @@ class PlaybackSessionBehaviorInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun releasedControllerAndStoppedServiceRecreateOneFreshCanonicalPlaybackSession() {
+        val audio = createLocalWaveFixture()
+        val token = SessionToken(
+            context,
+            ComponentName(context, PlaybackSessionService::class.java),
+        )
+        val creations = CopyOnWriteArrayList<androidx.media3.exoplayer.ExoPlayer>()
+        val created = CountDownLatch(2)
+        val releases = CopyOnWriteArrayList<PlaybackSessionTeardownStep>()
+        val destroyed = CountDownLatch(2)
+        PlaybackSessionService.playerCreationObserver = { player ->
+            creations.add(player)
+            created.countDown()
+        }
+        PlaybackSessionService.teardownObserver = PlaybackSessionTeardownObserver { step ->
+            releases.add(step)
+            destroyed.countDown()
+        }
+        var first: MediaController? = null
+        var second: MediaController? = null
+        try {
+            first = MediaController.Builder(context, token)
+                .buildAsync().get(10, TimeUnit.SECONDS)
+            assertTrue("first Media3 service not created", creations.isNotEmpty())
+            instrumentation.runOnMainSync {
+                first.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
+                first.prepare()
+            }
+            waitForControllerState(first) {
+                playbackState == androidx.media3.common.Player.STATE_READY
+            }
+            instrumentation.runOnMainSync { first.release() }
+            first = null
+            context.stopService(
+                android.content.Intent(context, PlaybackSessionService::class.java),
+            )
+            assertTrue(
+                "service should release player then session after controller unbind",
+                destroyed.await(15, TimeUnit.SECONDS),
+            )
+            assertEquals(
+                listOf(
+                    PlaybackSessionTeardownStep.PLAYER_RELEASED,
+                    PlaybackSessionTeardownStep.SESSION_RELEASED,
+                ),
+                releases.toList(),
+            )
+            second = MediaController.Builder(context, token)
+                .buildAsync().get(10, TimeUnit.SECONDS)
+            assertTrue(
+                "second bind must initialize a new service-owned player",
+                created.await(10, TimeUnit.SECONDS),
+            )
+            assertEquals(2, creations.size)
+            assertTrue(creations[0] !== creations[1])
+            instrumentation.runOnMainSync {
+                second.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
+                second.prepare()
+            }
+            waitForControllerState(second) {
+                playbackState == androidx.media3.common.Player.STATE_READY &&
+                    currentMediaItem?.localConfiguration?.uri?.scheme == "file"
+            }
+        } finally {
+            instrumentation.runOnMainSync {
+                first?.release()
+                second?.release()
+            }
+            PlaybackSessionService.playerCreationObserver = null
+            PlaybackSessionService.teardownObserver = null
+            audio.delete()
+        }
+    }
+
     private class RecordingPositionGateway : AppPlaybackPositionGateway {
         data class Call(val itemId: String, val positionMs: Long, val durationMs: Long?)
 
