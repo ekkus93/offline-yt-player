@@ -180,6 +180,143 @@ fn sanitized_split_av_fixture_extracts_separate_video_and_audio() {
 }
 
 #[test]
+fn split_audio_and_subtitle_track_ids_map_to_fresh_provider_neutral_assets() {
+    let mut response = fixture("split");
+    // Add a second video format sharing the same quality label. The highest
+    // ranked compatible provider ID must be selected, not an arbitrary "1080p".
+    response["streamingData"]["adaptiveFormats"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "itag": 136,
+            "url": "https://media.example/other-video.mp4",
+            "mimeType": "video/mp4; codecs=\"avc1.640028\"",
+            "width": 1920,
+            "height": 1080,
+            "bitrate": 1_000_000
+        }));
+    // A separate high-rate audio option must not override an explicit audio ID.
+    response["streamingData"]["adaptiveFormats"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "itag": 141,
+            "url": "https://media.example/high-rate.m4a?sig=PRIVATE_SIGNED_URL",
+            "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+            "bitrate": 192_000,
+            "audioChannels": 2,
+            "contentLength": "75000"
+        }));
+    response["captions"] = fixture("combined")["captions"].clone();
+    let extracted = parse_player(&response).expect("sanitized split fixture");
+    let url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    let media = normalize_extracted_media(url, &extracted).expect("normalize split media");
+    assert_eq!(
+        media.formats
+            .iter()
+            .find(|format| format.format_id == "140")
+            .expect("AAC audio option")
+            .container,
+        "m4a"
+    );
+    assert!(
+        media.formats
+            .iter()
+            .find(|format| format.format_id == "140")
+            .unwrap()
+            .compatible_direct_play
+    );
+    let choices = curate_quality_choices(&media);
+    assert_eq!(choices.len(), 1, "duplicate 1080p labels must collapse");
+    assert_eq!(choices[0].choice_id, "format:137");
+    let explicit = plan_download_assets_from_fresh_media(
+        &media,
+        "137",
+        choices[0].clone(),
+        url,
+        &extracted,
+        Some(".en"),
+        Some("140"),
+    )
+    .expect("selected split A/V and caption tracks");
+    assert_eq!(explicit.source.media_id, "dQw4w9WgXcQ");
+    assert_eq!(explicit.quality.choice_id, "format:137");
+    assert_eq!(explicit.assets.len(), 3);
+    assert_eq!(explicit.assets[0].asset_id, "video");
+    assert_eq!(
+        explicit.assets[0].relative_path,
+        "items/dQw4w9WgXcQ/video.mp4"
+    );
+    assert_eq!(
+        explicit.assets[0].url,
+        "https://media.example/video.mp4"
+    );
+    assert_eq!(explicit.assets[1].asset_id, "audio");
+    assert_eq!(
+        explicit.assets[1].relative_path,
+        "items/dQw4w9WgXcQ/audio.m4a"
+    );
+    assert_eq!(
+        explicit.assets[1].url,
+        "https://media.example/audio.m4a"
+    );
+    assert_eq!(explicit.assets[1].mime_type.as_deref(), Some("audio/mp4"));
+    assert_eq!(explicit.assets[2].asset_id, "subtitle:en:.en");
+    assert_eq!(
+        explicit.assets[2].relative_path,
+        "items/dQw4w9WgXcQ/subtitles/en.vtt"
+    );
+    let automatic = plan_download_assets_from_fresh_media(
+        &media,
+        "137",
+        choices[0].clone(),
+        url,
+        &extracted,
+        None,
+        None,
+    )
+    .expect("best compatible automatic audio option");
+    assert_eq!(automatic.assets.len(), 2);
+    assert_eq!(
+        automatic.assets[1].url,
+        "https://media.example/high-rate.m4a?sig=PRIVATE_SIGNED_URL"
+    );
+    for (subtitle, audio) in [(Some("missing"), Some("140")), (None, Some("missing"))] {
+        let error = plan_download_assets_from_fresh_media(
+            &media,
+            "137",
+            choices[0].clone(),
+            url,
+            &extracted,
+            subtitle,
+            audio,
+        )
+        .expect_err("unrecognized selected track ID must never fall back");
+        assert_eq!(error.kind, ErrorKind::NoCompatibleFormat);
+        assert!(!error.message.contains("PRIVATE_SIGNED_URL"));
+    }
+}
+
+#[test]
+fn combined_video_rejects_inapplicable_separate_audio_selection() {
+    let extracted = parse_player(&fixture("combined")).unwrap();
+    let url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    let media = normalize_extracted_media(url, &extracted).unwrap();
+    let choice = curate_quality_choices(&media).remove(0);
+    let err = plan_download_assets_from_fresh_media(
+        &media,
+        "22",
+        choice,
+        url,
+        &extracted,
+        None,
+        Some("140"),
+    )
+    .expect_err("combined A/V must not fabricate a separate audio choice");
+    assert_eq!(err.kind, ErrorKind::NoCompatibleFormat);
+}
+
+#[test]
 fn sanitized_unavailable_fixture_fails_closed() {
     let err = parse_player(&fixture("unavailable")).unwrap_err();
     assert_eq!(err.kind, ErrorKind::SourceChanged);

@@ -236,109 +236,132 @@ impl MediaSource for YouTubeSource {
                 .as_deref()
                 .ok_or_else(|| source_changed("Missing canonical YouTube URL"))?;
             let extracted = self.fetch(canonical)?;
-            let fresh = normalize_extracted_media(canonical, &extracted)?;
-            let video = fresh
-                .formats
-                .iter()
-                .find(|f| f.format_id == selected.format_id)
-                .ok_or_else(|| source_changed("Selected YouTube format changed during planning"))?;
-            let video_stream = extracted
-                .streams
-                .iter()
-                .find(|stream| stream.id == video.format_id)
-                .ok_or_else(|| source_changed("Selected YouTube stream URL was absent"))?;
-            let mut assets = vec![asset(
-                video_stream,
-                "video",
-                MediaKind::Video,
-                &media.source.media_id,
-            )?];
-            if video.role == StreamRole::VideoOnly {
-                let audio = match audio_format_id {
-                    Some(requested) => fresh
-                        .formats
-                        .iter()
-                        .find(|format| {
-                            format.format_id == requested
-                                && format.role == StreamRole::AudioOnly
-                                && format.compatible_direct_play
-                        })
-                        .ok_or_else(|| {
-                            CoreError::new(
-                                ErrorKind::NoCompatibleFormat,
-                                "Selected YouTube audio track is unavailable",
-                                false,
-                            )
-                        })?,
-                    None => fresh
-                        .formats
-                        .iter()
-                        .filter(|format| {
-                            format.role == StreamRole::AudioOnly && format.compatible_direct_play
-                        })
-                        .max_by_key(|format| {
-                            (format.bitrate_bps.unwrap_or(0), format.format_id.clone())
-                        })
-                        .ok_or_else(|| {
-                            CoreError::new(
-                                ErrorKind::NoCompatibleFormat,
-                                "No compatible YouTube audio stream accompanies this video",
-                                false,
-                            )
-                        })?,
-                };
-                let audio_stream = extracted
-                    .streams
-                    .iter()
-                    .find(|stream| stream.id == audio.format_id)
-                    .ok_or_else(|| source_changed("Selected YouTube audio URL was absent"))?;
-                assets.push(asset(
-                    audio_stream,
-                    "audio",
-                    MediaKind::Audio,
-                    &media.source.media_id,
-                )?);
-            } else if audio_format_id.is_some() {
-                return Err(CoreError::new(
-                    ErrorKind::NoCompatibleFormat,
-                    "Separate audio selection is not applicable to the selected combined format",
-                    false,
-                ));
-            }
-
-            if let Some(requested_track_id) = subtitle_track_id {
-                let track = fresh
-                    .subtitles
-                    .iter()
-                    .find(|track| track.track_id == requested_track_id)
-                    .ok_or_else(|| {
-                        CoreError::new(
-                            ErrorKind::NoCompatibleFormat,
-                            "Selected YouTube subtitle track is unavailable",
-                            false,
-                        )
-                    })?;
-                let extracted_track = extracted
-                    .subtitles
-                    .iter()
-                    .find(|track| track.id == requested_track_id)
-                    .ok_or_else(|| source_changed("Selected YouTube subtitle URL was absent"))?;
-                assets.push(subtitle_download_asset(
-                    &media.source.media_id,
-                    track,
-                    &extracted_track.url,
-                )?);
-            }
-
-            Ok(DownloadPlan {
-                source: media.source.clone(),
-                title: media.title.clone(),
-                duration_ms: media.duration_ms,
-                quality: choice,
-                assets,
-            })
+            plan_download_assets_from_fresh_media(
+                media,
+                selected.format_id.as_str(),
+                choice,
+                canonical,
+                &extracted,
+                subtitle_track_id,
+                audio_format_id,
+            )
         })
     }
+}
+
+// Package selection is separate from the network refresh so sanitized, offline
+// provider fixtures can exercise the exact production video/audio/subtitle asset
+// mapping, including duplicate quality labels and track-ID fidelity.
+fn plan_download_assets_from_fresh_media(
+    media: &MediaInfo,
+    selected_format_id: &str,
+    choice: QualityChoice,
+    canonical: &str,
+    extracted: &ExtractedYouTubeMedia,
+    subtitle_track_id: Option<&str>,
+    audio_format_id: Option<&str>,
+) -> Result<DownloadPlan, CoreError> {
+    let fresh = normalize_extracted_media(canonical, &extracted)?;
+    let video = fresh
+        .formats
+        .iter()
+        .find(|f| f.format_id == selected_format_id)
+        .ok_or_else(|| source_changed("Selected YouTube format changed during planning"))?;
+    let video_stream = extracted
+        .streams
+        .iter()
+        .find(|stream| stream.id == video.format_id)
+        .ok_or_else(|| source_changed("Selected YouTube stream URL was absent"))?;
+    let mut assets = vec![asset(
+        video_stream,
+        "video",
+        MediaKind::Video,
+        &media.source.media_id,
+    )?];
+    if video.role == StreamRole::VideoOnly {
+        let audio = match audio_format_id {
+            Some(requested) => fresh
+                .formats
+                .iter()
+                .find(|format| {
+                    format.format_id == requested
+                        && format.role == StreamRole::AudioOnly
+                        && format.compatible_direct_play
+                })
+                .ok_or_else(|| {
+                    CoreError::new(
+                        ErrorKind::NoCompatibleFormat,
+                        "Selected YouTube audio track is unavailable",
+                        false,
+                    )
+                })?,
+            None => fresh
+                .formats
+                .iter()
+                .filter(|format| {
+                    format.role == StreamRole::AudioOnly && format.compatible_direct_play
+                })
+                .max_by_key(|format| {
+                    (format.bitrate_bps.unwrap_or(0), format.format_id.clone())
+                })
+                .ok_or_else(|| {
+                    CoreError::new(
+                        ErrorKind::NoCompatibleFormat,
+                        "No compatible YouTube audio stream accompanies this video",
+                        false,
+                    )
+                })?,
+        };
+        let audio_stream = extracted
+            .streams
+            .iter()
+            .find(|stream| stream.id == audio.format_id)
+            .ok_or_else(|| source_changed("Selected YouTube audio URL was absent"))?;
+        assets.push(asset(
+            audio_stream,
+            "audio",
+            MediaKind::Audio,
+            &media.source.media_id,
+        )?);
+    } else if audio_format_id.is_some() {
+        return Err(CoreError::new(
+            ErrorKind::NoCompatibleFormat,
+            "Separate audio selection is not applicable to the selected combined format",
+            false,
+        ));
+    }
+
+    if let Some(requested_track_id) = subtitle_track_id {
+        let track = fresh
+            .subtitles
+            .iter()
+            .find(|track| track.track_id == requested_track_id)
+            .ok_or_else(|| {
+                CoreError::new(
+                    ErrorKind::NoCompatibleFormat,
+                    "Selected YouTube subtitle track is unavailable",
+                    false,
+                )
+            })?;
+        let extracted_track = extracted
+            .subtitles
+            .iter()
+            .find(|track| track.id == requested_track_id)
+            .ok_or_else(|| source_changed("Selected YouTube subtitle URL was absent"))?;
+        assets.push(subtitle_download_asset(
+            &media.source.media_id,
+            track,
+            &extracted_track.url,
+        )?);
+    }
+
+    Ok(DownloadPlan {
+        source: media.source.clone(),
+        title: media.title.clone(),
+        duration_ms: media.duration_ms,
+        quality: choice,
+        assets,
+    })
 }
 
 fn asset(

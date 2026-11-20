@@ -151,7 +151,15 @@ pub(super) fn parse_stream(v: &Value) -> Result<Option<ExtractedStream>, CoreErr
     ensure_provider_url_bound("YouTube media URL", url)?;
     let mime = v.get("mimeType").and_then(Value::as_str).unwrap_or("");
     let (mime_base, codecs) = mime.split_once(';').unwrap_or((mime, ""));
-    let container = mime_base.split('/').nth(1).unwrap_or("bin").to_owned();
+    // The provider labels AAC-only M4A streams as audio/mp4. Keep their MIME
+    // intact but use the playable file container and local .m4a extension.
+    // Without this mapping the normalizer incorrectly rejects a valid
+    // split-video audio asset as incompatible.
+    let container = if mime_base == "audio/mp4" {
+        "m4a".to_owned()
+    } else {
+        mime_base.split('/').nth(1).unwrap_or("bin").to_owned()
+    };
     let codec_list = codecs
         .split('"')
         .nth(1)

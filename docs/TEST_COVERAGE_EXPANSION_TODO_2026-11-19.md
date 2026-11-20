@@ -50,7 +50,7 @@
 ## COV-200 — YouTube source and Analyze resiliency (P0)
 
 - [x] **COV-201** Extend sanitized `youtube_source` / `youtube_extract` fixtures for missing/null/mismatched, duplicated and reordered provider fields, with exact valid/invalid outcomes.
-- [ ] **COV-202** Add 403/404/429/5xx and truncated body fixture tests; verify typed permanent/retryable classification, timeouts, bounds and no erroneous `Unavailable` success.
+- [x] **COV-202** Add 403/404/429/5xx and truncated body fixture tests; verify typed permanent/retryable classification, timeouts, bounds and no erroneous `Unavailable` success.
 - [ ] **COV-203** Add option-ID fidelity tests across duplicate quality labels, split A/V, audio and subtitle choices, including provider-neutral download plan mapping.
 - [ ] **COV-204** Exercise source resolution canceled before start and during controlled simulated blocking I/O; assert no stuck worker, duplicate request or false completion.
 - [ ] **COV-205** Extend Android Add/Analyze behavioral tests for plain/share/query-parameter URLs, native initialization error visibility, duplicate Analyze taps and typed error recovery.
@@ -62,6 +62,8 @@
 **Evidence:** _pending._
 
 **Evidence (COV-201):** Production `core/src/youtube_source/parse.rs::{parse_player,parse_stream}` and `core/src/youtube_source/tests.rs::{provider_field_shape_matrix_fails_closed_without_false_metadata,rejects_duplicate_provider_format_ids_instead_of_selecting_arbitrary_url,provider_stream_reordering_preserves_media_id_and_stream_attributes}` reject missing/wrong-shaped, duplicated and reordered sanitized provider data without live external requests. Exact-head Rust LCOV workflow `44505561276` at `a31ea408bbd5dfe01ed5684372c82f5e525214d5` passed, executing `cargo test --workspace --all-features`; deterministic fixture run `44505561262` also passed. Remaining COV-200 acceptance is unchecked.
+
+**Evidence (COV-202):** `core/src/youtube_source/tests.rs::{watch_page_http_status_classifies_retryability_without_leaking_body,watch_page_with_truncated_body_returns_retryable_network_error,unknown_length_watch_response_is_bounded_during_streaming,oversized_watch_response_is_rejected_before_parsing,watch_page_silent_server_times_out_without_exposing_provider_details}` exercise production `YouTubeSource::fetch_watch_page` and bounded response reader against sanitized localhost HTTP 403/404/408/429/500/502/503/504, truncated or missing length, oversized and timed-out response cases. They assert typed `HttpStatus`, `NetworkUnavailable` and `SourceChanged` classifications without forwarding provider tokens or claiming unavailable media was resolved. Target Rust formatter, clippy, and `cargo test --workspace --all-features` passed at exact `84aa0174e4c5707ab0aef32b488d15c66fdb4a75`, CI run `44675474331`; Rust coverage workflow `44675474437` also passed. All COV-202 fixture inputs are loopback, not live YouTube. COV-203 added in a subsequent commit and remains unchecked until the new exact-head CI qualifies it.
 
 ## COV-300 — SQLite durability, worker races and startup repair (P0)
 
