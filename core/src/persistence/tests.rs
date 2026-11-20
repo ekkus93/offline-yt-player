@@ -734,3 +734,158 @@ fn corrupt_download_snapshot_is_not_silently_deleted_during_reopen() {
         );
     }
 }
+
+#[test]
+fn injected_queue_claim_stage_cancel_and_completion_write_faults_recover_after_reopen() {
+    let dir = tempdir().unwrap();
+    for phase in ["enqueue", "claim", "stage", "cancel", "completion"] {
+        let path = dir.path().join(format!("phase-{phase}.sqlite3"));
+        let store = LibraryStore::open(&path).unwrap();
+        let mut previous = DurableDownloadSnapshot {
+            job_id: "item-1".into(),
+            state: DownloadState::Queued,
+            bytes_downloaded: 0,
+            total_bytes: Some(100),
+            attempt: 0,
+            retry_at_epoch_ms: None,
+            last_error: None,
+        };
+        if phase == "cancel" {
+            previous.state = DownloadState::Downloading;
+            previous.attempt = 1;
+        }
+        if phase == "completion" {
+            previous.state = DownloadState::Verifying;
+            previous.bytes_downloaded = 100;
+            previous.attempt = 1;
+        }
+        if phase != "enqueue" {
+            store.save_download_snapshot(&previous).unwrap();
+        }
+        if phase == "completion" {
+            store.stage_asset("item-1", &item(true).assets[0]).unwrap();
+        }
+
+        let (operation, table) = match phase {
+            "enqueue" => ("INSERT", "download_jobs"),
+            "claim" | "cancel" | "completion" => ("UPDATE", "download_jobs"),
+            "stage" => ("INSERT", "staged_assets"),
+            _ => unreachable!(),
+        };
+        store
+            .connection()
+            .unwrap()
+            .execute_batch(&format!(
+                "CREATE TRIGGER inject_phase_failure BEFORE {operation} ON {table}
+                 BEGIN SELECT RAISE(ABORT, 'test-only injected SQLite failure'); END;"
+            ))
+            .unwrap();
+
+        let mut next = previous.clone();
+        match phase {
+            "claim" => {
+                next.state = DownloadState::Resolving;
+                next.attempt = 1;
+            }
+            "cancel" => next.state = DownloadState::Canceled,
+            "completion" => next.state = DownloadState::Completed,
+            _ => {}
+        }
+        let attempt: Result<(), CoreError> = match phase {
+            "enqueue" => store
+                .insert_download_snapshot_if_absent(&previous)
+                .map(|_| ()),
+            "claim" | "cancel" => store
+                .replace_download_snapshot_if_unchanged(&previous, &next)
+                .map(|_| ()),
+            "stage" => store.stage_asset("item-1", &item(true).assets[0]),
+            "completion" => store
+                .promote_completed_if_unchanged("item-1", &item(true), &previous, &next)
+                .map(|_| ()),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            attempt.expect_err("injected write must fail").kind,
+            ErrorKind::Persistence,
+            "{phase}"
+        );
+        drop(store);
+
+        // A failure at any write phase must not change a durable job or
+        // remove a staged asset. Each fresh connection must see the same data.
+        let reopened = LibraryStore::open(&path).unwrap();
+        let expected_previous = if phase == "enqueue" {
+            Vec::new()
+        } else {
+            vec![previous.clone()]
+        };
+        assert_eq!(
+            reopened.load_download_snapshots().unwrap(),
+            expected_previous,
+            "phase {phase}: durable snapshot must not be partially written"
+        );
+        assert_eq!(
+            reopened.staged_job_ids().unwrap(),
+            if phase == "completion" {
+                vec!["item-1".to_owned()]
+            } else {
+                Vec::new()
+            },
+            "phase {phase}: staging must remain consistent"
+        );
+        assert!(
+            reopened.list(None).unwrap().is_empty(),
+            "phase {phase}: no library item may be promoted after a failed write"
+        );
+        reopened
+            .connection()
+            .unwrap()
+            .execute_batch("DROP TRIGGER inject_phase_failure")
+            .unwrap();
+
+        // Removing the test-only trigger permits the exact intended operation
+        // to finish, with no duplicate job and no partial metadata promotion.
+        match phase {
+            "enqueue" => {
+                assert!(reopened.insert_download_snapshot_if_absent(&previous).unwrap());
+                assert_eq!(
+                    reopened.load_download_snapshots().unwrap(),
+                    vec![previous]
+                );
+            }
+            "claim" | "cancel" => {
+                assert!(
+                    reopened
+                        .replace_download_snapshot_if_unchanged(&previous, &next)
+                        .unwrap(),
+                    "phase {phase}: retry with original snapshot must win"
+                );
+                assert_eq!(reopened.load_download_snapshots().unwrap(), vec![next]);
+            }
+            "stage" => {
+                reopened.stage_asset("item-1", &item(true).assets[0]).unwrap();
+                assert_eq!(
+                    reopened.staged_job_ids().unwrap(),
+                    vec!["item-1".to_owned()]
+                );
+                assert_eq!(reopened.load_download_snapshots().unwrap(), vec![previous]);
+            }
+            "completion" => {
+                assert!(
+                    reopened
+                        .promote_completed_if_unchanged(
+                            "item-1",
+                            &item(true),
+                            &previous,
+                            &next,
+                        )
+                        .unwrap()
+                );
+                assert_eq!(reopened.load_download_snapshots().unwrap(), vec![next]);
+                assert_eq!(reopened.list(None).unwrap(), vec![item(true)]);
+                assert!(reopened.staged_job_ids().unwrap().is_empty());
+            }
+            _ => unreachable!(),
+        }
+    }
+}
