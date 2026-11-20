@@ -499,7 +499,6 @@ mod tests {
         assert!(mapped.separate_audio);
     }
 
-
     #[test]
     fn zero_unsigned_fields_preserve_presence_and_bounded_text_across_ffi_records() {
         let zero = DurableDownloadSnapshot {
@@ -509,7 +508,11 @@ mod tests {
             total_bytes: Some(0),
             attempt: 0,
             retry_at_epoch_ms: Some(0),
-            last_error: Some(CoreError::new(ErrorKind::InvalidInput, "sanitized error", false)),
+            last_error: Some(CoreError::new(
+                ErrorKind::InvalidInput,
+                "sanitized error",
+                false,
+            )),
         };
         let mapped = FfiDurableDownloadSnapshot::from(&zero);
         assert_eq!(mapped.bytes_downloaded, 0);
@@ -546,7 +549,10 @@ mod tests {
         };
         let summary = FfiMediaSummary::from(&media);
         assert_eq!(summary.title, title);
-        assert_eq!(summary.title.chars().count(), crate::MAX_PROVIDER_TITLE_CHARS);
+        assert_eq!(
+            summary.title.chars().count(),
+            crate::MAX_PROVIDER_TITLE_CHARS
+        );
         assert_eq!(summary.duration_ms, Some(0));
         assert_eq!(summary.source.canonical_url, None);
         assert_eq!(summary.thumbnail_url, None);

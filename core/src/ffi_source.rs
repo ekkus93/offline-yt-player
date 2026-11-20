@@ -346,7 +346,6 @@ mod tests {
         assert_eq!(listed.choices[0].label, "720p");
     }
 
-
     #[test]
     fn malformed_source_requests_fail_with_typed_error_not_empty_success() {
         let service = service();
@@ -357,7 +356,10 @@ mod tests {
             "https://other.invalid/watch/one",
         ] {
             let result = service.resolve(input.into(), FfiCancellationToken::new());
-            assert!(result.media.is_none(), "malformed request must have no media");
+            assert!(
+                result.media.is_none(),
+                "malformed request must have no media"
+            );
             let error = result.error.expect("malformed input must report an error");
             assert_eq!(error.kind, FfiErrorKind::UnsupportedSource);
             assert!(!error.message.contains("PRIVATE_QUERY_TOKEN"));
@@ -365,7 +367,10 @@ mod tests {
             let choices = service.list_choices(input.into(), FfiCancellationToken::new());
             assert!(choices.choices.is_empty());
             assert_eq!(
-                choices.error.expect("missing choices must not be treated as success").kind,
+                choices
+                    .error
+                    .expect("missing choices must not be treated as success")
+                    .kind,
                 FfiErrorKind::UnsupportedSource
             );
         }
