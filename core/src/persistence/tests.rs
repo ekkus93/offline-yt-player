@@ -847,11 +847,12 @@ fn injected_queue_claim_stage_cancel_and_completion_write_faults_recover_after_r
         // to finish, with no duplicate job and no partial metadata promotion.
         match phase {
             "enqueue" => {
-                assert!(reopened.insert_download_snapshot_if_absent(&previous).unwrap());
-                assert_eq!(
-                    reopened.load_download_snapshots().unwrap(),
-                    vec![previous]
+                assert!(
+                    reopened
+                        .insert_download_snapshot_if_absent(&previous)
+                        .unwrap()
                 );
+                assert_eq!(reopened.load_download_snapshots().unwrap(), vec![previous]);
             }
             "claim" | "cancel" => {
                 assert!(
@@ -863,7 +864,9 @@ fn injected_queue_claim_stage_cancel_and_completion_write_faults_recover_after_r
                 assert_eq!(reopened.load_download_snapshots().unwrap(), vec![next]);
             }
             "stage" => {
-                reopened.stage_asset("item-1", &item(true).assets[0]).unwrap();
+                reopened
+                    .stage_asset("item-1", &item(true).assets[0])
+                    .unwrap();
                 assert_eq!(
                     reopened.staged_job_ids().unwrap(),
                     vec!["item-1".to_owned()]
@@ -873,12 +876,7 @@ fn injected_queue_claim_stage_cancel_and_completion_write_faults_recover_after_r
             "completion" => {
                 assert!(
                     reopened
-                        .promote_completed_if_unchanged(
-                            "item-1",
-                            &item(true),
-                            &previous,
-                            &next,
-                        )
+                        .promote_completed_if_unchanged("item-1", &item(true), &previous, &next,)
                         .unwrap()
                 );
                 assert_eq!(reopened.load_download_snapshots().unwrap(), vec![next]);
