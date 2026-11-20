@@ -163,6 +163,11 @@ internal fun runForegroundServiceTaskSafely(
 
 class DownloadForegroundService : Service() {
     private val workerRunning = AtomicBoolean(false)
+    // Network-paused work may still be blocked in native HTTP I/O. Stop that
+    // attempt cooperatively so its durable PAUSED state can be resumed when
+    // connectivity becomes eligible again. Unlike workerOwnership.stop(), this
+    // does not permanently stop the foreground service.
+    @Volatile private var activeWorkerExecution: DownloadWorkerExecution? = null
     private val workerOwnership = ForegroundWorkerOwnership(
         onStopFailure = {
             android.util.Log.w(
@@ -326,7 +331,14 @@ class DownloadForegroundService : Service() {
         if (decision == DownloadNetworkDecision.Allow && workerRunning.get()) return
 
         runConnectivityCoordinator(connectivity)
-        if (decision == DownloadNetworkDecision.Allow) {
+        if (decision == DownloadNetworkDecision.PauseForConnectivity) {
+            // The coordinator has durably paused the queue. A blocked native
+            // network operation must unwind; otherwise an eligible-network
+            // callback while workerRunning=true gets deferred indefinitely.
+            // Rust prioritizes a durable Pause over a platform stop, so no
+            // user cancellation or false completion is recorded here.
+            activeWorkerExecution?.requestStop()
+        } else {
             launchWorkerIfEligible(queueItemId)
         }
     }
@@ -358,6 +370,7 @@ class DownloadForegroundService : Service() {
             workerRunning.set(false)
             return
         }
+        activeWorkerExecution = execution
         launchGuardedServiceTask {
             var claimed = false
             try {
@@ -366,6 +379,7 @@ class DownloadForegroundService : Service() {
                 }
             } finally {
                 workerOwnership.finish(stopWorker)
+                activeWorkerExecution = null
                 workerRunning.set(false)
                 if (!workerOwnership.isStopped) {
                     settleWorkerAfterExecution(queueItemId, claimed)
