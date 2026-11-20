@@ -480,3 +480,130 @@ fn seeded_local_http_resume_matrix_never_accepts_unverified_appends() {
         assert_eq!(load_resume_representation(&partial).unwrap(), None);
     }
 }
+#[test]
+fn seeded_raw_chunked_and_truncated_http_responses_never_promote_corrupt_media() {
+    use sha2::Digest as _;
+
+    let original = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut seed = 0xA10D_5026_2026_u64;
+    for case in 0..20 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let mode = case % 5;
+        let size = 8 + ((seed >> 3) % 16) as usize;
+        let body = original[..size].to_vec();
+        let cutoff = 1 + (seed as usize % (size - 2));
+        let resumed_case = matches!(mode, 3 | 4);
+        let truncated_case = matches!(mode, 1 | 2 | 4);
+        let served = body.clone();
+        let server = RawHttpFixtureServer::start(move |mut stream| {
+            drain_http_request(&mut stream);
+            let headers = if resumed_case {
+                format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {cutoff}-{}/{}\r\nTransfer-Encoding: chunked\r\nETag: \"fixture-v1\"\r\nConnection: close\r\n\r\n",
+                    served.len() - 1,
+                    served.len()
+                )
+            } else if mode == 2 {
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nETag: \"fixture-v1\"\r\nConnection: close\r\n\r\n",
+                    served.len() + 4
+                )
+            } else {
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nETag: \"fixture-v1\"\r\nConnection: close\r\n\r\n".to_owned()
+            };
+            stream.write_all(headers.as_bytes()).unwrap();
+            let payload = if resumed_case {
+                &served[cutoff..]
+            } else {
+                &served[..]
+            };
+            if mode == 2 {
+                stream.write_all(&payload[..payload.len() / 2]).unwrap();
+            } else {
+                let declared_chunk = if truncated_case {
+                    payload.len() + 4
+                } else {
+                    payload.len()
+                };
+                stream
+                    .write_all(format!("{declared_chunk:X}\r\n").as_bytes())
+                    .unwrap();
+                let sent = if truncated_case {
+                    payload.len() / 2
+                } else {
+                    payload.len()
+                };
+                stream.write_all(&payload[..sent]).unwrap();
+                if !truncated_case {
+                    stream.write_all(b"\r\n0\r\n\r\n").unwrap();
+                }
+            }
+        });
+
+        let temp = tempfile::tempdir().unwrap();
+        let relative = "items/one/video.mp4";
+        let final_path = temp.path().join(relative);
+        let partial = partial_path(&final_path);
+        let request_url = format!("{}/stream", server.address);
+        if resumed_case {
+            fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+            fs::write(&partial, &body[..cutoff]).unwrap();
+            save_resume_representation(
+                &partial,
+                &ResumeRepresentation {
+                    url: request_url.clone(),
+                    etag: Some("\"fixture-v1\"".into()),
+                    last_modified: None,
+                    total_bytes: Some(body.len() as u64),
+                },
+            )
+            .unwrap();
+        }
+        let digest = format!("{:x}", sha2::Sha256::digest(&body));
+        let engine = DownloadEngine::new(temp.path(), DownloadPolicy::default()).unwrap();
+        let attempt = engine.transfer(
+            &TransferRequest {
+                url: request_url,
+                relative_path: relative.into(),
+                expected_bytes: Some(body.len() as u64),
+                expected_sha256: Some(digest.clone()),
+            },
+            &AtomicBool::new(false),
+        );
+        drop(server);
+        if truncated_case {
+            let err = attempt.expect_err("short chunk/body must never complete");
+            assert!(
+                matches!(
+                    err.kind,
+                    ErrorKind::NetworkUnavailable
+                        | ErrorKind::NetworkTimeout
+                        | ErrorKind::IntegrityFailure
+                ),
+                "seed=0x{seed:016x} case={case} mode={mode}: {err:?}"
+            );
+            assert!(
+                !final_path.exists(),
+                "seed=0x{seed:016x} case={case}: truncated media promoted"
+            );
+            if resumed_case {
+                assert!(
+                    fs::read(&partial).unwrap().starts_with(&body[..cutoff]),
+                    "seed=0x{seed:016x} case={case}: original verified prefix lost"
+                );
+            }
+        } else {
+            let success = attempt.unwrap_or_else(|err| {
+                panic!("seed=0x{seed:016x} case={case} mode={mode}: {err:?}")
+            });
+            assert_eq!(success.resumed, resumed_case);
+            assert_eq!(success.bytes, body.len() as u64);
+            assert_eq!(success.sha256, digest);
+            assert_eq!(fs::read(&final_path).unwrap(), body);
+            assert!(!partial.exists());
+            assert_eq!(load_resume_representation(&partial).unwrap(), None);
+        }
+    }
+}
