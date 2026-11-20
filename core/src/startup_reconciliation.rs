@@ -531,4 +531,77 @@ mod tests {
         assert_eq!(result.orphaned_partial_files_removed, 0);
         assert!(claimed.exists());
     }
+
+    #[test]
+    fn file_backed_two_checkpoint_crashes_are_reconciled_idempotently_without_partial_loss() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("download-db.sqlite3");
+        let root = temp.path().join("library");
+        let partial_directory = root.join("items/item-1");
+        std::fs::create_dir_all(&partial_directory).unwrap();
+        let partial = partial_directory.join("video.mp4.partial");
+        let resume = partial_directory.join("video.mp4.resume.json");
+        let orphan_partial = root.join("unclaimed.partial");
+        std::fs::write(&partial, b"verifiable partial bytes").unwrap();
+        std::fs::write(&resume, b"checkpoint sidecar").unwrap();
+        std::fs::write(&orphan_partial, b"unclaimed fixture").unwrap();
+
+        // Crash point 1: transfer has a durable active job and a staged asset.
+        // Crash point 2: another stage record is durable but its queue insert
+        // did not commit. Both partial files must remain recoverable.
+        {
+            let store = LibraryStore::open(&database).unwrap();
+            store
+                .save_download_snapshot(&snapshot("item-1", DownloadState::Downloading))
+                .unwrap();
+            store
+                .save_download_snapshot(&snapshot("user-paused", DownloadState::Paused))
+                .unwrap();
+            store
+                .save_download_snapshot(&snapshot("retry-wait", DownloadState::RetryWait))
+                .unwrap();
+            let staged = LocalAsset {
+                asset_id: "video".into(),
+                kind: MediaKind::Video,
+                relative_path: "items/item-1/video.mp4.partial".into(),
+                bytes: 24,
+                sha256: None,
+                mime_type: Some("video/mp4".into()),
+            };
+            store.stage_asset("item-1", &staged).unwrap();
+            store.stage_asset("stage-without-queue", &staged).unwrap();
+        }
+
+        for startup in 0..3 {
+            let store = LibraryStore::open(&database).unwrap();
+            let report = reconcile_startup_with_library_root(&store, &root).unwrap();
+            assert_eq!(report.jobs_requeued, usize::from(startup == 0));
+            assert_eq!(
+                report.orphaned_staged_jobs_recovered,
+                usize::from(startup == 0)
+            );
+            assert_eq!(report.orphaned_partial_files_removed, 0);
+            assert_eq!(report.asset_mismatches_reported, 0);
+
+            let jobs = store.load_download_snapshots().unwrap();
+            assert_eq!(jobs.len(), 4, "repeat startup may not duplicate recovery");
+            let job = |id: &str| jobs.iter().find(|s| s.job_id == id).unwrap();
+            assert_eq!(job("item-1").state, DownloadState::Queued);
+            assert_eq!(job("user-paused").state, DownloadState::Paused);
+            assert_eq!(job("retry-wait").state, DownloadState::RetryWait);
+            assert_eq!(job("retry-wait").retry_at_epoch_ms, Some(500));
+            assert_eq!(job("stage-without-queue").state, DownloadState::Failed);
+            assert_eq!(
+                job("stage-without-queue").last_error.as_ref().unwrap().kind,
+                ErrorKind::MissingAsset
+            );
+            assert_eq!(
+                store.staged_job_ids().unwrap(),
+                vec!["item-1".to_owned(), "stage-without-queue".to_owned()]
+            );
+            assert_eq!(std::fs::read(&partial).unwrap(), b"verifiable partial bytes");
+            assert_eq!(std::fs::read(&resume).unwrap(), b"checkpoint sidecar");
+            assert_eq!(std::fs::read(&orphan_partial).unwrap(), b"unclaimed fixture");
+        }
+    }
 }
