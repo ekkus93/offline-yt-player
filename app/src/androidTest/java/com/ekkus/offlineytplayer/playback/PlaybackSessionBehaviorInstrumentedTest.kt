@@ -3,6 +3,12 @@ package com.ekkus.offlineytplayer.playback
 import android.content.ComponentName
 import android.content.Context
 import android.media.AudioManager
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
+import android.util.Base64
+import java.security.MessageDigest
 import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.compose.runtime.mutableStateOf
@@ -528,6 +534,119 @@ class PlaybackSessionBehaviorInstrumentedTest {
             )
         } finally {
             PlaybackSessionService.teardownObserver = null
+        }
+    }
+
+
+    @Test
+    fun packagedOfflineAvFixtureCanBeDemuxedIntoRealVideoAudioAndSubtitles() {
+        val combined = File(context.cacheDir, "cov601-combined.mp4")
+        val video = File(context.cacheDir, "cov601-video.mp4")
+        val audio = File(context.cacheDir, "cov601-audio.m4a")
+        val subtitles = File(context.cacheDir, "cov601-captions.vtt")
+        try {
+            val encoded = instrumentation.context.assets
+                .open("playback/combined_0p5s.mp4.b64")
+                .bufferedReader(Charsets.US_ASCII)
+                .use { it.readText() }
+            val bytes = Base64.decode(encoded, Base64.DEFAULT)
+            assertEquals(3_064, bytes.size)
+            val hash = MessageDigest.getInstance("SHA-256")
+                .digest(bytes)
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            assertEquals("8d2af7ef700d6b040178d4d76967423c3d47860f00a58ff5508ba6c3ce070a2c", hash)
+            combined.writeBytes(bytes)
+            val combinedMimeTypes = localTrackMimeTypes(combined)
+            assertTrue(combinedMimeTypes.contains("video/avc"))
+            assertTrue(combinedMimeTypes.contains("audio/mp4a-latm"))
+
+            remuxFixtureTrack(combined, video, "video/")
+            remuxFixtureTrack(combined, audio, "audio/")
+            assertEquals(listOf("video/avc"), localTrackMimeTypes(video))
+            assertEquals(listOf("audio/mp4a-latm"), localTrackMimeTypes(audio))
+            subtitles.writeText(
+                "WEBVTT\n\n00:00:00.000 --> 00:00:00.450\nOffline fixture subtitle\n",
+                Charsets.UTF_8,
+            )
+            assertTrue(subtitles.readText().startsWith("WEBVTT\n\n"))
+            val item = LocalPlaybackPolicy.mediaItemFor(
+                LocalPlaybackAsset(
+                    videoPath = video.absolutePath,
+                    audioPath = audio.absolutePath,
+                    title = "Local split A/V",
+                    subtitleTracks = listOf(
+                        LocalSubtitleTrack(
+                            path = subtitles.absolutePath,
+                            language = "en",
+                            label = "English",
+                            mimeType = MimeTypes.TEXT_VTT,
+                        ),
+                    ),
+                ),
+            )
+            assertEquals(
+                audio.absolutePath,
+                LocalPlaybackPolicy.splitAudioPathFrom(item),
+            )
+            assertEquals("file", item.localConfiguration?.uri?.scheme)
+            assertEquals(
+                "file",
+                item.localConfiguration?.subtitleConfigurations?.single()?.uri?.scheme,
+            )
+        } finally {
+            combined.delete()
+            video.delete()
+            audio.delete()
+            subtitles.delete()
+        }
+    }
+
+    private fun localTrackMimeTypes(file: File): List<String> {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            (0 until extractor.trackCount).map { index ->
+                requireNotNull(
+                    extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME),
+                )
+            }
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun remuxFixtureTrack(combined: File, output: File, mimePrefix: String) {
+        val extractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        try {
+            extractor.setDataSource(combined.absolutePath)
+            val inputIndex = (0 until extractor.trackCount).first { index ->
+                extractor.getTrackFormat(index)
+                    .getString(MediaFormat.KEY_MIME)?.startsWith(mimePrefix) == true
+            }
+            extractor.selectTrack(inputIndex)
+            muxer = MediaMuxer(
+                output.absolutePath,
+                MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
+            )
+            val outputIndex = muxer.addTrack(extractor.getTrackFormat(inputIndex))
+            muxer.start()
+            val buffer = ByteBuffer.allocateDirect(64 * 1024)
+            val info = MediaCodec.BufferInfo()
+            while (true) {
+                buffer.clear()
+                val read = extractor.readSampleData(buffer, 0)
+                if (read < 0) break
+                info.set(0, read, extractor.sampleTime, extractor.sampleFlags)
+                muxer.writeSampleData(outputIndex, buffer, info)
+                extractor.advance()
+            }
+            muxer.stop()
+            muxer.release()
+            muxer = null
+        } finally {
+            muxer?.release()
+            extractor.release()
         }
     }
 
