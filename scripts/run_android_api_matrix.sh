@@ -54,7 +54,7 @@ for klass in "${classes[@]}"; do
       GeneratedUniffiSourceGatewaySmokeTest)
         args+=(--required-test "$klass#repeatedNativeResolverOpenCloseAndPreCanceledRequestsDoNotLeakState") ;;
       DownloadForegroundTimeoutInstrumentedTest)
-        args+=(--required-test "$klass#timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground") ;;
+        args+=(--required-test "$klass#timeoutSequencePersistsThenStopsNativeWorkThenStopsForeground" --required-test "$klass#duplicateTimeoutAndTeardownCallsStopNativeOnceAndRecreatedOwnerIsIndependent") ;;
       NotificationPermissionStateInstrumentationTest)
         args+=(--required-test "$klass#grantedAndDeniedOutcomesArePersistedWithoutInventingAnInitialState" --required-test "$klass#platformNotificationPermissionPhaseKeepsNativeDurableQueue") ;;
     esac

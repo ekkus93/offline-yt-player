@@ -7,6 +7,9 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -108,6 +111,76 @@ class DownloadForegroundTimeoutInstrumentedTest {
         )
         assertTrue(ownership.isStopped)
         assertEquals(1, preferences.getInt(TIMEOUT_COUNT_KEY, 0))
+    }
+
+
+    @Test
+    fun duplicateTimeoutAndTeardownCallsStopNativeOnceAndRecreatedOwnerIsIndependent() {
+        preferences.edit().clear().commit()
+        val nativeStopSignals = AtomicInteger()
+        val failures = AtomicInteger()
+        val oldOwner = ForegroundWorkerOwnership { failures.incrementAndGet() }
+        val nativeStop: () -> Unit = { nativeStopSignals.incrementAndGet() }
+        assertTrue(oldOwner.tryBegin(nativeStop))
+        val gate = CountDownLatch(1)
+        val stopped = CountDownLatch(8)
+        val workers = (0 until 8).map {
+            Thread {
+                check(gate.await(10, TimeUnit.SECONDS))
+                oldOwner.stop()
+                stopped.countDown()
+            }.apply { start() }
+        }
+        val sequence = mutableListOf<DownloadTimeoutStep>()
+        try {
+            DownloadForegroundTimeoutSequence.run(
+                persist = {
+                    DownloadForegroundTimeoutStore.persistTimeout(context, 51, 1)
+                },
+                stopNativeWork = oldOwner::stop,
+                stopForeground = {},
+                stopSelf = {},
+                observer = sequence::add,
+            )
+            gate.countDown()
+            assertTrue(stopped.await(10, TimeUnit.SECONDS))
+            workers.forEach { it.join() }
+            oldOwner.stop()
+            oldOwner.finish(nativeStop)
+            assertTrue(oldOwner.isStopped)
+            assertFalse(oldOwner.tryBegin { nativeStopSignals.incrementAndGet() })
+            assertEquals(1, nativeStopSignals.get())
+            assertEquals(0, failures.get())
+            assertEquals(
+                DownloadTimeoutStep.values().toList(),
+                sequence,
+            )
+            val diskFile = java.io.File(
+                context.applicationInfo.dataDir,
+                "shared_prefs/$PREFERENCES_NAME.xml",
+            )
+            assertTrue(diskFile.readText().contains("name=\"$TIMEOUT_COUNT_KEY\" value=\"1\""))
+            // A newly constructed service ownership gate must remain usable
+            // even when the prior service was destroyed and timed out.
+            val newOwner = ForegroundWorkerOwnership { failures.incrementAndGet() }
+            val newWorker: () -> Unit = { nativeStopSignals.incrementAndGet() }
+            assertTrue(newOwner.tryBegin(newWorker))
+            DownloadForegroundTimeoutSequence.run(
+                persist = { DownloadForegroundTimeoutStore.persistTimeout(context, 52, 1) },
+                stopNativeWork = oldOwner::stop,
+                stopForeground = {},
+                stopSelf = {},
+            )
+            assertEquals(1, nativeStopSignals.get())
+            assertEquals(2, preferences.getInt(TIMEOUT_COUNT_KEY, 0))
+            assertEquals(52, preferences.getInt(LAST_START_ID_KEY, -1))
+            assertFalse(newOwner.isStopped)
+            newOwner.finish(newWorker)
+            assertEquals(0, failures.get())
+        } finally {
+            gate.countDown()
+            workers.forEach { it.join(1_000) }
+        }
     }
 
     private companion object {
