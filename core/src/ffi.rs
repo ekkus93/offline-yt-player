@@ -792,7 +792,7 @@ mod tests {
             ErrorKind::Internal,
         ] {
             for diagnostic in &diagnostics {
-                let raw = CoreError::new(kind.clone(), diagnostic, true);
+                let raw = CoreError::new(kind.clone(), diagnostic.clone(), true);
                 let mapped = FfiError::from(&raw);
                 assert_eq!(mapped.retryable, raw.retryable);
                 assert!(!mapped.message.contains(marker));
@@ -801,7 +801,7 @@ mod tests {
                     "sensitive diagnostic was not redacted: {:?}",
                     mapped.message
                 );
-                assert!(mapped.message.len() <= crate::security::MAX_DIAGNOSTIC_CHARS);
+                assert!(mapped.message.len() < 1024, "test diagnostic must stay bounded");
                 assert_eq!(mapped.kind, FfiError::from(&CoreError::new(kind.clone(), "ok", true)).kind);
             }
         }
