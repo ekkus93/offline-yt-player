@@ -144,17 +144,41 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 "adb must restore a real Android default network",
                 observedNetwork.get() != DownloadConnectivity.None,
             )
-            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 90_000L) {
+            // Require a second host-driven interruption after the first
+            // resume actually enters the real native downloading state.
+            waitForState(jobId, CoreDownloadState.DOWNLOADING, timeoutMs = 45_000L)
+            signals.resolve("resumed-once").writeText("first real OS recovery has a live worker")
+            val secondLossDeadline = SystemClock.elapsedRealtime() + 45_000L
+            while (
+                observedNetwork.get() != DownloadConnectivity.None &&
+                SystemClock.elapsedRealtime() < secondLossDeadline
+            ) SystemClock.sleep(50)
+            assertEquals(DownloadConnectivity.None, observedNetwork.get())
+            waitForState(jobId, CoreDownloadState.PAUSED)
+            assertTrue("second pause must retain the resumed transfer partial", partial.length() > 0L)
+            assertFalse("second pause cannot promote final media", finished.exists())
+            signals.resolve("paused-again").writeText("second real OS loss durably paused worker")
+            val secondRestoreDeadline = SystemClock.elapsedRealtime() + 45_000L
+            while (
+                observedNetwork.get() == DownloadConnectivity.None &&
+                SystemClock.elapsedRealtime() < secondRestoreDeadline
+            ) SystemClock.sleep(50)
+            assertTrue("second host restore must reach observer", observedNetwork.get() != DownloadConnectivity.None)
+            waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 180_000L) {
                 "partial=${partial.length()} final=${finished.length()} " +
                     "fixtureRequests=${server.requestCount.get()} fixtureBytes=${server.bytesSent.get()} " +
                     "observedNetwork=${observedNetwork.get()}"
             }
             assertGeneratedFixtureFile(finished, payloadBytes, payloadModulus)
+            assertTrue("two resumes require at least three fixture requests", server.requestCount.get() >= 3)
             assertFalse("resume must remove partial bytes after promotion", partial.exists())
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
                 val library = core.listLibrary()
                 assertNull(library.error)
-                assertTrue(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
+                assertTrue(requireNotNull(library.value).single { it.itemId == jobId }.completed)
+                val queue = core.listDownloadQueue()
+                assertNull(queue.error)
+                assertEquals(CoreDownloadState.COMPLETED, requireNotNull(queue.value).single { it.jobId == jobId }.state)
             }
             signals.resolve("complete").writeText("real OS loss/resume completed durable local item")
         } finally {
@@ -263,6 +287,24 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 DownloadConnectivity.Unmetered,
                 network.get(),
             )
+            waitForState(jobId, CoreDownloadState.DOWNLOADING, timeoutMs = 90_000L)
+            signals.resolve("wifi-resumed-once").writeText("first unmetered recovery has active native worker")
+            val secondMeteredDeadline = SystemClock.elapsedRealtime() + 45_000L
+            while (
+                network.get() != DownloadConnectivity.Metered &&
+                SystemClock.elapsedRealtime() < secondMeteredDeadline
+            ) SystemClock.sleep(50L)
+            assertEquals(DownloadConnectivity.Metered, network.get())
+            waitForState(jobId, CoreDownloadState.PAUSED)
+            assertTrue("second metered pause must retain partial", partial.length() > 0L)
+            assertFalse("metered replay cannot promote final media", finished.exists())
+            signals.resolve("wifi-paused-again").writeText("second real cost transition paused worker")
+            val secondUnmeteredDeadline = SystemClock.elapsedRealtime() + 45_000L
+            while (
+                network.get() != DownloadConnectivity.Unmetered &&
+                SystemClock.elapsedRealtime() < secondUnmeteredDeadline
+            ) SystemClock.sleep(50L)
+            assertEquals(DownloadConnectivity.Unmetered, network.get())
             waitForState(jobId, CoreDownloadState.COMPLETED, timeoutMs = 180_000L) {
                 "testNetwork=${network.get()} " +
                     "serviceCallbacks=${serviceNetworkCallbacks.joinToString()} " +
@@ -271,11 +313,16 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                     "final=${if (finished.isFile) finished.length() else 0L}"
             }
             assertGeneratedFixtureFile(finished, payloadBytes, payloadModulus)
+            assertTrue("two Wi-Fi-only resumes need three fixture requests", server.requestCount.get() >= 3)
             assertFalse("completed Wi-Fi-only download must remove partial", partial.exists())
+            assertTrue("service must observe both metered transitions", serviceNetworkCallbacks.count { it == DownloadConnectivity.Metered } >= 2)
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
                 val library = core.listLibrary()
                 assertNull(library.error)
-                assertTrue(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
+                assertTrue(requireNotNull(library.value).single { it.itemId == jobId }.completed)
+                val queue = core.listDownloadQueue()
+                assertNull(queue.error)
+                assertEquals(CoreDownloadState.COMPLETED, requireNotNull(queue.value).single { it.jobId == jobId }.state)
             }
             signals.resolve("wifi-complete").writeText("real unmetered Wi-Fi resumed and completed Library item")
         } finally {

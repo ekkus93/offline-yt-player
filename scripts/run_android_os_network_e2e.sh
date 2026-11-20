@@ -65,6 +65,14 @@ adb shell settings put global airplane_mode_on 1
 adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true >/dev/null 2>&1 || true
 wait_signal paused
 restore_network
+wait_signal resumed-once
+# Interrupt the real resumed worker again before it can complete.
+adb shell svc wifi disable
+adb shell svc data disable
+adb shell settings put global airplane_mode_on 1
+adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true >/dev/null 2>&1 || true
+wait_signal paused-again
+restore_network
 wait_signal complete
 wait "$INST_PID"
 INST_PID=""
@@ -149,6 +157,16 @@ android_wifi_metered_set "$METERED_SSID" true "$DIR/wifi-metered-active.log" "$D
 wait_signal wifi-paused "$DIR/rmd1506-wifi-metered.log"
 android_wifi_metered_set "$METERED_SSID" false "$DIR/wifi-unmetered-active.log" "$DIR/wifi-networks-unmetered.txt" || {
     echo "WIFI_ONLY_METERED_FAILED: host could not restore unmetered policy during active transfer"
+    exit 1
+}
+wait_signal wifi-resumed-once "$DIR/rmd1506-wifi-metered.log"
+android_wifi_metered_set "$METERED_SSID" true "$DIR/wifi-metered-active-twice.log" "$DIR/wifi-networks-metered-twice.txt" || {
+    echo "WIFI_ONLY_METERED_FAILED: host could not reapply metered policy during resumed transfer"
+    exit 1
+}
+wait_signal wifi-paused-again "$DIR/rmd1506-wifi-metered.log"
+android_wifi_metered_set "$METERED_SSID" false "$DIR/wifi-unmetered-final.log" "$DIR/wifi-networks-unmetered-final.txt" || {
+    echo "WIFI_ONLY_METERED_FAILED: host could not restore final unmetered policy"
     exit 1
 }
 wait_signal wifi-complete "$DIR/rmd1506-wifi-metered.log"
