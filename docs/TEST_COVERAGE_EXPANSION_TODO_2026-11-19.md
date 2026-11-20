@@ -71,10 +71,10 @@
 
 ## COV-300 — SQLite durability, worker races and startup repair (P0)
 
-- [ ] **COV-301** Add file-backed SQLite transaction fault tests for enqueue, claim, stage, promote, cancellation, and completion boundaries, including reopen/recovery assertions.
-- [ ] **COV-302** Cover future schema version, malformed/corrupt DB, foreign-key/orphan data and failed migration; verify fail-closed errors and no destructive fallback.
+- [x] **COV-301** Add file-backed SQLite transaction fault tests for enqueue, claim, stage, promote, cancellation, and completion boundaries, including reopen/recovery assertions.
+- [x] **COV-302** Cover future schema version, malformed/corrupt DB, foreign-key/orphan data and failed migration; verify fail-closed errors and no destructive fallback.
 - [x] **COV-303** Exercise concurrent independent DB connections/workers racing to claim and settle the same job; verify a single authoritative winner.
-- [ ] **COV-304** Add cancel-vs-complete, pause-vs-retry, stale worker, and duplicate schedule races without nondeterministic sleeps; use barriers or test-controlled clocks.
+- [x] **COV-304** Add cancel-vs-complete, pause-vs-retry, stale worker, and duplicate schedule races without nondeterministic sleeps; use barriers or test-controlled clocks.
 - [ ] **COV-305** Add repeated startup reconciliation/partial-staged-file tests, including missing assets, symlinks, stale lease and crash-between-checkpoint boundaries; prove idempotence and outside-root safety.
 - [x] **COV-306** Add a bundled-SQLite upgrade regression smoke for `rusqlite 0.41.x`: file open/migrate, FK enforcement, transaction, snapshot persisted after reopen.
 - [x] **COV-307** Run new Rust tests under normal CI and coverage; document observed durable-state invariant and exact-head CI.
@@ -86,6 +86,10 @@
 **Evidence (COV-303):** Production `LibraryStore` snapshot compare-and-swap and atomic promotion in `core/src/persistence/{snapshots}.rs` and `core/src/persistence.rs` are exercised by `core/src/persistence/tests.rs::{independent_sqlite_worker_connections_race_for_one_authoritative_claim,independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item}` with two independent connections and synchronization barriers, requiring exactly one claim or terminal transition and library/staging consistency. Exact-head Rust coverage `44505561276` and deterministic fixture `44505561262` passed at `a31ea408bbd5dfe01ed5684372c82f5e525214d5`. Other fault-phase and job-scheduling races remain open.
 
 **Evidence (COV-307, requalified):** Exact-head `e408880d1719b55026dd35c84a98db5cf7900d52` passed `cargo test --workspace --all-features` and clippy in CI run `44676046018`, plus `cargo-llvm-cov --workspace --all-features` in `44676046105` (**8,511/9,430 = 90.25%** scoped Rust production lines; no measurable branches). Included `persistence/tests.rs::{independent_sqlite_worker_connections_race_for_one_authoritative_claim,independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item,bundled_sqlite_file_reopen_preserves_durable_queue_and_foreign_keys}` assert a single durable winner, fail-closed stale snapshot CAS and no promoted canceled asset after file-backed reopen. This run qualifies test execution, not all still unchecked transaction fault phases COV-301/302/304/305.
+
+**Evidence (COV-301/302/304; exact source SHA `bfba51ec3a3f5807670e2bf1f895ec6f8519b17d`):** Rust workspace fmt/clippy/tests in main CI `44726100035` passed, including `core/src/persistence/tests.rs::{injected_queue_claim_stage_cancel_and_completion_write_faults_recover_after_reopen,failed_asset_insert_rolls_back_promotion_and_preserves_staging_after_reopen,failed_initial_migration_rolls_back_ddl_and_preserves_user_tables_after_reopen,corrupt_download_snapshot_is_not_silently_deleted_during_reopen,future_schema_and_corrupt_file_fail_closed_without_destroying_user_data,independent_sqlite_pause_and_retry_race_preserves_one_authoritative_state,concurrent_duplicate_schedule_insert_writes_only_one_durable_job,independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item}`. Production `LibraryStore::{insert_download_snapshot_if_absent,replace_download_snapshot_if_unchanged,stage_asset,promote_completed_if_unchanged,promote_completed,migrate,load_download_snapshots}` is exercised against **on-disk SQLite** with test-only failure triggers, reopen/retry of enqueue, claim, stage, cancel, completion, and rollback-safe promotion. Failed v0 migration preserves an existing user-owned `assets` table and rolls back partially created `library_items` / index on two attempts; unknown future schema, damaged files, orphan FK and malformed download row fail closed without deleting data. Two-connection CAS pause-vs-retry and terminal cancel-vs-complete races and three-worker duplicate scheduling use synchronization barriers, require exactly one winner and preserve the authoritative row after reopen. Rust LCOV `44726100060` passed with **8,688/9,584 = 90.65%** production source lines (branch unmeasured). These tests do not assert physical flash failure or SQLite disk crash durability beyond file-backed transaction/reopen behavior.
+
+**Partial evidence (COV-305; remains unchecked):** `core/src/startup_reconciliation.rs::tests::file_backed_two_checkpoint_crashes_are_reconciled_idempotently_without_partial_loss` reopens a real database three times after staged-download crash checkpoints and proves a single queued recovery, one failed orphaned stage recovery, preservation of user Paused/RetryWait deadlines and no deletion of partial/resume sidecars. Existing symlink/missing asset cases and `stale_startup_requeue_cannot_override_newer_pause_or_completion` also pass in Rust CI `44726100035`. A distinct explicit stale-lease/crash-between-actual-filesystem-move test is still needed before checking full COV-305.
 
 ## COV-400 — Android service, notification and API-level matrix (P1)
 
@@ -136,8 +140,8 @@
 
 ## COV-700 — UniFFI/native boundary correctness (P1)
 
-- [ ] **COV-701** Inventory `core/src/ffi*.rs` and `GeneratedUniffi*Gateway` bindings, supported error variants, nullable/unsigned fields, cancellation and cleanup paths.
-- [ ] **COV-702** Test FFI error conversion and edge-value round trips including zero/max unsigned, null fields, large bounded strings and malformed inputs; forbid empty-success coercion.
+- [x] **COV-701** Inventory `core/src/ffi*.rs` and `GeneratedUniffi*Gateway` bindings, supported error variants, nullable/unsigned fields, cancellation and cleanup paths.
+- [x] **COV-702** Test FFI error conversion and edge-value round trips including zero/max unsigned, null fields, large bounded strings and malformed inputs; forbid empty-success coercion.
 - [ ] **COV-703** Add repeated open/close and pre/in-flight cancellation race tests through the production gateway/native-loading path.
 - [x] **COV-704** Prove `liboffline_yt_core.so` + JNA packaging for both arm64-v8a and x86_64 and runtime tests on x86_64 emulator.
 - [ ] **COV-705** Execute arm64 runtime smoke on emulator/hardware if feasible; otherwise record this as an explicit unverified runtime-ABI gap, distinct from cross-build.
@@ -148,6 +152,8 @@
 **Evidence:** _pending._
 
 **Evidence (COV-704, validated 2026-11-20 UTC):** `.github/workflows/ci.yml` job `UniFFI Kotlin and Android ABI` (`44646351095`) built and verified both `arm64-v8a` and `x86_64` Rust core/JNA packaging; on the same SHA API 29 smoke (`44646351074`) and API 26/33/34 matrix (`44646351120`) executed `GeneratedUniffiSourceGatewaySmokeTest::repeatedNativeResolverOpenCloseAndPreCanceledRequestsDoNotLeakState` through packaged native `FfiYouTubeSourceService` and `GeneratedUniffiSourceAnalysisGateway` on x86_64. **Arm64 cross-build/packaging is not arm64 runtime qualification**; COV-705 remains open.
+
+**Evidence (COV-701/702; exact SHA `bfba51ec3a3f5807670e2bf1f895ec6f8519b17d`):** `docs/UNIFFI_NATIVE_BOUNDARY_COVERAGE_INVENTORY_2026-11-20.md` inventories the 11 Rust `ffi*.rs` modules exported from `core/src/lib.rs`, the Android `coregateway` source adapter and native loading/preflight, 14 typed error kinds, nullable/unsigned fields and cooperative cancel/cleanup paths. `core/src/ffi.rs::{all_core_error_categories_preserve_kind_and_retryability_across_ffi,ffi_records_preserve_optional_and_maximum_unsigned_values,zero_unsigned_fields_preserve_presence_and_bounded_text_across_ffi_records,same_label_audio_choices_keep_distinct_format_ids_through_ffi}` exercise typed error mapping for both retryability values, `u32::MAX`/`u64::MAX`, zero-vs-`None` optional values, preserved bounded title text and format IDs. `core/src/ffi_source.rs::malformed_source_requests_fail_with_typed_error_not_empty_success` sends empty, unsupported-scheme/host and signed-query variations through production fixture-source FFI and requires typed `UnsupportedSource` with no fabricated `media`/choice success and no private token in diagnostics. Rust tests main CI `44726100035` and LCOV `44726100060` succeeded. Generated Android x86_64 native smoke was previously validated at `1534875022dc3273bae07af9a5b423c4e2e8ad2e` (CI `44646351074`, API matrix `44646351120`); this does NOT claim arm64 runtime or new SHA's Android smoke has passed. COV-703/705/706 remain separate for real native in-flight/UI/error runtime qualification.
 
 ## COV-800 — Final evidence and gate policy (P2, after implementation)
 
@@ -178,6 +184,6 @@ This is a priority recommendation, not permission to skip independent work or ma
 ## Completion record
 
 - **Current baseline SHA at document creation:** `e946a24b9939c03a7f77f667705a1f888ae44771`.
-- **Completed (evidence-backed) subtasks at this checkpoint:** 29/62; 33 remain open. The task sections and exact-SHA evidence above, not this summary count, are authoritative.
-- **Latest evidence-backed coverage:** exact `e408880d1719b55026dd35c84a98db5cf7900d52`, Rust 90.25% lines, Kotlin/JVM 37.72% lines and 30.60% branches, separate API 29 instrumentation report; see COV-801 and baseline.
+- **Completed (evidence-backed) subtasks at this checkpoint:** 34/62; 28 remain open. The task sections and exact-SHA evidence above, not this summary count, are authoritative.
+- **Latest evidence-backed coverage:** exact `bfba51ec3a3f5807670e2bf1f895ec6f8519b17d`, Rust core **8,688/9,584 (90.65%)** lines (branch unmeasured); latest separately measured Kotlin/JVM **37.72%** lines, Android API 29 instrumentation **11.91%** lines on prior SHA. Do not conflate coverage lanes.
 - **CI evidence for new test changes:** Rust coverage `44501336363` and main CI `44501336322` passed at exact `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`; other workflow statuses require recheck on the next head.
