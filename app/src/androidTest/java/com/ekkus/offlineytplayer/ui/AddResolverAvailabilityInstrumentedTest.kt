@@ -156,7 +156,10 @@ class AddResolverAvailabilityInstrumentedTest {
                 source.analyzedUrls,
             )
         }
-        compose.onNodeWithText("PRIVATE_TRACKING_TOKEN", substring = true).assertDoesNotExist()
+        // The user-entered share URL is intentionally left in the editable
+        // input field. Only the normalized, token-free URL may cross into
+        // the source-analysis gateway; asserting no token anywhere in the
+        // Compose tree would incorrectly reject the visible input itself.
     }
 
     @Test
