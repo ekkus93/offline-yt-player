@@ -619,3 +619,116 @@ fn independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item() 
         assert_eq!(after.staged_job_ids().unwrap(), vec!["item-1"]);
     }
 }
+
+#[test]
+fn failed_initial_migration_rolls_back_ddl_and_preserves_user_tables_after_reopen() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("failed-migration.sqlite3");
+    // Simulate a legacy v0 file whose assets table name conflicts with the
+    // new migration, after library_items and its unique index have been created
+    // in the same transaction. The original sentinel must survive.
+    {
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_meta (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    version INTEGER NOT NULL
+                 );
+                 INSERT INTO schema_meta(id, version) VALUES(1, 0);
+                 CREATE TABLE assets(marker TEXT NOT NULL);
+                 INSERT INTO assets(marker) VALUES('USER_DATA_MUST_SURVIVE');",
+            )
+            .unwrap();
+    }
+
+    for attempt in 0..2 {
+        let failure = LibraryStore::open(&path).expect_err("migration must fail closed");
+        assert_eq!(failure.kind, ErrorKind::Persistence, "attempt {attempt}");
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        let version: i64 = connection
+            .query_row("SELECT version FROM schema_meta WHERE id=1", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 0, "attempt {attempt}: no premature schema bump");
+        let marker: String = connection
+            .query_row("SELECT marker FROM assets", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(marker, "USER_DATA_MUST_SURVIVE");
+        for table in ["library_items", "staged_assets", "download_jobs"] {
+            let created: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(created, 0, "attempt {attempt}: partial table {table}");
+        }
+        let created_index: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='library_source_identity'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(created_index, 0, "attempt {attempt}: partial unique index");
+    }
+}
+
+#[test]
+fn corrupt_download_snapshot_is_not_silently_deleted_during_reopen() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("bad-snapshot.sqlite3");
+    let valid = DurableDownloadSnapshot {
+        job_id: "valid-job".into(),
+        state: DownloadState::Queued,
+        bytes_downloaded: 1,
+        total_bytes: Some(100),
+        attempt: 1,
+        retry_at_epoch_ms: None,
+        last_error: None,
+    };
+    {
+        let store = LibraryStore::open(&path).unwrap();
+        store.save_download_snapshot(&valid).unwrap();
+        let connection = store.connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO download_jobs(job_id, state_json, bytes_downloaded, attempt)
+                 VALUES('invalid-state', 'not-json', 10, 0)",
+                [],
+            )
+            .unwrap();
+    }
+
+    for attempt in 0..2 {
+        let store = LibraryStore::open(&path).expect("schema remains valid on reopen");
+        assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+        let error = store
+            .load_download_snapshots()
+            .expect_err("malformed state must not be treated as an empty queue");
+        assert_eq!(error.kind, ErrorKind::Persistence, "attempt {attempt}");
+        // Read raw bytes instead of the typed projection: a damaged job must
+        // remain for explicit repair, not be silently discarded on startup.
+        let connection = store.connection().unwrap();
+        let damaged: String = connection
+            .query_row(
+                "SELECT state_json FROM download_jobs WHERE job_id='invalid-state'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(damaged, "not-json");
+        let valid_state: String = connection
+            .query_row(
+                "SELECT state_json FROM download_jobs WHERE job_id='valid-job'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            valid_state,
+            serde_json::to_string(&DownloadState::Queued).unwrap()
+        );
+    }
+}
