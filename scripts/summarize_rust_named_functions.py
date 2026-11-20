@@ -14,7 +14,11 @@ import json
 from pathlib import Path
 import re
 
-from scripts.summarize_rust_coverage import CoverageError, core_relative_path
+# Support both python -m unittest (package import) and direct CI CLI invocation.
+if __package__:
+    from .summarize_rust_coverage import CoverageError, core_relative_path
+else:
+    from summarize_rust_coverage import CoverageError, core_relative_path
 
 
 DECLARATION = re.compile(r"\bfn\s+([A-Za-z_][A-Za-z_0-9]*)\b")
