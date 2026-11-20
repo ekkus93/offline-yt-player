@@ -887,3 +887,108 @@ fn injected_queue_claim_stage_cancel_and_completion_write_faults_recover_after_r
         }
     }
 }
+
+#[test]
+fn independent_sqlite_pause_and_retry_race_preserves_one_authoritative_state() {
+    use std::sync::{Arc, Barrier};
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("pause-retry-race.sqlite3");
+    let owner = LibraryStore::open(&path).unwrap();
+    let waiting = DurableDownloadSnapshot {
+        job_id: "pause-retry".into(),
+        state: DownloadState::RetryWait,
+        bytes_downloaded: 45,
+        total_bytes: Some(100),
+        attempt: 2,
+        retry_at_epoch_ms: Some(60_000),
+        last_error: None,
+    };
+    owner.save_download_snapshot(&waiting).unwrap();
+    drop(owner);
+    let gate = Arc::new(Barrier::new(3));
+    let mut workers = Vec::new();
+    for pause in [true, false] {
+        let database = path.clone();
+        let rendezvous = Arc::clone(&gate);
+        workers.push(std::thread::spawn(move || {
+            let store = LibraryStore::open(&database).unwrap();
+            let previous = store.load_download_snapshots().unwrap().remove(0);
+            let mut next = previous.clone();
+            next.state = if pause {
+                DownloadState::Paused
+            } else {
+                DownloadState::Queued
+            };
+            next.retry_at_epoch_ms = None;
+            if !pause {
+                next.attempt += 1;
+            }
+            rendezvous.wait();
+            let won = store
+                .replace_download_snapshot_if_unchanged(&previous, &next)
+                .unwrap();
+            (won, next)
+        }));
+    }
+    gate.wait();
+    let results = workers
+        .into_iter()
+        .map(|thread| thread.join().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        results.iter().filter(|(won, _)| *won).count(),
+        1,
+        "only pause OR retry may win the same previously observed snapshot"
+    );
+    let expected = results
+        .into_iter()
+        .find_map(|(won, next)| won.then_some(next))
+        .unwrap();
+    let reopened = LibraryStore::open(&path).unwrap();
+    assert_eq!(reopened.load_download_snapshots().unwrap(), vec![expected]);
+    assert!(reopened.list(None).unwrap().is_empty());
+}
+
+#[test]
+fn concurrent_duplicate_schedule_insert_writes_only_one_durable_job() {
+    use std::sync::{Arc, Barrier};
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("duplicate-enqueue.sqlite3");
+    let owner = LibraryStore::open(&path).unwrap();
+    drop(owner);
+    let queued = DurableDownloadSnapshot {
+        job_id: "duplicate-schedule".into(),
+        state: DownloadState::Queued,
+        bytes_downloaded: 0,
+        total_bytes: None,
+        attempt: 0,
+        retry_at_epoch_ms: None,
+        last_error: None,
+    };
+    let gate = Arc::new(Barrier::new(4));
+    let mut workers = Vec::new();
+    for _ in 0..3 {
+        let database = path.clone();
+        let rendezvous = Arc::clone(&gate);
+        let request = queued.clone();
+        workers.push(std::thread::spawn(move || {
+            let store = LibraryStore::open(&database).unwrap();
+            rendezvous.wait();
+            store.insert_download_snapshot_if_absent(&request).unwrap()
+        }));
+    }
+    gate.wait();
+    assert_eq!(
+        workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .filter(|inserted| *inserted)
+            .count(),
+        1,
+        "concurrent scheduler requests must create exactly one queued job"
+    );
+    let reopened = LibraryStore::open(&path).unwrap();
+    assert_eq!(reopened.load_download_snapshots().unwrap(), vec![queued]);
+}
