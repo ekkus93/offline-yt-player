@@ -509,7 +509,10 @@ fn watch_page_silent_server_times_out_without_exposing_provider_details() {
         .fetch_watch_page(&format!("http://{addr}/watch?sig=PRIVATE_TOKEN"))
         .expect_err("silent provider must not resolve successfully");
     assert_eq!(err.kind, ErrorKind::NetworkUnavailable);
-    assert!(err.retryable, "a transient provider timeout should be retryable");
+    assert!(
+        err.retryable,
+        "a transient provider timeout should be retryable"
+    );
     assert_eq!(err.message, "YouTube request failed");
     assert!(!err.message.contains("PRIVATE_TOKEN"));
     server.join().expect("fixture socket server stopped");
