@@ -3,6 +3,8 @@ package com.ekkus.offlineytplayer.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import com.ekkus.offlineytplayer.coregateway.AppSourceAnalysisGateway
 import com.ekkus.offlineytplayer.coregateway.CoreGatewayResult
+import com.ekkus.offlineytplayer.coregateway.CoreGatewayError
+import java.util.concurrent.CopyOnWriteArrayList
 import com.ekkus.offlineytplayer.coregateway.CoreSourceAnalysis
 import com.ekkus.offlineytplayer.coregateway.CoreSourceQualityChoice
 import java.util.concurrent.CountDownLatch
@@ -120,5 +122,117 @@ class AddResolverAvailabilityInstrumentedTest {
             }.isSuccess
         }
         compose.runOnIdle { assertEquals(1, analyzeCalls.get()) }
+    }
+
+    @Test
+    fun plainWatchUrlFromShareOpensRealAddAnalyzeFlow() {
+        analyzeSharedWatchUrlAndRequireCanonical(
+            "https://www.youtube.com/watch?v=AACwyjlk8ko",
+        )
+    }
+
+    @Test
+    fun watchShareLinkDropsTrackingAndTimeParametersBeforeAnalysis() {
+        analyzeSharedWatchUrlAndRequireCanonical(
+            "https://www.youtube.com/watch?feature=share&t=43s&v=AACwyjlk8ko&si=PRIVATE_TRACKING_TOKEN",
+        )
+    }
+
+    private fun analyzeSharedWatchUrlAndRequireCanonical(sharedUrl: String) {
+        val source = FakeSourceAnalysisGateway()
+        compose.setContent {
+            OfflineYTPlayerApp(
+                initialSharedUrl = sharedUrl,
+                sourceAnalysisGateway = source,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
+        }
+        compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
+        compose.waitUntil(10_000) { source.analyzedUrls.size == 1 }
+        compose.runOnIdle {
+            assertEquals(
+                listOf("https://www.youtube.com/watch?v=AACwyjlk8ko"),
+                source.analyzedUrls,
+            )
+        }
+        compose.onNodeWithText("PRIVATE_TRACKING_TOKEN", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun typedNetworkErrorIsRedactedAndSecondAnalyzeRecoversWithoutDuplicateRequests() {
+        val calls = AtomicInteger(0)
+        val analyzedUrls = CopyOnWriteArrayList<String>()
+        val source = object : AppSourceAnalysisGateway {
+            override fun analyze(sourceUrl: String): CoreGatewayResult<CoreSourceAnalysis> {
+                analyzedUrls.add(sourceUrl)
+                if (calls.incrementAndGet() == 1) {
+                    return CoreGatewayResult(
+                        value = null,
+                        error = CoreGatewayError(
+                            kind = "NETWORK_TIMEOUT",
+                            message = "Authorization: Bearer PRIVATE_ANALYZE_TOKEN, " +
+                                "https://cdn.invalid/file?sig=PRIVATE_SIGNED_QUERY",
+                            retryable = true,
+                        ),
+                    )
+                }
+                return CoreGatewayResult(
+                    value = CoreSourceAnalysis(
+                        sourceUrl = sourceUrl,
+                        title = "Recovered source fixture",
+                        durationMs = 61_000,
+                        thumbnailUrl = null,
+                        qualityLabel = "720p",
+                        estimatedBytes = 1_000,
+                        qualityOptions = listOf(
+                            CoreSourceQualityChoice(
+                                label = "720p",
+                                estimatedBytes = 1_000,
+                                choiceId = "format:fixture-720p",
+                            ),
+                        ),
+                    ),
+                    error = null,
+                )
+            }
+
+            override fun close() = Unit
+        }
+        compose.setContent {
+            OfflineYTPlayerApp(
+                initialSharedUrl = "https://youtu.be/AACwyjlk8ko?t=11s",
+                sourceAnalysisGateway = source,
+                onLibraryQueryChanged = {},
+                onUpdateSettings = {},
+            )
+        }
+        compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
+        compose.waitUntil(10_000) {
+            runCatching {
+                compose.onNodeWithText("Source network request failed. Try again.")
+                    .assertIsDisplayed()
+            }.isSuccess
+        }
+        compose.onNodeWithText("PRIVATE_ANALYZE_TOKEN", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("PRIVATE_SIGNED_QUERY", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
+        compose.waitUntil(10_000) {
+            runCatching {
+                compose.onNodeWithText("Recovered source fixture").assertExists()
+            }.isSuccess
+        }
+        compose.onNodeWithText("Source network request failed. Try again.").assertDoesNotExist()
+        compose.onNodeWithText("PRIVATE_ANALYZE_TOKEN", substring = true).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(2, calls.get())
+            assertEquals(
+                listOf(
+                    "https://www.youtube.com/watch?v=AACwyjlk8ko",
+                    "https://www.youtube.com/watch?v=AACwyjlk8ko",
+                ),
+                analyzedUrls.toList(),
+            )
+        }
     }
 }
