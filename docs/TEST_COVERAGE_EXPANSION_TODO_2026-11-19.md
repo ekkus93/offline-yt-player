@@ -1,7 +1,7 @@
 # Offline YT Player — Risk-Based Test Coverage Expansion TODO
 
 **Created:** 2026-11-19  
-**Status:** New independent workstream; every unchecked item requires implementation and evidence.  
+**Status:** In progress; checked items have exact-commit evidence, and every unchecked item remains actionable or requires documented external validation.  
 **Spec:** `docs/TEST_COVERAGE_EXPANSION_SPEC_2026-11-19.md`  
 **Baseline reviewed:** `e946a24b9939c03a7f77f667705a1f888ae44771`  
 **Repository:** `ekkus93/offline-yt-player` (`master`)
@@ -51,8 +51,8 @@
 
 - [x] **COV-201** Extend sanitized `youtube_source` / `youtube_extract` fixtures for missing/null/mismatched, duplicated and reordered provider fields, with exact valid/invalid outcomes.
 - [x] **COV-202** Add 403/404/429/5xx and truncated body fixture tests; verify typed permanent/retryable classification, timeouts, bounds and no erroneous `Unavailable` success.
-- [ ] **COV-203** Add option-ID fidelity tests across duplicate quality labels, split A/V, audio and subtitle choices, including provider-neutral download plan mapping.
-- [ ] **COV-204** Exercise source resolution canceled before start and during controlled simulated blocking I/O; assert no stuck worker, duplicate request or false completion.
+- [x] **COV-203** Add option-ID fidelity tests across duplicate quality labels, split A/V, audio and subtitle choices, including provider-neutral download plan mapping.
+- [x] **COV-204** Exercise source resolution canceled before start and during controlled simulated blocking I/O; assert no stuck worker, duplicate request or false completion.
 - [ ] **COV-205** Extend Android Add/Analyze behavioral tests for plain/share/query-parameter URLs, native initialization error visibility, duplicate Analyze taps and typed error recovery.
 - [ ] **COV-206** Add adversarial malformed/oversized metadata and signed-query-token fixtures; prove bounded output and error/log redaction through FFI/UI.
 - [ ] **COV-207** Run target Rust tests, exact-head API 29 Android smoke/required-method evidence and overall CI; note live-source/hardware exclusions separately.
@@ -65,6 +65,10 @@
 
 **Evidence (COV-202):** `core/src/youtube_source/tests.rs::{watch_page_http_status_classifies_retryability_without_leaking_body,watch_page_with_truncated_body_returns_retryable_network_error,unknown_length_watch_response_is_bounded_during_streaming,oversized_watch_response_is_rejected_before_parsing,watch_page_silent_server_times_out_without_exposing_provider_details}` exercise production `YouTubeSource::fetch_watch_page` and bounded response reader against sanitized localhost HTTP 403/404/408/429/500/502/503/504, truncated or missing length, oversized and timed-out response cases. They assert typed `HttpStatus`, `NetworkUnavailable` and `SourceChanged` classifications without forwarding provider tokens or claiming unavailable media was resolved. Target Rust formatter, clippy, and `cargo test --workspace --all-features` passed at exact `84aa0174e4c5707ab0aef32b488d15c66fdb4a75`, CI run `44675474331`; Rust coverage workflow `44675474437` also passed. All COV-202 fixture inputs are loopback, not live YouTube. COV-203 added in a subsequent commit and remains unchecked until the new exact-head CI qualifies it.
 
+**Evidence (COV-203, Rust-qualified):** Production `core/src/youtube_source/parse.rs::parse_stream` now normalizes provider `audio/mp4` AAC-only audio to the playback-compatible `m4a` container, preserving MIME; `core/src/youtube_extract.rs::normalize_stream` thus recognizes direct-play split-audio tracks. `core/src/youtube_source.rs::{download_plan_with_options,plan_download_assets_from_fresh_media}` uses the same refreshed-stream mapping in production and offline fixtures. `core/src/youtube_source/tests.rs::{split_audio_and_subtitle_track_ids_map_to_fresh_provider_neutral_assets,combined_video_rejects_inapplicable_separate_audio_selection}` asserts duplicate 1080p labels preserve `format:137`, explicit audio 140 is not replaced by high-bitrate 141, default audio selects 141, subtitle `.en` selects a local VTT path, and bad IDs and invalid combined-video separate-audio selections fail closed. Rust fmt/clippy/workspace tests `44676046018` and LLVM coverage `44676046105` succeeded at exact implementation SHA `e408880d1719b55026dd35c84a98db5cf7900d52`. Mandatory Android smoke rerun `44676046005` attempt 2 was **in progress** when this evidence was recorded; COV-207 remains unchecked until a passing complete matrix is observed.
+
+**Evidence (COV-204):** `core/src/ffi_source.rs::{canceled_source_boundary_before_dispatch_never_starts_work,in_flight_cancellation_disallows_completion_after_blocked_source_returns}` exercise production `resolve_source` through `ControlledResolutionSource` with bounded test-controlled channels. The pre-canceled request never enters the provider (`calls=0`); a cancellation while blocked has exactly one provider call, joins its worker, and yields a typed nonretryable `Canceled` rather than fabricated media. Both execute as ordinary workspace Rust tests in CI `44676046018` (passing exact SHA `e408880...`). The Android production gateway pre-canceled repeated-open smoke is also covered in API matrix `44676046033`; this is not a claim of actual external live YouTube cancellation.
+
 ## COV-300 — SQLite durability, worker races and startup repair (P0)
 
 - [ ] **COV-301** Add file-backed SQLite transaction fault tests for enqueue, claim, stage, promote, cancellation, and completion boundaries, including reopen/recovery assertions.
@@ -73,13 +77,15 @@
 - [ ] **COV-304** Add cancel-vs-complete, pause-vs-retry, stale worker, and duplicate schedule races without nondeterministic sleeps; use barriers or test-controlled clocks.
 - [ ] **COV-305** Add repeated startup reconciliation/partial-staged-file tests, including missing assets, symlinks, stale lease and crash-between-checkpoint boundaries; prove idempotence and outside-root safety.
 - [x] **COV-306** Add a bundled-SQLite upgrade regression smoke for `rusqlite 0.41.x`: file open/migrate, FK enforcement, transaction, snapshot persisted after reopen.
-- [ ] **COV-307** Run new Rust tests under normal CI and coverage; document observed durable-state invariant and exact-head CI.
+- [x] **COV-307** Run new Rust tests under normal CI and coverage; document observed durable-state invariant and exact-head CI.
 
 **Acceptance:** no double promotion/completion, silent state loss or recovery escape; all fault injections are test-only.
 
 **Evidence (COV-306):** `core/src/persistence/tests.rs::bundled_sqlite_file_reopen_preserves_durable_queue_and_foreign_keys` exercises `LibraryStore::open/migrate/save_download_snapshot/stage_asset/promote_completed` against a file-backed bundled SQLite database, reopens and checks saved queue/library, verifies `PRAGMA foreign_keys=ON` and rejects an orphan `assets` insert. The test is included in the passing Rust coverage lane `44501336363` at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e` and normal Rust CI `44501336322`; no arbitrary fixture claims about other migration versions.
 
 **Evidence (COV-303):** Production `LibraryStore` snapshot compare-and-swap and atomic promotion in `core/src/persistence/{snapshots}.rs` and `core/src/persistence.rs` are exercised by `core/src/persistence/tests.rs::{independent_sqlite_worker_connections_race_for_one_authoritative_claim,independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item}` with two independent connections and synchronization barriers, requiring exactly one claim or terminal transition and library/staging consistency. Exact-head Rust coverage `44505561276` and deterministic fixture `44505561262` passed at `a31ea408bbd5dfe01ed5684372c82f5e525214d5`. Other fault-phase and job-scheduling races remain open.
+
+**Evidence (COV-307, requalified):** Exact-head `e408880d1719b55026dd35c84a98db5cf7900d52` passed `cargo test --workspace --all-features` and clippy in CI run `44676046018`, plus `cargo-llvm-cov --workspace --all-features` in `44676046105` (**8,511/9,430 = 90.25%** scoped Rust production lines; no measurable branches). Included `persistence/tests.rs::{independent_sqlite_worker_connections_race_for_one_authoritative_claim,independent_sqlite_completion_and_cancel_race_never_promotes_canceled_item,bundled_sqlite_file_reopen_preserves_durable_queue_and_foreign_keys}` assert a single durable winner, fail-closed stale snapshot CAS and no promoted canceled asset after file-backed reopen. This run qualifies test execution, not all still unchecked transaction fault phases COV-301/302/304/305.
 
 ## COV-400 — Android service, notification and API-level matrix (P1)
 
@@ -145,11 +151,11 @@
 
 ## COV-800 — Final evidence and gate policy (P2, after implementation)
 
-- [ ] **COV-801** Recompute actual per-module Rust and Kotlin coverage and compare with COV-100 baseline; report line/branch deltas without conflating languages.
+- [x] **COV-801** Recompute actual per-module Rust and Kotlin coverage and compare with COV-100 baseline; report line/branch deltas without conflating languages.
 - [ ] **COV-802** Map each added test to risk, executed production path, SHA and CI run, and identify remaining high-risk uncovered branches.
-- [ ] **COV-803** Assess whether to enforce a narrow nonregression threshold on stable Rust/JVM packages; **do not** enable it until baseline, stability and developer approval are documented.
+- [x] **COV-803** Assess whether to enforce a narrow nonregression threshold on stable Rust/JVM packages; **do not** enable it until baseline, stability and developer approval are documented.
 - [x] **COV-804** Run full required exact-head CI including Android smoke, FGS timeout, supply chain, deterministic E2E, cold-start and real-network E2E; failures must be fixed or remain open.
-- [ ] **COV-805** Verify tag-only artifact policy still passes, no live-source dependency exists in mandatory lanes, and no security/privacy exceptions were broadened.
+- [x] **COV-805** Verify tag-only artifact policy still passes, no live-source dependency exists in mandatory lanes, and no security/privacy exceptions were broadened.
 - [ ] **COV-806** Publish a dated coverage closeout note with report locations, tool versions, CI run IDs, confirmed gaps and any pending Samsung A54/human release gates.
 - [ ] **COV-807** Check this task only after all remaining actionable subtasks are verified; do not mark the initiative done if device/API or measurement requirements are still blocked.
 
@@ -158,6 +164,8 @@
 **Evidence:** _pending._
 
 **Evidence (COV-804, latest fully green implementation SHA):** All 11 workflows passed at `1534875022dc3273bae07af9a5b423c4e2e8ad2e`; individual run IDs and attempt numbers are in COV-106/110 above. This only proves that implementation commit; subsequent changes require fresh CI. Do **not** treat COV-804 as final initiative closeout or mark COV-807 complete.
+
+**Evidence (COV-801/803/805; partial overall closeout):** On exact `e408880d1719b55026dd35c84a98db5cf7900d52`, Rust `core/src` `44676046105`: **8,511/9,430 = 90.25%** executable lines (45 files; branch unmeasured), up **1.25 percentage points** from `af38f8ffc...` Rust baseline 89.00% and **0.84 points** from the latest prior 89.41%; raw function-symbol coverage **921/1,522 = 60.51%**, not a reliable unique named-function metric. Kotlin/JVM `44676046018`: **1,433/3,799 = 37.72%** lines and **904/2,954 = 30.60%** branches, down 0.08 and 0.09 percentage points versus baseline 37.80% and 30.69%; Kotlin `ui` 272/1347, `coregateway` 335/868 and `downloads` 376/796. Separate API 29 on-emulator JaCoCo `44676046080`: measured production-path coverage (never added to Kover denominator). Largest measured Rust remaining uncovered lines include `youtube_source.rs` 185/298, `ffi_download_control.rs` 289/381, `worker.rs` 422/492, `ffi.rs` 387/452. **Threshold assessment (COV-803):** do not enforce Rust 85%, critical durable-state 90% or Kotlin 80% thresholds: branch/file/function scope is incomplete, Kotlin is far below target and developer approval to gate is absent. **COV-805:** main CI `44676046018` plus supply chain `44676046026` and CI evidence `44676046160` succeeded under unchanged tag-only artifact policy; all newly required tests use offline/local fixtures, the live provider test remains explicitly ignored/manual, and no security/privacy exception was broadened. New exact-head Android smoke `44676046005` attempt 2 was still running at checkpoint; do not claim this newer commit has 11/11 green until confirmed.
 
 ---
 
@@ -170,6 +178,6 @@ This is a priority recommendation, not permission to skip independent work or ma
 ## Completion record
 
 - **Current baseline SHA at document creation:** `e946a24b9939c03a7f77f667705a1f888ae44771`.
-- **Implemented subtasks:** COV-001, 002, 004, 005, 101, 102, 103, 104, 105, 107, 108, 306, 501; COV-201, 303, 503; remaining tasks retain unchecked status.
-- **Coverage percentages (measured at `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`):** Rust core 89.00% lines (branch unmeasured); Kotlin/JVM production code 37.80% lines and 30.69% branches; Android instrumentation still unmeasured.
+- **Completed (evidence-backed) subtasks at this checkpoint:** 29/62; 33 remain open. The task sections and exact-SHA evidence above, not this summary count, are authoritative.
+- **Latest evidence-backed coverage:** exact `e408880d1719b55026dd35c84a98db5cf7900d52`, Rust 90.25% lines, Kotlin/JVM 37.72% lines and 30.60% branches, separate API 29 instrumentation report; see COV-801 and baseline.
 - **CI evidence for new test changes:** Rust coverage `44501336363` and main CI `44501336322` passed at exact `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`; other workflow statuses require recheck on the next head.
