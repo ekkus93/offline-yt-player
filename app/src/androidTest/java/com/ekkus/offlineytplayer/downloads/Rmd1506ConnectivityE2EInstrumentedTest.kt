@@ -87,11 +87,13 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         val observedNetwork = AtomicReference(DownloadConnectivity.None)
         val observer = AndroidDownloadConnectivityObserver(context, observedNetwork::set)
         val jobId = "rmd-1506-os-network"
-        val payload = ByteArray(8 * 1024 * 1024) { (it % 251).toByte() }
+        // Keep the original transfer length without 8 MiB of retained test heap.
+        val payloadBytes = 8 * 1024 * 1024
+        val payloadModulus = 251
         val relativePath = "items/rmd-1506-os-network/video.mp4"
         val partial = File(context.filesDir, "items/rmd-1506-os-network/.video.mp4.partial")
         val finished = File(context.filesDir, relativePath)
-        val server = SlowRangeFixtureServer(payload).also { it.start() }
+        val server = SlowRangeFixtureServer(body = null, generatedSize = payloadBytes, generatedModulus = payloadModulus).also { it.start() }
         observer.start()
         try {
             val initialDeadline = SystemClock.elapsedRealtime() + 20_000L
@@ -108,7 +110,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 assertNull(result.error)
                 assertEquals(true, result.value)
             }
-            seedDurableWork(jobId, server.mediaUrl, relativePath, payload.size)
+            seedDurableWork(jobId, server.mediaUrl, relativePath, payloadBytes)
             assertTrue(
                 AndroidDownloadExecutionScheduler(context).schedule(
                     DownloadScheduleRequest(jobId, networkPreference = DownloadNetworkPreference.AnyNetwork),
@@ -147,8 +149,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                     "fixtureRequests=${server.requestCount.get()} fixtureBytes=${server.bytesSent.get()} " +
                     "observedNetwork=${observedNetwork.get()}"
             }
-            assertEquals(payload.size.toLong(), finished.length())
-            assertArrayEquals(payload, finished.readBytes())
+            assertGeneratedFixtureFile(finished, payloadBytes, payloadModulus)
             assertFalse("resume must remove partial bytes after promotion", partial.exists())
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
                 val library = core.listLibrary()
@@ -196,11 +197,13 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         val jobId = "rmd-1506-wifi-metered"
         // Keep enough work queued for the host's real ConnectivityManager callback to
         // reach the service before completion, even on fast software emulators.
-        val payload = ByteArray(24 * 1024 * 1024) { (it % 247).toByte() }
+        // Retain the 24 MiB metered transition without an oversized JVM allocation.
+        val payloadBytes = 24 * 1024 * 1024
+        val payloadModulus = 247
         val relativePath = "items/rmd-1506-wifi-metered/video.mp4"
         val partial = File(context.filesDir, "items/rmd-1506-wifi-metered/.video.mp4.partial")
         val finished = File(context.filesDir, relativePath)
-        val server = SlowRangeFixtureServer(payload).also { it.start() }
+        val server = SlowRangeFixtureServer(body = null, generatedSize = payloadBytes, generatedModulus = payloadModulus).also { it.start() }
         observer.start()
         try {
             val networkDeadline = SystemClock.elapsedRealtime() + 20_000L
@@ -218,7 +221,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                 assertNull(enqueued.error)
                 assertEquals(true, enqueued.value)
             }
-            seedDurableWork(jobId, server.mediaUrl, relativePath, payload.size)
+            seedDurableWork(jobId, server.mediaUrl, relativePath, payloadBytes)
             assertTrue(
                 AndroidDownloadExecutionScheduler(context).schedule(
                     DownloadScheduleRequest(
@@ -267,7 +270,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                     "partial=${if (partial.isFile) partial.length() else 0L} " +
                     "final=${if (finished.isFile) finished.length() else 0L}"
             }
-            assertArrayEquals(payload, finished.readBytes())
+            assertGeneratedFixtureFile(finished, payloadBytes, payloadModulus)
             assertFalse("completed Wi-Fi-only download must remove partial", partial.exists())
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
                 val library = core.listLibrary()
@@ -353,7 +356,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             resumedWorker.join(15_000)
             assertFalse("resumed worker must complete", resumedWorker.isAlive)
 
-            assertEquals(payload.toList(), finalPath.readBytes().toList())
+            assertArrayEquals(payload, finalPath.readBytes())
             assertFalse("successful recovery must remove the partial file", partialPath.exists())
             GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
                 val library = core.listLibrary()
@@ -408,7 +411,7 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                     .putExtra(DownloadForegroundService.EXTRA_QUEUE_ITEM_ID, jobId),
             )
             waitForState(jobId, CoreDownloadState.COMPLETED)
-            assertEquals(payload.toList(), File(context.filesDir, relativePath).readBytes().toList())
+            assertArrayEquals(payload, File(context.filesDir, relativePath).readBytes())
             assertEquals("registered observer must be reused", 1, registrations.get())
             assertEquals("no additional connectivity callback may drive the worker", 1, callbacks.get())
             waitForServiceToSettleAfterCompletion()
@@ -498,6 +501,25 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
             SystemClock.sleep(50L)
         }
         throw AssertionError("foreground worker did not settle after completing fixture download")
+    }
+
+    private fun assertGeneratedFixtureFile(file: File, expectedBytes: Int, modulus: Int) {
+        assertEquals(expectedBytes.toLong(), file.length())
+        file.inputStream().buffered().use { input ->
+            val bytes = ByteArray(4096)
+            var offset = 0
+            while (offset < expectedBytes) {
+                val received = input.read(bytes, 0, minOf(bytes.size, expectedBytes - offset))
+                assertTrue("truncated generated fixture at byte " + offset, received > 0)
+                for (i in 0 until received) {
+                    if (bytes[i] != ((offset + i) % modulus).toByte()) {
+                        throw AssertionError("corrupt generated fixture at byte " + (offset + i))
+                    }
+                }
+                offset += received
+            }
+            assertEquals("no trailing bytes", -1, input.read())
+        }
     }
 
     private fun seedDurableWork(
@@ -632,7 +654,15 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         }
     }
 
-    private class SlowRangeFixtureServer(private val body: ByteArray) : AutoCloseable {
+    private class SlowRangeFixtureServer(
+        private val body: ByteArray?,
+        private val generatedSize: Int = body?.size ?: 0,
+        private val generatedModulus: Int = 251,
+    ) : AutoCloseable {
+        init {
+            require(generatedSize > 0)
+            require(generatedModulus > 0)
+        }
         private val stopping = AtomicBoolean(false)
         private val failure = AtomicReference<Throwable?>()
         val requestCount = AtomicInteger(0)
@@ -675,29 +705,38 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
                                     ?.removePrefix("bytes=")
                                     ?.substringBefore('-')
                                     ?.toIntOrNull()
-                                    ?.coerceIn(0, body.size)
+                                    ?.coerceIn(0, generatedSize)
                                     ?: 0
-                                val responseBody = body.copyOfRange(start, body.size)
+                                // Generate bounded chunks instead of cloning the full range.
+                                val responseBytes = generatedSize - start
                                 val status = if (start > 0) "206 Partial Content" else "200 OK"
                                 val contentRange = if (start > 0) {
-                                    "Content-Range: bytes $start-${body.lastIndex}/${body.size}\r\n"
+                                    "Content-Range: bytes $start-${(generatedSize - 1)}/${generatedSize}\r\n"
                                 } else {
                                     ""
                                 }
                                 val responseHeaders =
                                     "HTTP/1.1 $status\r\n" +
                                         "Content-Type: video/mp4\r\n" +
-                                        "Content-Length: ${responseBody.size}\r\n" +
+                                        "Content-Length: ${responseBytes}\r\n" +
                                         "ETag: \"rmd-1506-v1\"\r\n" +
                                         contentRange +
                                         "Connection: close\r\n\r\n"
                                 val output = socket.getOutputStream()
                                 output.write(responseHeaders.toByteArray(StandardCharsets.US_ASCII))
                                 output.flush()
-                                for (offset in responseBody.indices step CHUNK_BYTES) {
-                                    val end = minOf(offset + CHUNK_BYTES, responseBody.size)
+                                val chunk = ByteArray(CHUNK_BYTES)
+                                for (offset in start until generatedSize step CHUNK_BYTES) {
+                                    val end = minOf(offset + CHUNK_BYTES, generatedSize)
                                     try {
-                                        output.write(responseBody, offset, end - offset)
+                                        if (body != null) {
+                                            output.write(body, offset, end - offset)
+                                        } else {
+                                            for (i in 0 until end - offset) {
+                                                chunk[i] = ((offset + i) % generatedModulus).toByte()
+                                            }
+                                            output.write(chunk, 0, end - offset)
+                                        }
                                         output.flush()
                                         bytesSent.addAndGet((end - offset).toLong())
                                     } catch (_: SocketException) {
