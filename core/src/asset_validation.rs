@@ -206,6 +206,26 @@ mod tests {
         std::fs::write(path, bytes).unwrap();
     }
 
+
+    #[cfg(unix)]
+    #[test]
+    fn oversized_filesystem_component_fails_as_typed_nonretryable_validation_io() {
+        let root = tempdir().unwrap();
+        // Linux rejects a single >255-byte path component with ENAMETOOLONG,
+        // not NotFound; this reaches the real symlink_metadata error handling.
+        // No permissions or root privilege assumptions are required.
+        let invalid_root = root.path().join("x".repeat(512));
+        let error = validate_library_item_assets(
+            &invalid_root,
+            &item(4, None),
+            AssetValidationDepth::Cheap,
+        )
+        .expect_err("invalid filesystem component must be a typed error");
+        assert_eq!(error.kind, ErrorKind::Persistence);
+        assert!(!error.retryable);
+        assert!(error.message.starts_with("failed to validate local asset:"));
+    }
+
     #[cfg(unix)]
     #[test]
     fn symlinked_library_root_never_validates_external_assets_as_healthy() {

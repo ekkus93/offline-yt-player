@@ -676,6 +676,74 @@ mod tests {
         assert!(!ffi.retryable);
     }
 
+
+    #[test]
+    fn ffi_library_list_get_delete_and_corrupt_schema_return_typed_results() {
+        use crate::{LocalAsset, MediaKind};
+
+        let folder = tempfile::tempdir().unwrap();
+        let database = folder.path().join("ffi-library.sqlite3");
+        let store = LibraryStore::open(&database).unwrap();
+        let item = LibraryItem {
+            item_id: "ffi-library-item".into(),
+            source: SourceIdentity::new("fixture", "ffi-library-source"),
+            display_title: "Offline FFI asset".into(),
+            duration_ms: None,
+            quality_label: "fixture".into(),
+            assets: vec![LocalAsset {
+                asset_id: "video".into(),
+                kind: MediaKind::Video,
+                relative_path: "items/ffi-library-item/video.mp4".into(),
+                bytes: 4,
+                sha256: None,
+                mime_type: Some("video/mp4".into()),
+            }],
+            created_at_epoch_ms: 1,
+            playback_position_ms: 0,
+            completed: true,
+        };
+        store.promote_completed("fixture-download", &item).unwrap();
+        drop(store);
+
+        let service = FfiCoreService::open(database.to_string_lossy().into_owned()).unwrap();
+        let listed = service.library_list(None);
+        assert!(listed.error.is_none());
+        assert_eq!(listed.items.len(), 1);
+        assert_eq!(listed.items[0].item_id, "ffi-library-item");
+        assert_eq!(listed.items[0].source.media_id, "ffi-library-source");
+
+        let found = service.library_get("ffi-library-item".into());
+        assert!(found.error.is_none());
+        assert_eq!(found.item.unwrap().display_title, "Offline FFI asset");
+        let missing = service.library_get("absent".into());
+        assert!(missing.error.is_none());
+        assert!(missing.item.is_none());
+        let removed = service.library_delete("ffi-library-item".into());
+        assert!(removed.error.is_none());
+        assert!(removed.deleted);
+        let already_removed = service.library_delete("ffi-library-item".into());
+        assert!(already_removed.error.is_none());
+        assert!(!already_removed.deleted);
+        assert!(service.library_list(None).items.is_empty());
+
+        // A damaged SQLite schema must never become an empty-success result
+        // through the generated/native boundary.
+        rusqlite::Connection::open(&database)
+            .unwrap()
+            .execute_batch("DROP TABLE library_items;")
+            .unwrap();
+        let list_failure = service.library_list(None);
+        assert!(list_failure.items.is_empty());
+        assert_eq!(list_failure.error.unwrap().kind, FfiErrorKind::Persistence);
+        let get_failure = service.library_get("ffi-library-item".into());
+        assert!(get_failure.item.is_none());
+        assert_eq!(get_failure.error.unwrap().kind, FfiErrorKind::Persistence);
+        let delete_failure = service.library_delete("ffi-library-item".into());
+        assert!(!delete_failure.deleted);
+        assert_eq!(delete_failure.error.unwrap().kind, FfiErrorKind::Persistence);
+        assert_eq!(ffi_core_identity(), crate::core_identity());
+    }
+
     #[test]
     fn core_service_exposes_durable_queue_and_survives_reopen() {
         let temp = tempfile::tempdir().unwrap();
