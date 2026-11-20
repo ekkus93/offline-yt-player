@@ -673,17 +673,18 @@ class PlaybackSessionBehaviorInstrumentedTest {
         var first: MediaController? = null
         var second: MediaController? = null
         try {
-            first = MediaController.Builder(context, token)
+            val primary = MediaController.Builder(context, token)
                 .buildAsync().get(10, TimeUnit.SECONDS)
+            first = primary
             assertTrue("first Media3 service not created", creations.isNotEmpty())
             instrumentation.runOnMainSync {
-                first.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
-                first.prepare()
+                primary.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
+                primary.prepare()
             }
-            waitForControllerState(first) {
+            waitForControllerState(primary) {
                 playbackState == androidx.media3.common.Player.STATE_READY
             }
-            instrumentation.runOnMainSync { first.release() }
+            instrumentation.runOnMainSync { primary.release() }
             first = null
             context.stopService(
                 android.content.Intent(context, PlaybackSessionService::class.java),
@@ -699,8 +700,9 @@ class PlaybackSessionBehaviorInstrumentedTest {
                 ),
                 releases.toList(),
             )
-            second = MediaController.Builder(context, token)
+            val rebound = MediaController.Builder(context, token)
                 .buildAsync().get(10, TimeUnit.SECONDS)
+            second = rebound
             assertTrue(
                 "second bind must initialize a new service-owned player",
                 created.await(10, TimeUnit.SECONDS),
@@ -708,10 +710,10 @@ class PlaybackSessionBehaviorInstrumentedTest {
             assertEquals(2, creations.size)
             assertTrue(creations[0] !== creations[1])
             instrumentation.runOnMainSync {
-                second.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
-                second.prepare()
+                rebound.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(audio)))
+                rebound.prepare()
             }
-            waitForControllerState(second) {
+            waitForControllerState(rebound) {
                 playbackState == androidx.media3.common.Player.STATE_READY &&
                     currentMediaItem?.localConfiguration?.uri?.scheme == "file"
             }
