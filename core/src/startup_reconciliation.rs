@@ -610,4 +610,42 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn stale_worker_lease_at_startup_cannot_reset_a_newer_reclaimed_attempt() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("reclaimed-lease.sqlite3");
+        let recovery = LibraryStore::open(&path).unwrap();
+        let worker = LibraryStore::open(&path).unwrap();
+        let original = snapshot("same-job", DownloadState::Downloading);
+        worker.save_download_snapshot(&original).unwrap();
+        let stale_scan = recovery.load_download_snapshots().unwrap().remove(0);
+
+        // A restarted service claims a newer attempt of the same download
+        // before the old startup scan can persist its requeue decision.
+        let mut reclaimed = original.clone();
+        reclaimed.attempt += 1;
+        reclaimed.bytes_downloaded += 128;
+        worker.save_download_snapshot(&reclaimed).unwrap();
+        assert!(
+            !requeue_interrupted_snapshot_if_unchanged(&recovery, &stale_scan).unwrap(),
+            "stale startup recovery must not overwrite the worker's newer lease"
+        );
+        assert_eq!(
+            recovery.load_download_snapshots().unwrap(),
+            vec![reclaimed.clone()]
+        );
+        drop(recovery);
+        drop(worker);
+
+        // The next real startup may legitimately requeue the latest worker
+        // lease, but must retain its attempt and download checkpoint.
+        let fresh = LibraryStore::open(&path).unwrap();
+        assert_eq!(reconcile_startup_downloads(&fresh).unwrap().jobs_requeued, 1);
+        let recovered = fresh.load_download_snapshots().unwrap().remove(0);
+        assert_eq!(recovered.state, DownloadState::Queued);
+        assert_eq!(recovered.attempt, reclaimed.attempt);
+        assert_eq!(recovered.bytes_downloaded, reclaimed.bytes_downloaded);
+        assert_eq!(reconcile_startup_downloads(&fresh).unwrap().jobs_requeued, 0);
+    }
 }
