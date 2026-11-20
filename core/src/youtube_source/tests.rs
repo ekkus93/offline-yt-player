@@ -450,7 +450,9 @@ fn watch_page_http_status_classifies_retryability_without_leaking_body() {
         (408, true),
         (429, true),
         (500, true),
+        (502, true),
         (503, true),
+        (504, true),
     ] {
         with_local_watch_response(
             status,
@@ -474,6 +476,43 @@ fn watch_page_with_truncated_body_returns_retryable_network_error() {
         assert!(err.retryable);
         assert!(!err.message.contains("short"));
     });
+}
+
+#[test]
+fn watch_page_silent_server_times_out_without_exposing_provider_details() {
+    use std::io::Read as _;
+    use std::net::TcpListener;
+    use std::time::Duration;
+
+    // A local endpoint accepts the request and deliberately sends no HTTP response.
+    // This exercises reqwest's actual request timeout rather than checking a
+    // configured constant or requiring external YouTube network availability.
+    let listener = TcpListener::bind("127.0.0.1:0").expect("test listener");
+    let addr = listener.local_addr().expect("test socket address");
+    let server = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().expect("test request");
+        socket
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("test socket timeout");
+        let mut request = [0_u8; 2048];
+        assert!(socket.read(&mut request).expect("test HTTP request") > 0);
+        std::thread::sleep(Duration::from_millis(350));
+    });
+    let source = YouTubeSource {
+        client: Client::builder()
+            .connect_timeout(Duration::from_millis(100))
+            .timeout(Duration::from_millis(100))
+            .build()
+            .expect("bounded fixture HTTP client"),
+    };
+    let err = source
+        .fetch_watch_page(&format!("http://{addr}/watch?sig=PRIVATE_TOKEN"))
+        .expect_err("silent provider must not resolve successfully");
+    assert_eq!(err.kind, ErrorKind::NetworkUnavailable);
+    assert!(err.retryable, "a transient provider timeout should be retryable");
+    assert_eq!(err.message, "YouTube request failed");
+    assert!(!err.message.contains("PRIVATE_TOKEN"));
+    server.join().expect("fixture socket server stopped");
 }
 
 #[test]

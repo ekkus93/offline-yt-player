@@ -128,6 +128,18 @@ At implementation SHA `a31ea408bbd5dfe01ed5684372c82f5e525214d5`, Rust LCOV work
 
 The coverage TODO checks COV-201, 303 and 503 based on their individual Rust tests; tasks requiring broader provider error cases, API matrix and on-device instrumentation remain open.
 
+## Verified 11-workflow exact-head checkpoint (2026-11-20 UTC)
+
+At SHA `1534875022dc3273bae07af9a5b423c4e2e8ad2e`, **all 11/11** CI workflows were successful. This is a distinct later measurement from the historical baseline above; it supersedes older “unmeasured” statements **only for these exact reports**, without implying unmeasured per-function Rust or arm64 runtime coverage.
+
+| Measured lane | Covered / total lines | Line rate | Covered / total branches | Exact-head workflow |
+| --- | ---: | ---: | ---: | --- |
+| Rust core (LLVM LCOV 0.9.1) | 8,415 / 9,412 | **89.41%** | Unmeasured | `44646351133` |
+| Kotlin JVM (Kover 0.9.11) | 1,433 / 3,799 | **37.72%** | 904 / 2,954 (**30.60%**) | `44646351095` |
+| Android API 29 instrumented (AGP JaCoCo XML) | 493 / 4,139 | **11.91%** | 188 / 2,972 (**6.33%**) | `44646351080`, attempt 2 |
+
+AGP report path `app/build/reports/coverage/androidTest/debug/connected/report.xml`; `summarize_android_instrumentation_coverage.py` validated actual hits in `AppShell.kt`, `AddWorkflowPolicy.kt`, `DownloadSetupModels.kt`, `LibraryDownloads.kt`, `Theme.kt`. The Android report executes `AddResolverAvailabilityInstrumentedTest`, does **not** include every app runtime path, and must not be added to the JVM Kover denominator. Kotlin JVM measured `ui` at 272/1347 and `downloads` at 376/796, and `coregateway` at 335/868. Main CI `44646351095` and all required emulator tests passed; see the coverage TODO evidence for individual run IDs. Tag-only artifact rules remain intact. Proposed Rust 85% / critical state 90% / Kotlin 80% goals are **not enforced**; module/function classification and low Kotlin coverage remain open.
+
 ## Updates
 
 Add exact source SHA, CI run link, tool versions, measured line/branch totals and uncovered file/function list here *only after the reporting workflow runs*. Do not equate an installed tool with a validated coverage baseline.

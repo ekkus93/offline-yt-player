@@ -35,15 +35,17 @@
 - [x] **COV-103** Confirm Rust denominator covers actual `core/src` logic, excluding tests, generated UniFFI bindings and external crates without silently hiding real source modules.
 - [x] **COV-104** Evaluate/pin compatible Kotlin JVM coverage instrumentation (Kover or justified equivalent); wire `testDebugUnitTest` and produce validated machine-readable per-package results.
 - [x] **COV-105** Confirm Android/JVM denominator excludes generated bindings/test code and includes key production `downloads`, UI-state and gateway logic.
-- [ ] **COV-106** Prototype Android instrumentation coverage on API 29 in a *separate* lane, verifying counters for a known app production path; if incompatible, document blocker and keep task open.
+- [x] **COV-106** Prototype Android instrumentation coverage on API 29 in a *separate* lane, verifying counters for a known app production path; if incompatible, document blocker and keep task open.
 - [x] **COV-107** Publish bounded Rust/JVM totals with exact SHA and tool versions in logs and `GITHUB_STEP_SUMMARY`; preserve tag-only artifact uploads except existing narrowly permitted cases.
 - [x] **COV-108** Add host-side tests validating coverage report parsing/denominators; missing/empty reports must be reported as errors or `unmeasured`, never 100%.
 - [ ] **COV-109** Record measured baseline per component/package/function. Keep thresholds **report-only** initially and document proposed (not enforced) Rust 85%, critical state 90%, Kotlin business logic 80% line goals.
-- [ ] **COV-110** Run exact-head standard CI plus coverage lane; record separate per-workflow evidence and verify no unauthorized artifact uploads or altered existing smoke acceptance.
+- [x] **COV-110** Run exact-head standard CI plus coverage lane; record separate per-workflow evidence and verify no unauthorized artifact uploads or altered existing smoke acceptance.
 
 **Acceptance:** repeatable numeric Rust and JVM totals from production code, distinct Android instrumentation status, exact-SHA evidence, and no fake green report on missing data.
 
 **Evidence (COV-101/102/103/104/105/107/108):** `.github/workflows/coverage-rust.yml`, `scripts/summarize_rust_coverage.py`, `tests/test_summarize_rust_coverage.py`, `app/build.gradle.kts` pinned Kover, `scripts/summarize_kotlin_coverage.py`, `tests/test_summarize_kotlin_coverage.py` and `.github/workflows/ci.yml`. At exact `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`, Rust coverage run `44501336363` completed with **8,125/9,129 = 89.00%** core/src measured lines (45 source files; branch coverage **unmeasured**). Main CI `44501336322` passed including coverage-parser tests and Kover Gradle task; Kotlin source packages `com.ekkus.offlineytplayer` excluding generated UniFFI `core` returned **1,435/3,796 = 37.80%** JVM source lines and **906/2,952 = 30.69%** branches. Both summaries print exact SHA and tool versions in the job output and summary; no new master artifacts. Detailed package breakdown in the baseline. COV-106/109/110 remain unchecked (instrumentation measurement, function-level classification, and full CI).
+
+**Evidence (COV-106/110, validated 2026-11-20 UTC):** Exact-head `1534875022dc3273bae07af9a5b423c4e2e8ad2e` passed all **11/11** required GitHub Actions workflows, including main CI `44646351095`, Rust coverage `44646351133`, API 29 Android JaCoCo coverage `44646351080` (attempt 2), API matrix `44646351120` (attempt 2), Android smoke `44646351074`, API 35 FGS timeout `44646351114`, cold start `44646351058`, OS network E2E `44646351039`, supply chain `44646351067`, deterministic fixture `44646351134` and CI evidence `44646351287`. Production `ui/AppShell.kt` and `ui/AddWorkflowPolicy.kt` were actually covered through `AddResolverAvailabilityInstrumentedTest` on an API 29 emulator; `scripts/assert_android_smoke_execution.py` required real executed class/method XML, and `summarize_android_instrumentation_coverage.py` validated nonzero JaCoCo production UI counters. Android on-emulator **493/4,139 = 11.91%** lines, **188/2,972** branches; Rust `core/src` **8,415/9,412 = 89.41%** lines (branch unmeasured), and JVM Kotlin **1,433/3,799 = 37.72%** lines and **904/2,954 = 30.60%** branches (separate denominators). `tests/test_actions_artifact_tag_policy.py` remained in passing governance; coverage workflows do not upload artifacts on ordinary master pushes. COV-109 remains open because per-*function* measurements are not yet trustworthy; do not enforce thresholds.
 
 ## COV-200 — YouTube source and Analyze resiliency (P0)
 
@@ -79,18 +81,22 @@
 
 ## COV-400 — Android service, notification and API-level matrix (P1)
 
-- [ ] **COV-401** Audit existing API 29/35 tests, and establish feasible API 26/33/34 emulator profiles and bounded execution strategy.
+- [x] **COV-401** Audit existing API 29/35 tests, and establish feasible API 26/33/34 emulator profiles and bounded execution strategy.
 - [ ] **COV-402** Add API 26-33 foreground fallback and API 34+ UIDT scheduling behavior tests; assert actual scheduling inputs and failure/restriction cases.
 - [ ] **COV-403** Add notification-permission granted/denied/revoked and repeated pause/resume/cancel notification-action tests backed by durable queue state.
 - [ ] **COV-404** Add process/service recreation and timeout callback tests ensuring legal teardown, noncancel platform stop, no duplicate worker and recovery ordering.
 - [ ] **COV-405** Extend host-controlled network E2E for quick offline/online and metered/unmetered transitions; verify Wi-Fi-only classification and exactly-once resume behavior.
 - [ ] **COV-406** Cover reboot-before-unlock restrictions and no direct boot-time dataSync FGS launch on applicable APIs, with an executable behavioral test.
-- [ ] **COV-407** Execute selected API 26, 33, 34 and existing 29/35 runs; record actual APIs exercised, links, skipped/unavailable tiers and flaky retry evidence.
+- [x] **COV-407** Execute selected API 26, 33, 34 and existing 29/35 runs; record actual APIs exercised, links, skipped/unavailable tiers and flaky retry evidence.
 - [ ] **COV-408** Retain hardware-only A54 battery/network behavior as separately documented pending device validation; do not check it as automatically passed.
 
 **Acceptance:** executable platform behavior checked at named API levels; existing workflows remain required and intact.
 
 **Evidence:** _pending._
+
+**Evidence (COV-401/407, validated 2026-11-20 UTC):** `.github/workflows/android-api-matrix.yml` and `scripts/run_android_api_matrix.sh` invoke and require executed XML for four native/runtime/timeout/notification classes **separately** at APIs **26, 33 and 34**. All three matrix jobs passed on exact SHA `1534875022dc3273bae07af9a5b423c4e2e8ad2e`, Actions run `44646351120` **attempt 2** (API 26 retry followed Maven Central HTTP 429 for Gradle's JUnit Platform dependencies, not an assertion failure). Existing API 29 Android smoke `44646351074`, cold start `44646351058` and real OS-network `44646351039` passed, as did API 35 FGS timeout `44646351114`. Emulator results do not prove an actual Samsung A54 battery/firmware behavior, arm64 runtime, or every scheduling restriction on every API tier. COV-402/403/404/405/406/408 remain open for their full behavioral scope.
+
+**Partial evidence (COV-405; remains unchecked):** Production `DownloadForegroundService.handleConnectivityChange` now requests a cooperative native stop on a durable connectivity pause, and the real API 29 host-controlled `Rmd1506ConnectivityE2EInstrumentedTest` passed both offline→online restore and unmetered→metered→unmetered Wi-Fi-only modes (`WIFI_ONLY_METERED_QUALIFIED`) in run `44646351039`. Extend rapid multi-transition and exactly-once resume assertions before checking the entire COV-405 requirement.
 
 ## COV-500 — HTTP resume, integrity and filesystem adversaries (P1)
 
@@ -125,7 +131,7 @@
 - [ ] **COV-701** Inventory `core/src/ffi*.rs` and `GeneratedUniffi*Gateway` bindings, supported error variants, nullable/unsigned fields, cancellation and cleanup paths.
 - [ ] **COV-702** Test FFI error conversion and edge-value round trips including zero/max unsigned, null fields, large bounded strings and malformed inputs; forbid empty-success coercion.
 - [ ] **COV-703** Add repeated open/close and pre/in-flight cancellation race tests through the production gateway/native-loading path.
-- [ ] **COV-704** Prove `liboffline_yt_core.so` + JNA packaging for both arm64-v8a and x86_64 and runtime tests on x86_64 emulator.
+- [x] **COV-704** Prove `liboffline_yt_core.so` + JNA packaging for both arm64-v8a and x86_64 and runtime tests on x86_64 emulator.
 - [ ] **COV-705** Execute arm64 runtime smoke on emulator/hardware if feasible; otherwise record this as an explicit unverified runtime-ABI gap, distinct from cross-build.
 - [ ] **COV-706** Validate safe diagnostic redaction through the boundary and Android UI; run exact-head generated-binding/ABI build and Android smoke.
 
@@ -133,12 +139,14 @@
 
 **Evidence:** _pending._
 
+**Evidence (COV-704, validated 2026-11-20 UTC):** `.github/workflows/ci.yml` job `UniFFI Kotlin and Android ABI` (`44646351095`) built and verified both `arm64-v8a` and `x86_64` Rust core/JNA packaging; on the same SHA API 29 smoke (`44646351074`) and API 26/33/34 matrix (`44646351120`) executed `GeneratedUniffiSourceGatewaySmokeTest::repeatedNativeResolverOpenCloseAndPreCanceledRequestsDoNotLeakState` through packaged native `FfiYouTubeSourceService` and `GeneratedUniffiSourceAnalysisGateway` on x86_64. **Arm64 cross-build/packaging is not arm64 runtime qualification**; COV-705 remains open.
+
 ## COV-800 — Final evidence and gate policy (P2, after implementation)
 
 - [ ] **COV-801** Recompute actual per-module Rust and Kotlin coverage and compare with COV-100 baseline; report line/branch deltas without conflating languages.
 - [ ] **COV-802** Map each added test to risk, executed production path, SHA and CI run, and identify remaining high-risk uncovered branches.
 - [ ] **COV-803** Assess whether to enforce a narrow nonregression threshold on stable Rust/JVM packages; **do not** enable it until baseline, stability and developer approval are documented.
-- [ ] **COV-804** Run full required exact-head CI including Android smoke, FGS timeout, supply chain, deterministic E2E, cold-start and real-network E2E; failures must be fixed or remain open.
+- [x] **COV-804** Run full required exact-head CI including Android smoke, FGS timeout, supply chain, deterministic E2E, cold-start and real-network E2E; failures must be fixed or remain open.
 - [ ] **COV-805** Verify tag-only artifact policy still passes, no live-source dependency exists in mandatory lanes, and no security/privacy exceptions were broadened.
 - [ ] **COV-806** Publish a dated coverage closeout note with report locations, tool versions, CI run IDs, confirmed gaps and any pending Samsung A54/human release gates.
 - [ ] **COV-807** Check this task only after all remaining actionable subtasks are verified; do not mark the initiative done if device/API or measurement requirements are still blocked.
@@ -146,6 +154,8 @@
 **Acceptance:** measured, reproducible coverage baseline and improvement, behavioral proof with exact-head CI, and honest residual-risk reporting.
 
 **Evidence:** _pending._
+
+**Evidence (COV-804, latest fully green implementation SHA):** All 11 workflows passed at `1534875022dc3273bae07af9a5b423c4e2e8ad2e`; individual run IDs and attempt numbers are in COV-106/110 above. This only proves that implementation commit; subsequent changes require fresh CI. Do **not** treat COV-804 as final initiative closeout or mark COV-807 complete.
 
 ---
 
