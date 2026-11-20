@@ -535,3 +535,200 @@ fn transfer_and_cleanup_reject_non_directory_library_root() {
     assert_eq!(cleanup_error.kind, ErrorKind::InvalidInput);
     assert_eq!(fs::read(&root).unwrap(), b"not a directory");
 }
+#[test]
+fn seeded_mid_write_failures_keep_exact_partials_and_recover_with_verified_sha() {
+    use sha2::Digest as _;
+
+    let data = b"verified-local-disk-failure".repeat(5_000);
+    let checksum = format!("{:x}", sha2::Sha256::digest(&data));
+    let mut seed = 0xD15C_A0FE_2026_u64;
+    for case in 0..12 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let fail_at = match case {
+            0 => 0,
+            1 => 1,
+            2 => data.len() as u64 - 1,
+            _ => seed % data.len() as u64,
+        };
+        let server = FixtureServer::start(data.clone());
+        let root = tempfile::tempdir().unwrap();
+        let relative_path = "items/faulted/video.mp4";
+        let final_path = root.path().join(relative_path);
+        let partial = partial_path(&final_path);
+        let request = TransferRequest {
+            url: format!("{}/media", server.address),
+            relative_path: relative_path.into(),
+            expected_bytes: Some(data.len() as u64),
+            expected_sha256: Some(checksum.clone()),
+        };
+        let mut engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        engine.test_write_failure_after_bytes = Some(fail_at);
+        let error = engine
+            .transfer(&request, &AtomicBool::new(false))
+            .expect_err("injected ENOSPC must never publish a completed asset");
+        assert_eq!(error.kind, ErrorKind::InsufficientStorage);
+        assert!(!final_path.exists(), "case {case} seed=0x{seed:016x}");
+        assert_eq!(
+            fs::read(&partial).unwrap(),
+            data[..fail_at as usize],
+            "case {case} seed=0x{seed:016x} cut={fail_at}"
+        );
+        assert!(load_resume_representation(&partial).unwrap().is_some());
+        let retry = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let result = retry.transfer(&request, &AtomicBool::new(false)).unwrap();
+        assert_eq!(result.resumed, fail_at > 0, "case {case}");
+        assert_eq!(result.sha256, checksum);
+        assert_eq!(fs::read(final_path).unwrap(), data);
+        assert!(!partial.exists());
+        assert_eq!(load_resume_representation(&partial).unwrap(), None);
+    }
+}
+
+#[test]
+fn canceled_progress_callback_obeys_partial_retention_and_retries_safely() {
+    use sha2::Digest as _;
+
+    let data = vec![0x5a_u8; COPY_BUFFER_BYTES * 3 + 17];
+    let checksum = format!("{:x}", sha2::Sha256::digest(&data));
+    for retain in [true, false] {
+        let server = FixtureServer::start(data.clone());
+        let root = tempfile::tempdir().unwrap();
+        let relative_path = "items/cancel/video.mp4";
+        let final_path = root.path().join(relative_path);
+        let partial = partial_path(&final_path);
+        let policy = DownloadPolicy {
+            retain_partial_on_cancel: retain,
+            ..DownloadPolicy::default()
+        };
+        let request = TransferRequest {
+            url: format!("{}/media", server.address),
+            relative_path: relative_path.into(),
+            expected_bytes: Some(data.len() as u64),
+            expected_sha256: Some(checksum.clone()),
+        };
+        let engine = DownloadEngine::new(root.path(), policy).unwrap();
+        let err = engine
+            .transfer_with_progress(&request, &AtomicBool::new(false), |bytes| {
+                assert!(bytes > 0 && bytes < data.len() as u64);
+                Err(CoreError::new(
+                    ErrorKind::Canceled,
+                    "test-controlled cancellation",
+                    false,
+                ))
+            })
+            .expect_err("canceled transfer may not be completed");
+        assert_eq!(err.kind, ErrorKind::Canceled);
+        assert!(!final_path.exists());
+        assert_eq!(partial.exists(), retain);
+        assert_eq!(
+            load_resume_representation(&partial).unwrap().is_some(),
+            retain
+        );
+        if retain {
+            let prefix = fs::read(&partial).unwrap();
+            assert!(!prefix.is_empty());
+            assert!(prefix.len() < data.len());
+            assert_eq!(prefix, data[..prefix.len()]);
+        }
+        let restarted = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+        let result = restarted
+            .transfer(&request, &AtomicBool::new(false))
+            .unwrap();
+        assert_eq!(result.resumed, retain);
+        assert_eq!(result.sha256, checksum);
+        assert_eq!(fs::read(final_path).unwrap(), data);
+        assert!(!partial.exists());
+    }
+}
+
+#[test]
+fn corrupt_resume_sidecar_keeps_original_partial_and_rejects_false_completion() {
+    use sha2::Digest as _;
+
+    let data = b"bounded-corrupt-sidecar".repeat(500);
+    let checksum = format!("{:x}", sha2::Sha256::digest(&data));
+    let server = FixtureServer::start(data.clone());
+    let root = tempfile::tempdir().unwrap();
+    let relative = "items/corrupt/video.mp4";
+    let final_path = root.path().join(relative);
+    fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+    let partial = partial_path(&final_path);
+    fs::write(&partial, &data[..13]).unwrap();
+    fs::write(resume_metadata_path(&partial), b"{\"broken\":").unwrap();
+    let url = format!("{}/media", server.address);
+    let request = TransferRequest {
+        url: url.clone(),
+        relative_path: relative.into(),
+        expected_bytes: Some(data.len() as u64),
+        expected_sha256: Some(checksum.clone()),
+    };
+    let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+    let err = engine
+        .transfer(&request, &AtomicBool::new(false))
+        .expect_err("malformed sidecar must not be treated as verified identity");
+    assert_eq!(err.kind, ErrorKind::IntegrityFailure);
+    assert_eq!(fs::read(&partial).unwrap(), &data[..13]);
+    assert!(!final_path.exists());
+    save_resume_representation(
+        &partial,
+        &ResumeRepresentation {
+            url,
+            etag: Some("\"fixture-v1\"".into()),
+            last_modified: None,
+            total_bytes: Some(data.len() as u64),
+        },
+    )
+    .unwrap();
+    let result = engine.transfer(&request, &AtomicBool::new(false)).unwrap();
+    assert!(result.resumed);
+    assert_eq!(result.sha256, checksum);
+    assert_eq!(fs::read(final_path).unwrap(), data);
+}
+
+#[cfg(unix)]
+#[test]
+fn seeded_unsafe_paths_are_rejected_before_network_or_outside_root_writes() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let sentinel = outside.path().join("untouched.media");
+    fs::write(&sentinel, b"original outside media").unwrap();
+    fs::create_dir_all(root.path().join("items")).unwrap();
+    let engine = DownloadEngine::new(root.path(), DownloadPolicy::default()).unwrap();
+    let mut seed = 0x5159_4E45_5026_u64;
+    for case in 0..36 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let relative_path = match case % 4 {
+            0 => format!("../outside-{case}.mp4"),
+            1 => format!("items/{}/../../outside-{case}.mp4", seed % 100),
+            2 => format!("/tmp/oyp-outside-{case}.mp4"),
+            _ => {
+                let link = format!("items/link-{case}");
+                symlink(outside.path(), root.path().join(&link)).unwrap();
+                format!("{link}/untouched.media")
+            }
+        };
+        let err = engine
+            .transfer(
+                &TransferRequest {
+                    url: "http://127.0.0.1:1/no-network-needed".into(),
+                    relative_path,
+                    expected_bytes: Some(256),
+                    expected_sha256: None,
+                },
+                &AtomicBool::new(false),
+            )
+            .expect_err("unsafe generated path must be rejected before HTTP");
+        assert_eq!(
+            err.kind,
+            ErrorKind::InvalidInput,
+            "seed=0x{seed:016x} case={case}"
+        );
+        assert_eq!(fs::read(&sentinel).unwrap(), b"original outside media");
+    }
+}
