@@ -34,3 +34,23 @@ Rust fmt, clippy, `cargo test --workspace --all-features` in main CI **447261000
 Keep tag-only artifact policy, no live YouTube dependency in mandatory test jobs, no secrets/logged URLs, preserve native JNA ABI checks, do not weaken Golden/layout tests or smoke required-method assertions. CI dependency fetch failures (Maven/JUnit/JaCoCo) must be distinguished from test assertion failures and only retried on exact SHA.
 
 **User assistance needed eventually:** access to Samsung Galaxy A54 and, for arm64 runtime if no suitable arm64 runner/emulator is available, physical-device execution. Proceed with independent software tasks without stalling on hardware.
+
+## Handoff addendum — after Android API and Media3 expansion
+
+**Latest fully green implementation SHA:** `89b633397df31125055c71a7fd8bc582cb013181` (**11/11 workflows**). Runs: CI `44752387157`, Rust coverage `44752387168`, JaCoCo `44752387425`, Android smoke `44752387182`, API matrix `44752387129`, FGS `44752387151`, cold-start `44752386985`, OS-network `44752386893`, fixture E2E `44752387325`, supply `44752387030`, CI evidence `44752387640`.
+
+**Newly checked with execution evidence:** COV-205/206/207, COV-305, COV-402/406, COV-502/504/505/506, COV-601/602/605/606, COV-802. The canonical TODO now has **49/62 checked** and **13 open**; do not infer closure for those remaining.
+
+**Newest HEAD at handoff authoring:** `a82ec5997a69dfb6d4aa7448645f40b0342294bd` adds user-visible safe playback errors for missing/corrupt persisted local Library media, with two actual Android error tests. Main CI, JaCoCo, Rust LCOV, API matrix, cold start, FGS, supply and real-network had passed, while Android smoke remained in progress. **COV-604 stays unchecked** pending that Android smoke; this documentation CAS commit advances HEAD and must not be confused with the implementation run.
+
+**Immediate next independently actionable tasks:**
+1. Check and fix COV-604 actual API29 smoke (test `PlaybackSessionBehaviorInstrumentedTest::{missingOfflineMediaReportsSafePlayerErrorAndNeverSwitchesToRemoteUri,corruptOfflineMediaReportsSafePlayerErrorAndNeverClaimsReady}`). Do not weaken raster-golden checks.
+2. COV-603 genuine emulator audio focus loss/gain and rapid seek/play/pause after lifecycle, checked against actual session state; existing saved-position tests already pass.
+3. COV-403 actual notification POST_NOTIFICATIONS permission granted/denied/revoked with durable state; avoid revoking running instrumentation app and killing the process (use host pre-start configuration).
+4. COV-404 service process recreation/timeout worker ownership and COV-405 host-driven rapid OS Wi-Fi/metered callback transitions with exactly-once resume.
+5. COV-703 native Android in-flight cancellation and COV-706 safe UI FFI error render; COV-705 arm64 runtime if emulator feasible otherwise A54.
+6. COV-003/109 reliable per-*named-function* Rust/branch measurements (LLVM raw mangled FNDA does not suffice).
+7. Final COV-806 closeout only after above work with honest COV-408 A54 and release-policy gate; COV-807 remains unchecked until all requirements actually verified.
+
+**Measurement:** Rust **90.78%**, JVM Kotlin **37.72%**, Kotlin branches **30.64%**, separate JaCoCo; Rust branches unmeasured. New risk/CI mapping lives in `docs/TEST_COVERAGE_TRACEABILITY_2026-11-20.md`.
+

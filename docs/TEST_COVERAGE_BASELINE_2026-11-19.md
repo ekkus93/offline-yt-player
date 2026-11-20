@@ -155,6 +155,10 @@ Measured at source SHA `e408880d1719b55026dd35c84a98db5cf7900d52` by Rust covera
 
 COV-003 remains **unchecked** pending a trustworthy line/function/branch-to-test reconciliation beyond this risk-ranked shortlist; COV-109 remains unchecked for the same function-level measurement limitation. This protects against declaring an unmeasured branch covered or uncovered without actual instrumentation.
 
+## Verified coverage expansion checkpoint — 2026-11-20
+
+At fully green implementation SHA `89b633397df31125055c71a7fd8bc582cb013181`, all 11 workflows passed. Measured Rust source `core/src` 8,727/9,613 = **90.78%** lines across 45 files, raw FNDA 933/1541 = 60.55% compiler symbols (not trustworthy named-function percentage), and **unmeasured Rust branches**. JVM Kotlin Kover 0.9.11 is 1,433/3,799 = **37.72%** lines, 905/2,954 = **30.64%** branches. API29 JaCoCo independently verified production UI source hits. Full evidence IDs and remaining high-risk code paths are in `docs/TEST_COVERAGE_TRACEABILITY_2026-11-20.md`. No threshold was enforced, and tag-only artifacts remain unchanged. **Do not claim physical A54 or arm64 execution.**
+
 ## Updates
 
 Add exact source SHA, CI run link, tool versions, measured line/branch totals and uncovered file/function list here *only after the reporting workflow runs*. Do not equate an installed tool with a validated coverage baseline.

@@ -53,9 +53,9 @@
 - [x] **COV-202** Add 403/404/429/5xx and truncated body fixture tests; verify typed permanent/retryable classification, timeouts, bounds and no erroneous `Unavailable` success.
 - [x] **COV-203** Add option-ID fidelity tests across duplicate quality labels, split A/V, audio and subtitle choices, including provider-neutral download plan mapping.
 - [x] **COV-204** Exercise source resolution canceled before start and during controlled simulated blocking I/O; assert no stuck worker, duplicate request or false completion.
-- [ ] **COV-205** Extend Android Add/Analyze behavioral tests for plain/share/query-parameter URLs, native initialization error visibility, duplicate Analyze taps and typed error recovery.
-- [ ] **COV-206** Add adversarial malformed/oversized metadata and signed-query-token fixtures; prove bounded output and error/log redaction through FFI/UI.
-- [ ] **COV-207** Run target Rust tests, exact-head API 29 Android smoke/required-method evidence and overall CI; note live-source/hardware exclusions separately.
+- [x] **COV-205** Extend Android Add/Analyze behavioral tests for plain/share/query-parameter URLs, native initialization error visibility, duplicate Analyze taps and typed error recovery.
+- [x] **COV-206** Add adversarial malformed/oversized metadata and signed-query-token fixtures; prove bounded output and error/log redaction through FFI/UI.
+- [x] **COV-207** Run target Rust tests, exact-head API 29 Android smoke/required-method evidence and overall CI; note live-source/hardware exclusions separately.
 
 **Acceptance:** deterministic fixture tests prove parser/adapter/FFI/UI behaviors without live YouTube dependency; original Analyze regressions remain covered.
 
@@ -69,13 +69,15 @@
 
 **Evidence (COV-204):** `core/src/ffi_source.rs::{canceled_source_boundary_before_dispatch_never_starts_work,in_flight_cancellation_disallows_completion_after_blocked_source_returns}` exercise production `resolve_source` through `ControlledResolutionSource` with bounded test-controlled channels. The pre-canceled request never enters the provider (`calls=0`); a cancellation while blocked has exactly one provider call, joins its worker, and yields a typed nonretryable `Canceled` rather than fabricated media. Both execute as ordinary workspace Rust tests in CI `44676046018` (passing exact SHA `e408880...`). The Android production gateway pre-canceled repeated-open smoke is also covered in API matrix `44676046033`; this is not a claim of actual external live YouTube cancellation.
 
+**Evidence (COV-205/206/207, exact full-green SHA `89b633397df31125055c71a7fd8bc582cb013181`):** Compose API29 `AddResolverAvailabilityInstrumentedTest` tests plain/short/share YouTube URLs, tracking query normalization at the actual `AppSourceAnalysisGateway`, duplicate Analyze gating, startup errors and safe typed NETWORK_TIMEOUT→second-Analyze recovery without a false-success card. The edit field intentionally keeps raw user text; gateway sees only the token-free canonical URL. Android JaCoCo `44752387425`, smoke `44752387182`, main Rust/JVM `44752387157`, Rust LCOV `44752387168`, API 26/33/34 `44752387129`, real network `44752386893`, cold start `44752386985`, FGS `44752387151`, supply `44752387030`, deterministic fixture `44752387325`, CI evidence `44752387640` all passed **11/11** on exact implementation SHA. FFI fixture-source malformed input returns typed `UnsupportedSource`; `SourceMetadataPolicyTest` exercises 100K oversized input, signed-query and encoded-header metadata redaction; `ProductionRedactionBehaviorTest` exercises actual Compose presentation with persisted signed URLs. This does not qualify live YouTube or Samsung A54. See `docs/TEST_COVERAGE_TRACEABILITY_2026-11-20.md` for the per-test risk table.
+
 ## COV-300 — SQLite durability, worker races and startup repair (P0)
 
 - [x] **COV-301** Add file-backed SQLite transaction fault tests for enqueue, claim, stage, promote, cancellation, and completion boundaries, including reopen/recovery assertions.
 - [x] **COV-302** Cover future schema version, malformed/corrupt DB, foreign-key/orphan data and failed migration; verify fail-closed errors and no destructive fallback.
 - [x] **COV-303** Exercise concurrent independent DB connections/workers racing to claim and settle the same job; verify a single authoritative winner.
 - [x] **COV-304** Add cancel-vs-complete, pause-vs-retry, stale worker, and duplicate schedule races without nondeterministic sleeps; use barriers or test-controlled clocks.
-- [ ] **COV-305** Add repeated startup reconciliation/partial-staged-file tests, including missing assets, symlinks, stale lease and crash-between-checkpoint boundaries; prove idempotence and outside-root safety.
+- [x] **COV-305** Add repeated startup reconciliation/partial-staged-file tests, including missing assets, symlinks, stale lease and crash-between-checkpoint boundaries; prove idempotence and outside-root safety.
 - [x] **COV-306** Add a bundled-SQLite upgrade regression smoke for `rusqlite 0.41.x`: file open/migrate, FK enforcement, transaction, snapshot persisted after reopen.
 - [x] **COV-307** Run new Rust tests under normal CI and coverage; document observed durable-state invariant and exact-head CI.
 
@@ -91,14 +93,16 @@
 
 **Partial evidence (COV-305; remains unchecked):** `core/src/startup_reconciliation.rs::tests::file_backed_two_checkpoint_crashes_are_reconciled_idempotently_without_partial_loss` reopens a real database three times after staged-download crash checkpoints and proves a single queued recovery, one failed orphaned stage recovery, preservation of user Paused/RetryWait deadlines and no deletion of partial/resume sidecars. Existing symlink/missing asset cases and `stale_startup_requeue_cannot_override_newer_pause_or_completion` also pass in Rust CI `44726100035`. A distinct explicit stale-lease/crash-between-actual-filesystem-move test is still needed before checking full COV-305.
 
+**Evidence (COV-305, qualified at `fa0dd56c4a22b45beb7b810001a313e0442eeecb`):** Production `startup_reconciliation::{reconcile_startup_with_library_root,requeue_interrupted_snapshot_if_unchanged}` is exercised by `file_backed_two_checkpoint_crashes_are_reconciled_idempotently_without_partial_loss`, `stale_worker_lease_at_startup_cannot_reset_a_newer_reclaimed_attempt`, plus missing/symlink, staged orphan and stale-repair tests. Actual on-disk SQLite reopen, three repeated scans, sidecar retention and compare-and-swap newer lease preservation; Rust fmt/clippy/workspace CI `44727541863` passed. Requalified in full-green Rust CI `44752387157`. Power removal/fsync cannot be simulated by these tests; no physical-device claim.
+
 ## COV-400 — Android service, notification and API-level matrix (P1)
 
 - [x] **COV-401** Audit existing API 29/35 tests, and establish feasible API 26/33/34 emulator profiles and bounded execution strategy.
-- [ ] **COV-402** Add API 26-33 foreground fallback and API 34+ UIDT scheduling behavior tests; assert actual scheduling inputs and failure/restriction cases.
+- [x] **COV-402** Add API 26-33 foreground fallback and API 34+ UIDT scheduling behavior tests; assert actual scheduling inputs and failure/restriction cases.
 - [ ] **COV-403** Add notification-permission granted/denied/revoked and repeated pause/resume/cancel notification-action tests backed by durable queue state.
 - [ ] **COV-404** Add process/service recreation and timeout callback tests ensuring legal teardown, noncancel platform stop, no duplicate worker and recovery ordering.
 - [ ] **COV-405** Extend host-controlled network E2E for quick offline/online and metered/unmetered transitions; verify Wi-Fi-only classification and exactly-once resume behavior.
-- [ ] **COV-406** Cover reboot-before-unlock restrictions and no direct boot-time dataSync FGS launch on applicable APIs, with an executable behavioral test.
+- [x] **COV-406** Cover reboot-before-unlock restrictions and no direct boot-time dataSync FGS launch on applicable APIs, with an executable behavioral test.
 - [x] **COV-407** Execute selected API 26, 33, 34 and existing 29/35 runs; record actual APIs exercised, links, skipped/unavailable tiers and flaky retry evidence.
 - [ ] **COV-408** Retain hardware-only A54 battery/network behavior as separately documented pending device validation; do not check it as automatically passed.
 
@@ -110,14 +114,16 @@
 
 **Partial evidence (COV-405; remains unchecked):** Production `DownloadForegroundService.handleConnectivityChange` now requests a cooperative native stop on a durable connectivity pause, and the real API 29 host-controlled `Rmd1506ConnectivityE2EInstrumentedTest` passed both offline→online restore and unmetered→metered→unmetered Wi-Fi-only modes (`WIFI_ONLY_METERED_QUALIFIED`) in run `44646351039`. Extend rapid multi-transition and exactly-once resume assertions before checking the entire COV-405 requirement.
 
+**Evidence (COV-402/406, exact `89b633397df31125055c71a7fd8bc582cb013181`):** Actual API 26/33/34 emulator workflow `44752387129` passed all three profiles and `scripts/run_android_api_matrix.sh` required executed XML for `AndroidRuntimeSmokeTest::{runtimeSchedulingInputsAndRestrictedUidtFailureMatchActualApiTier,bootBeforeUnlockCannotStartDataSyncOrOpenCredentialProtectedFiles}`. Production `DownloadExecutionSchedulerPolicy` constructs API-tier `JobInfo` extras/any-network, API34 Wi-Fi NetworkRequest and setUserInitiated; null platform scheduler must refuse a fabricated accepted UIDT. Production `DownloadRebootReceiver` was invoked with a hostile ContextWrapper whose foreground/service/file methods throw; no illegal launch or pre-unlock file access occurred, and recovery remains deferred to the normal startup path. These qualify Android API behavior, **not** an actual locked/rebooting OEM device. COV-403/404/405 remain open for notification revoke, race/recreation and real rapid network-transition scope, COV-408 for physical A54.
+
 ## COV-500 — HTTP resume, integrity and filesystem adversaries (P1)
 
 - [x] **COV-501** Inventory `core/src/download/tests/transfer.rs` and `resume_limits.rs`; avoid re-adding existing 200/206/416, ENOSPC and body-disconnect cases.
-- [ ] **COV-502** Add reproducible bounded property tests over Range/Content-Range, validators, content length and chunked/truncated response combinations using a local HTTP stub.
+- [x] **COV-502** Add reproducible bounded property tests over Range/Content-Range, validators, content length and chunked/truncated response combinations using a local HTTP stub.
 - [x] **COV-503** Assert unsafe combinations always restart or fail (never append unverifiable bytes); output failing seed/input for replay.
-- [ ] **COV-504** Inject mid-write disk failures, cancellation and malformed resume metadata; verify retained/removed partials match policy and no accepted corrupt SHA/length.
-- [ ] **COV-505** Check no path traversal, symlink escape, excessive writes or unbounded memory from generated inputs; retain minimized adversarial fixtures.
-- [ ] **COV-506** Run deterministic tests repeatedly in CI; record coverage delta, exact-head Rust job and accepted invariants.
+- [x] **COV-504** Inject mid-write disk failures, cancellation and malformed resume metadata; verify retained/removed partials match policy and no accepted corrupt SHA/length.
+- [x] **COV-505** Check no path traversal, symlink escape, excessive writes or unbounded memory from generated inputs; retain minimized adversarial fixtures.
+- [x] **COV-506** Run deterministic tests repeatedly in CI; record coverage delta, exact-head Rust job and accepted invariants.
 
 **Acceptance:** zero accepted corrupt/resumed outputs across bounded adversarial cases; reproducible seeds in failures.
 
@@ -125,18 +131,22 @@
 
 **Evidence (COV-503):** `core/src/resume_http.rs::{seeded_remote_validator_matrix_never_appends_unproven_partial_bytes,malformed_content_ranges_never_report_a_trustworthy_total}` exercise production representation extraction, `ResumeRepresentation::matches`, sidecar saving and `prepare_partial_reuse` across 128 repeatable validator/size combinations and invalid Content-Range values. Failures include seed/case data. Rust coverage `44505561276` and deterministic fixture E2E `44505561262` passed at `a31ea408bbd5dfe01ed5684372c82f5e525214d5`. The broader HTTP 200/206/416 property matrix and injected filesystem failures remain unchecked.
 
+**Evidence (COV-502/504/505/506):** Actual production `DownloadEngine::transfer` and `transfer_with_progress` tests `core/src/download/tests/resume_limits.rs::{seeded_local_http_resume_matrix_never_accepts_unverified_appends,seeded_raw_chunked_and_truncated_http_responses_never_promote_corrupt_media}` (28+20 deterministic localhost 200/206/416, validators, forged range and premature EOF); `core/src/download/tests/transfer.rs::{seeded_mid_write_failures_keep_exact_partials_and_recover_with_verified_sha,canceled_progress_callback_obeys_partial_retention_and_retries_safely,corrupt_resume_sidecar_keeps_original_partial_and_rejects_false_completion,seeded_unsafe_paths_are_rejected_before_network_or_outside_root_writes}` (12 seeded storage faults, both cancel-retention modes, corrupt resume sidecar, 36 traversal/absolute/symlink cases). Seed/case data is on assertion failure; exact bytes and SHA-256 required for completed outputs; outside-root sentinel unchanged. Rust CI `44748753191` and LLVM LCOV `44748752980` passed at implementation `429e82530a9afcfcc3eeeb4b04daf20353b185e0`, repeated in Rust LCOV `44751198528` and fully green Rust+LCOV `44752387157`/`44752387168` at `89b633397df31125055c71a7fd8bc582cb013181`. Measured total Rust line coverage **90.65% → 90.78%** (+0.13 percentage points), branches unmeasured; tests do not claim real power failure. See traceability.
+
 ## COV-600 — Media3 local playback lifecycle (P1)
 
-- [ ] **COV-601** Inventory existing playback unit/instrumented tests and prepare small deterministic combined A/V, split A/V and subtitle assets.
-- [ ] **COV-602** Add real Media3 `PlaybackSessionService` instrumentation for bind/unbind and destruction/recreation, ensuring one canonical playback session and no leaks.
+- [x] **COV-601** Inventory existing playback unit/instrumented tests and prepare small deterministic combined A/V, split A/V and subtitle assets.
+- [x] **COV-602** Add real Media3 `PlaybackSessionService` instrumentation for bind/unbind and destruction/recreation, ensuring one canonical playback session and no leaks.
 - [ ] **COV-603** Exercise audio-focus loss/gain, controller disconnect, rapid play/pause/seek and saved-position restoration after lifecycle/process restart.
 - [ ] **COV-604** Test missing, truncated and corrupt local media/subtitles: user-visible error, no unintended network access or false completed state.
-- [ ] **COV-605** Test selected local audio/subtitle track switching and representative media-button/notification behavior without relying on external providers.
-- [ ] **COV-606** Run exact-head playback instrumented smoke, golden/layout tests if impacted, and standard CI; record limitations of emulator audio routing.
+- [x] **COV-605** Test selected local audio/subtitle track switching and representative media-button/notification behavior without relying on external providers.
+- [x] **COV-606** Run exact-head playback instrumented smoke, golden/layout tests if impacted, and standard CI; record limitations of emulator audio routing.
 
 **Acceptance:** production Media3 session behavior is exercised by deterministic offline assets and retained across supported lifecycle transitions.
 
 **Evidence:** _pending._
+
+**Evidence (COV-601/602/605/606, exact green `89b633397df31125055c71a7fd8bc582cb013181`):** `PlaybackSessionBehaviorInstrumentedTest::packagedOfflineAvFixtureCanBeDemuxedIntoRealVideoAudioAndSubtitles` decodes SHA-verified 3,064-byte local H.264/AAC MP4 and uses Android `MediaExtractor`/`MediaMuxer` to derive split video MP4 / audio M4A + local WebVTT. `releasedControllerAndStoppedServiceRecreateOneFreshCanonicalPlaybackSession` exercises real session controller unbind, PLAYER_RELEASED→SESSION_RELEASED teardown and new offline `STATE_READY` with distinct ExoPlayer instance. Existing `subtitleControlCyclesTracksThenOffOnTheSessionTrackSelection`, `audioControlCyclesPersistedTracksAndWrapsOnTheSessionTrackSelection`, and `systemMediaButtonsPauseResumeAndSeekTheCanonicalSession` exercise selection and button actions. Android smoke `44752387182`, main CI + goldens `44752387157`, API 26/33/34 matrix `44752387129`, all 11 workflows passed; reference `docs/MEDIA3_COVERAGE_FIXTURE_INVENTORY_2026-11-20.md`. Emulator audio routing not physical A54 audio-focus qualification. COV-603 remains open; missing/corrupt local playback UI COV-604 from newer `a82ec599...` is **pending** latest Android smoke, not checked.
 
 ## COV-700 — UniFFI/native boundary correctness (P1)
 
@@ -158,7 +168,7 @@
 ## COV-800 — Final evidence and gate policy (P2, after implementation)
 
 - [x] **COV-801** Recompute actual per-module Rust and Kotlin coverage and compare with COV-100 baseline; report line/branch deltas without conflating languages.
-- [ ] **COV-802** Map each added test to risk, executed production path, SHA and CI run, and identify remaining high-risk uncovered branches.
+- [x] **COV-802** Map each added test to risk, executed production path, SHA and CI run, and identify remaining high-risk uncovered branches.
 - [x] **COV-803** Assess whether to enforce a narrow nonregression threshold on stable Rust/JVM packages; **do not** enable it until baseline, stability and developer approval are documented.
 - [x] **COV-804** Run full required exact-head CI including Android smoke, FGS timeout, supply chain, deterministic E2E, cold-start and real-network E2E; failures must be fixed or remain open.
 - [x] **COV-805** Verify tag-only artifact policy still passes, no live-source dependency exists in mandatory lanes, and no security/privacy exceptions were broadened.
@@ -173,6 +183,8 @@
 
 **Evidence (COV-801/803/805; partial overall closeout):** On exact `e408880d1719b55026dd35c84a98db5cf7900d52`, Rust `core/src` `44676046105`: **8,511/9,430 = 90.25%** executable lines (45 files; branch unmeasured), up **1.25 percentage points** from `af38f8ffc...` Rust baseline 89.00% and **0.84 points** from the latest prior 89.41%; raw function-symbol coverage **921/1,522 = 60.51%**, not a reliable unique named-function metric. Kotlin/JVM `44676046018`: **1,433/3,799 = 37.72%** lines and **904/2,954 = 30.60%** branches, down 0.08 and 0.09 percentage points versus baseline 37.80% and 30.69%; Kotlin `ui` 272/1347, `coregateway` 335/868 and `downloads` 376/796. Separate API 29 on-emulator JaCoCo `44676046080`: measured production-path coverage (never added to Kover denominator). Largest measured Rust remaining uncovered lines include `youtube_source.rs` 185/298, `ffi_download_control.rs` 289/381, `worker.rs` 422/492, `ffi.rs` 387/452. **Threshold assessment (COV-803):** do not enforce Rust 85%, critical durable-state 90% or Kotlin 80% thresholds: branch/file/function scope is incomplete, Kotlin is far below target and developer approval to gate is absent. **COV-805:** main CI `44676046018` plus supply chain `44676046026` and CI evidence `44676046160` succeeded under unchanged tag-only artifact policy; all newly required tests use offline/local fixtures, the live provider test remains explicitly ignored/manual, and no security/privacy exception was broadened. New exact-head Android smoke `44676046005` attempt 2 was still running at checkpoint; do not claim this newer commit has 11/11 green until confirmed.
 
+**Evidence (COV-802, published):** `docs/TEST_COVERAGE_TRACEABILITY_2026-11-20.md` maps each new/verified COV-200/300/400/500/600/700 test family to production function, actual test method, exact source SHA and passing Rust/JVM/API29/API26-34 workflow, with missing branch/function measurement and hardware/arm64 gaps explicitly enumerated. Verified current report-only Rust **8,727/9,613 = 90.78%**, Kotlin JVM **1,433/3,799 = 37.72%**, Kotlin JVM branch **905/2,954 = 30.64%**, no trustworthy named Rust function or BRDA branch counters. The final closeout COV-806 and overall COV-807 remain unchecked because measurable software gaps/hardware gates remain.
+
 ---
 
 ## Recommended implementation order
@@ -184,6 +196,6 @@ This is a priority recommendation, not permission to skip independent work or ma
 ## Completion record
 
 - **Current baseline SHA at document creation:** `e946a24b9939c03a7f77f667705a1f888ae44771`.
-- **Completed (evidence-backed) subtasks at this checkpoint:** 34/62; 28 remain open. The task sections and exact-SHA evidence above, not this summary count, are authoritative.
-- **Latest evidence-backed coverage:** exact `bfba51ec3a3f5807670e2bf1f895ec6f8519b17d`, Rust core **8,688/9,584 (90.65%)** lines (branch unmeasured); latest separately measured Kotlin/JVM **37.72%** lines, Android API 29 instrumentation **11.91%** lines on prior SHA. Do not conflate coverage lanes.
-- **CI evidence for new test changes:** Rust coverage `44501336363` and main CI `44501336322` passed at exact `af38f8ffc31a27d6edd7111800f3a32c3fd1280e`; other workflow statuses require recheck on the next head.
+- **Completed (evidence-backed) subtasks at this checkpoint:** 49/62; 13 remain open. The task sections and exact-SHA evidence above, not this summary count, are authoritative.
+- **Latest evidence-backed coverage:** exact `89b633397df31125055c71a7fd8bc582cb013181`, Rust core **8,727/9,613 (90.78%)** lines (branches unmeasured); JVM Kotlin **1,433/3,799 (37.72%)** lines, **905/2,954 (30.64%)** branches, separate API29 JaCoCo. Do not combine coverage lanes.
+- **Latest fully green implementation SHA:** `89b633397df31125055c71a7fd8bc582cb013181`, **11/11** workflows, main CI `44752387157`, Android smoke `44752387182`, JaCoCo `44752387425`, Rust LCOV `44752387168`, API matrix `44752387129`. A newer production playback-error change `a82ec5997a69dfb6d4aa7448645f40b0342294bd` requires its **own** full CI before check-off.
