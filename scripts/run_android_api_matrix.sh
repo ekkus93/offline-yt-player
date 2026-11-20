@@ -35,7 +35,7 @@ for klass in "${classes[@]}"; do
   args=(--results-dir app/build/outputs/androidTest-results/connected --required-class "$klass")
   case "$name" in
     AndroidRuntimeSmokeTest)
-      args+=(--required-test "$klass#targetPackageIsInstalled") ;;
+      args+=(--required-test "$klass#targetPackageIsInstalled" --required-test "$klass#runtimeSchedulingInputsAndRestrictedUidtFailureMatchActualApiTier" --required-test "$klass#bootBeforeUnlockCannotStartDataSyncOrOpenCredentialProtectedFiles") ;;
     GeneratedUniffiSourceGatewaySmokeTest)
       args+=(--required-test "$klass#repeatedNativeResolverOpenCloseAndPreCanceledRequestsDoNotLeakState") ;;
     DownloadForegroundTimeoutInstrumentedTest)
