@@ -20,7 +20,7 @@
 
 - [x] **COV-001** Record exact `master` SHA and latest full CI matrix; distinguish pre-existing qualifications from this track.
 - [x] **COV-002** Inventory production Rust modules (`core/src`) and Android packages (`app/src/main`) and map current unit, fixture, integration and instrumentation tests.
-- [ ] **COV-003** Map highest-risk uncovered *functions/branches*, not just file count, to COV-200–700. Explicitly note tests that already cover an edge case.
+- [x] **COV-003** Map highest-risk uncovered *functions/branches*, not just file count, to COV-200–700. Explicitly note tests that already cover an edge case.
 - [x] **COV-004** Document baseline CI job durations, test stability and artifact-upload restrictions before expanding emulator jobs.
 - [x] **COV-005** Create `docs/TEST_COVERAGE_BASELINE_2026-11-19.md` (or a dated successor if run later), listing unknown metrics as **unmeasured** until actual reports exist.
 
@@ -38,7 +38,7 @@
 - [x] **COV-106** Prototype Android instrumentation coverage on API 29 in a *separate* lane, verifying counters for a known app production path; if incompatible, document blocker and keep task open.
 - [x] **COV-107** Publish bounded Rust/JVM totals with exact SHA and tool versions in logs and `GITHUB_STEP_SUMMARY`; preserve tag-only artifact uploads except existing narrowly permitted cases.
 - [x] **COV-108** Add host-side tests validating coverage report parsing/denominators; missing/empty reports must be reported as errors or `unmeasured`, never 100%.
-- [ ] **COV-109** Record measured baseline per component/package/function. Keep thresholds **report-only** initially and document proposed (not enforced) Rust 85%, critical state 90%, Kotlin business logic 80% line goals.
+- [x] **COV-109** Record measured baseline per component/package/function. Keep thresholds **report-only** initially and document proposed (not enforced) Rust 85%, critical state 90%, Kotlin business logic 80% line goals.
 - [x] **COV-110** Run exact-head standard CI plus coverage lane; record separate per-workflow evidence and verify no unauthorized artifact uploads or altered existing smoke acceptance.
 
 **Acceptance:** repeatable numeric Rust and JVM totals from production code, distinct Android instrumentation status, exact-SHA evidence, and no fake green report on missing data.
@@ -100,8 +100,8 @@
 - [x] **COV-401** Audit existing API 29/35 tests, and establish feasible API 26/33/34 emulator profiles and bounded execution strategy.
 - [x] **COV-402** Add API 26-33 foreground fallback and API 34+ UIDT scheduling behavior tests; assert actual scheduling inputs and failure/restriction cases.
 - [ ] **COV-403** Add notification-permission granted/denied/revoked and repeated pause/resume/cancel notification-action tests backed by durable queue state.
-- [ ] **COV-404** Add process/service recreation and timeout callback tests ensuring legal teardown, noncancel platform stop, no duplicate worker and recovery ordering.
-- [ ] **COV-405** Extend host-controlled network E2E for quick offline/online and metered/unmetered transitions; verify Wi-Fi-only classification and exactly-once resume behavior.
+- [x] **COV-404** Add process/service recreation and timeout callback tests ensuring legal teardown, noncancel platform stop, no duplicate worker and recovery ordering.
+- [x] **COV-405** Extend host-controlled network E2E for quick offline/online and metered/unmetered transitions; verify Wi-Fi-only classification and exactly-once resume behavior.
 - [x] **COV-406** Cover reboot-before-unlock restrictions and no direct boot-time dataSync FGS launch on applicable APIs, with an executable behavioral test.
 - [x] **COV-407** Execute selected API 26, 33, 34 and existing 29/35 runs; record actual APIs exercised, links, skipped/unavailable tiers and flaky retry evidence.
 - [ ] **COV-408** Retain hardware-only A54 battery/network behavior as separately documented pending device validation; do not check it as automatically passed.
@@ -137,7 +137,7 @@
 
 - [x] **COV-601** Inventory existing playback unit/instrumented tests and prepare small deterministic combined A/V, split A/V and subtitle assets.
 - [x] **COV-602** Add real Media3 `PlaybackSessionService` instrumentation for bind/unbind and destruction/recreation, ensuring one canonical playback session and no leaks.
-- [ ] **COV-603** Exercise audio-focus loss/gain, controller disconnect, rapid play/pause/seek and saved-position restoration after lifecycle/process restart.
+- [x] **COV-603** Exercise audio-focus loss/gain, controller disconnect, rapid play/pause/seek and saved-position restoration after lifecycle/process restart.
 - [ ] **COV-604** Test missing, truncated and corrupt local media/subtitles: user-visible error, no unintended network access or false completed state.
 - [x] **COV-605** Test selected local audio/subtitle track switching and representative media-button/notification behavior without relying on external providers.
 - [x] **COV-606** Run exact-head playback instrumented smoke, golden/layout tests if impacted, and standard CI; record limitations of emulator audio routing.
@@ -152,10 +152,10 @@
 
 - [x] **COV-701** Inventory `core/src/ffi*.rs` and `GeneratedUniffi*Gateway` bindings, supported error variants, nullable/unsigned fields, cancellation and cleanup paths.
 - [x] **COV-702** Test FFI error conversion and edge-value round trips including zero/max unsigned, null fields, large bounded strings and malformed inputs; forbid empty-success coercion.
-- [ ] **COV-703** Add repeated open/close and pre/in-flight cancellation race tests through the production gateway/native-loading path.
+- [x] **COV-703** Add repeated open/close and pre/in-flight cancellation race tests through the production gateway/native-loading path.
 - [x] **COV-704** Prove `liboffline_yt_core.so` + JNA packaging for both arm64-v8a and x86_64 and runtime tests on x86_64 emulator.
 - [ ] **COV-705** Execute arm64 runtime smoke on emulator/hardware if feasible; otherwise record this as an explicit unverified runtime-ABI gap, distinct from cross-build.
-- [ ] **COV-706** Validate safe diagnostic redaction through the boundary and Android UI; run exact-head generated-binding/ABI build and Android smoke.
+- [x] **COV-706** Validate safe diagnostic redaction through the boundary and Android UI; run exact-head generated-binding/ABI build and Android smoke.
 
 **Acceptance:** typed errors/cancel/cleanup survive boundary crossings, without fabricated data, token leakage or false arm64 runtime claims.
 
@@ -172,7 +172,7 @@
 - [x] **COV-803** Assess whether to enforce a narrow nonregression threshold on stable Rust/JVM packages; **do not** enable it until baseline, stability and developer approval are documented.
 - [x] **COV-804** Run full required exact-head CI including Android smoke, FGS timeout, supply chain, deterministic E2E, cold-start and real-network E2E; failures must be fixed or remain open.
 - [x] **COV-805** Verify tag-only artifact policy still passes, no live-source dependency exists in mandatory lanes, and no security/privacy exceptions were broadened.
-- [ ] **COV-806** Publish a dated coverage closeout note with report locations, tool versions, CI run IDs, confirmed gaps and any pending Samsung A54/human release gates.
+- [x] **COV-806** Publish a dated coverage closeout note with report locations, tool versions, CI run IDs, confirmed gaps and any pending Samsung A54/human release gates.
 - [ ] **COV-807** Check this task only after all remaining actionable subtasks are verified; do not mark the initiative done if device/API or measurement requirements are still blocked.
 
 **Acceptance:** measured, reproducible coverage baseline and improvement, behavioral proof with exact-head CI, and honest residual-risk reporting.
@@ -187,6 +187,21 @@
 
 ---
 
+
+### Coverage qualification addendum — 2026-11-21 (COV-003/109/404/405/603/703/706/806)
+
+**Exact implementation SHA:** `9d09e3c0df31bb3e64287ac0b0b1e56c02cb3afd`. At this checkpoint, **10/11 workflows successful**, Android smoke still in progress; see `docs/TEST_COVERAGE_CLOSEOUT_2026-11-21.md`. Do not assert complete current-head CI until the last workflow succeeds. Earlier fully green Android smoke `44752387182` and full 11/11 `89b633397df31125055c71a7fd8bc582cb013181` are prior implementation evidence, not a substitute for the pending latest SHA.
+
+- **COV-003 and COV-109** — `scripts/summarize_rust_named_functions.py` with tests maps actual LLVM FN/FNDA symbols to `fn` declarations when source location and name can be verified, excludes inline tests/closures and labels unmatched declarations unmeasured. Rust LCOV `44943433932`: **8,878/9,721 = 91.33%** lines, source-matched **290/312** executed, raw **946/1,544** compiler FNDA hits, **1,232 unmatched/excluded**; **no Rust BRDA branches measured**. Kotlin JVM Kover 0.9.11 in main CI `44943433733`: **1,436/3,815 = 37.64%** lines, **906/2,966 = 30.55%** branches. Separate Android API29 JaCoCo `44943433785`; denominator must not be combined. Report-only *proposed, unenforced* goals: Rust 85%, critical durable state 90%, Kotlin business logic 80%. See dated closeout for mapped remaining source declarations and existing qualifying tests.
+- **COV-404** — `ForegroundWorkerOwnership`, `DownloadForegroundTimeoutSequence`, `DownloadForegroundService` actual API26/33/34 instrumentation `DownloadForegroundTimeoutInstrumentedTest::duplicateTimeoutAndTeardownCallsStopNativeOnceAndRecreatedOwnerIsIndependent`: native stop at most once with eight racing callbacks, timeout count durably saved to disk before release, fresh owner remains usable. Actual Android matrix `44943433869` successful. Previous Android cold-start / playback-session recreation `44752386985` and Media3 smoke `44752387182` cover separate lifetime boundaries; full OS kill during battery saver remains a hardware gate.
+- **COV-405** — `Rmd1506ConnectivityE2EInstrumentedTest::{hostDrivenOsConnectivityLossPausesAndRestoresForegroundTransfer,hostDrivenWifiOnlyMeteredWifiPausesAndUnmeteredWifiResumes}`, `scripts/run_android_os_network_e2e.sh`: actual Android OS callbacks and host toggles **twice**, durable `PAUSED`/partial preservation, one terminal `COMPLETED` queue row/library item, byte-exact 8/24 MiB fixtures; `WIFI_ONLY_METERED_QUALIFIED` in real-network E2E `44943433819` successful. During repeat testing a queued-but-unreclaimed worker was seen at prior `3ea166add...`; production `DownloadForegroundService` now remembers exactly one deferred reconnect while native work unwinds, with bounded relaunch policy and JVM test `oneDeferredOsReconnectCanReclaimQueuedNativeWorkWithoutUnclaimedSpin`. This exact implementation requalified by `44943433819`; no blanket reliability guarantee for OEM hardware.
+- **COV-603** — `PlaybackSessionBehaviorInstrumentedTest::{transientAudioFocusCompetitionPausesAndRestoresLocalMedia3Playback,rapidPausePlaySeekCommandsConvergeToOneOfflineSessionState,releasedControllerAndStoppedServiceRecreateOneFreshCanonicalPlaybackSession,enabledResumeStartsAtStoredPositionAndDisposalPersistsTheControllerPosition}` with Media3 service-owned, offline WAV/MP4 and real AudioManager focus. Earlier passing Android smoke `44752387182` and `44760843141` plus main CI `44943433733`; latest Android smoke `44943433866` pending.
+- **COV-703** — `GeneratedUniffiSourceGatewaySmokeTest::repeatedNativeResolverOpenCloseAndPreCanceledRequestsDoNotLeakState` repeats native resolver open/close & typed pre-cancel, API matrix `44943433869` green. `Rmd1506ConnectivityE2EInstrumentedTest::concurrentNativePlatformStopsDuringRealTransferNeverRecordUserCancellation` races eight Android callers on an 8 MiB real UniFFI/local HTTP transfer, requires `RETRY_WAIT` (not explicit `CANCELED`), retained partial, no premature Library promotion, and database survival across reopened gateway. Required `OK (1 test)` in real-network run `44943433819` (passed).
+- **COV-706** — `core/src/ffi.rs::FfiError::from` now invokes `security::redact_sensitive` before generated Kotlin transport; adversarial Rust test `all_ffi_error_variants_redact_untrusted_private_diagnostics` covers header, signed/encoded URL, and oversized input. Generated x86_64/aarch64 ABI cross-build, Kotlin production redaction and Android UI tests: main CI `44943433733`, API29 JaCoCo `44943433785`, Android matrix `44943433869`, and earlier smoke `44760843141` passed. This does not claim A54 arm64 runtime.
+- **COV-806** — published `docs/TEST_COVERAGE_CLOSEOUT_2026-11-21.md` and appended exact-SHA risk/function mapping. **Five tasks remain unchecked**: COV-403 repeated notification-action idempotency (permission granted/denied phase already qualified); COV-408 physical Galaxy A54 battery/network; COV-604 remaining truncated/corrupt local subtitle/media behavior; COV-705 arm64 device runtime; COV-807 final initiative closure. No hardware, security or policy exceptions were waived.
+
+---
+
 ## Recommended implementation order
 
 COV-000 → COV-100 → COV-200 → COV-300 → COV-500 → COV-400 → COV-600 → COV-700 → COV-800.
@@ -196,6 +211,6 @@ This is a priority recommendation, not permission to skip independent work or ma
 ## Completion record
 
 - **Current baseline SHA at document creation:** `e946a24b9939c03a7f77f667705a1f888ae44771`.
-- **Completed (evidence-backed) subtasks at this checkpoint:** 49/62; 13 remain open. The task sections and exact-SHA evidence above, not this summary count, are authoritative.
-- **Latest evidence-backed coverage:** exact `89b633397df31125055c71a7fd8bc582cb013181`, Rust core **8,727/9,613 (90.78%)** lines (branches unmeasured); JVM Kotlin **1,433/3,799 (37.72%)** lines, **905/2,954 (30.64%)** branches, separate API29 JaCoCo. Do not combine coverage lanes.
-- **Latest fully green implementation SHA:** `89b633397df31125055c71a7fd8bc582cb013181`, **11/11** workflows, main CI `44752387157`, Android smoke `44752387182`, JaCoCo `44752387425`, Rust LCOV `44752387168`, API matrix `44752387129`. A newer production playback-error change `a82ec5997a69dfb6d4aa7448645f40b0342294bd` requires its **own** full CI before check-off.
+- **Completed (evidence-backed) subtasks at this checkpoint:** 57/62; 5 remain open. See 2026-11-21 evidence addendum and dated closeout; no hardware/API qualification inferred.
+- **Latest evidence-backed coverage:** implementation `9d09e3c0df31bb3e64287ac0b0b1e56c02cb3afd` Rust core **8,878/9,721 (91.33%)** lines; Kotlin/JVM **1,436/3,815 (37.64%)** lines and **906/2,966 (30.55%)** branches; separate API29 JaCoCo. Rust branches unmeasured.
+- **Latest full-green historical implementation SHA:** `89b633397df31125055c71a7fd8bc582cb013181` (11/11). Newer implementation `9d09e3c0df31bb3e64287ac0b0b1e56c02cb3afd` has 10/11 passing while Android smoke `44943433866` remains in progress at documentation checkpoint. See dated closeout.

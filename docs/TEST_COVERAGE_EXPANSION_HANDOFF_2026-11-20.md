@@ -54,3 +54,6 @@ Keep tag-only artifact policy, no live YouTube dependency in mandatory test jobs
 
 **Measurement:** Rust **90.78%**, JVM Kotlin **37.72%**, Kotlin branches **30.64%**, separate JaCoCo; Rust branches unmeasured. New risk/CI mapping lives in `docs/TEST_COVERAGE_TRACEABILITY_2026-11-20.md`.
 
+## November 21 continuation handoff
+
+Latest measured implementation `9d09e3c0df31bb3e64287ac0b0b1e56c02cb3afd`; 10/11 workflows succeeded at documentation checkpoint, latest Android smoke `44943433866` still in progress. Source redaction, missing/corrupt local player UI, native in-flight platform stop, 26/33/34 host notification permission, two-cycle host network and a bounded reconnect-recovery production fix committed to master. Canonical TODO now **57/62 checked, 5 open**. See `docs/TEST_COVERAGE_CLOSEOUT_2026-11-21.md` and `docs/TEST_COVERAGE_TRACEABILITY_2026-11-20.md`. Next: add repeated Pause/Resume/Cancel notification-action idempotency (COV-403); finish truncated media/VTT and subtitle recovery UI (COV-604); qualify arm64 Android runtime and Samsung A54 battery/network behavior with hardware access (COV-705/408); leave COV-807 unchecked. All newer commits require their own exact-head CI; prior historical 11/11 success does not transfer automatically.

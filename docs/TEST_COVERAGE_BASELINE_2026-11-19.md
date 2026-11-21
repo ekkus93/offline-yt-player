@@ -162,3 +162,7 @@ At fully green implementation SHA `89b633397df31125055c71a7fd8bc582cb013181`, al
 ## Updates
 
 Add exact source SHA, CI run link, tool versions, measured line/branch totals and uncovered file/function list here *only after the reporting workflow runs*. Do not equate an installed tool with a validated coverage baseline.
+
+## Verified November 21, 2026 baseline
+
+At `9d09e3c0df31bb3e64287ac0b0b1e56c02cb3afd`: Rust `cargo-llvm-cov 0.9.1` `44943433932` **8,878/9,721 (91.33%)** line coverage in 45 files; conservative source-matched **290/312** executed with **1,232 LLVM symbols unmatched/excluded** and **Rust BRDA branches unmeasured**. Kotlin `Kover 0.9.11` main CI `44943433733` **1,436/3,815 (37.64%)** lines and **906/2,966 (30.55%)** branches. API29 device JaCoCo `44943433785` separate. All targets are report-only. See `docs/TEST_COVERAGE_CLOSEOUT_2026-11-21.md` for exact workflow IDs and gaps.
