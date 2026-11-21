@@ -56,6 +56,29 @@ internal fun PortraitPlayerScreen(
     onBack: () -> Unit,
 ) {
     val validated = remember(asset) { LocalPlaybackPolicy.validate(asset) }
+    // Library-owned subtitle files may disappear or be truncated after an app
+    // restore. Validate only the six-byte VTT signature, without sending
+    // anything over the network or reading arbitrary provider metadata.
+    // Preview/golden fixtures intentionally have no persisted Library item ID.
+    val localSubtitleUnavailable = remember(validated) {
+        !LocalPlaybackPolicy.persistableItemId(validated).isNullOrBlank() &&
+            validated.subtitleTracks.any { track ->
+                runCatching {
+                    val file = java.io.File(track.path)
+                    if (!file.isFile || !file.canRead() || file.length() == 0L) {
+                        true
+                    } else if (track.mimeType == androidx.media3.common.MimeTypes.TEXT_VTT) {
+                        val signature = ByteArray(6)
+                        java.io.DataInputStream(file.inputStream()).use { input ->
+                            input.readFully(signature)
+                        }
+                        String(signature, Charsets.US_ASCII) != "WEBVTT"
+                    } else {
+                        false
+                    }
+                }.getOrDefault(true)
+            }
+    }
     val context = LocalContext.current
     val subtitleLabels = remember(validated) { LocalPlaybackPolicy.availableSubtitleLabels(validated) }
     val audioLabels = remember(validated) { LocalPlaybackPolicy.availableAudioLabels(validated) }
@@ -123,6 +146,9 @@ internal fun PortraitPlayerScreen(
         Text(if (controller == null) "Connecting to playback session…" else "Offline local playback")
         if (mediaReady) Text("Position ${formatPlaybackPosition(displayedPositionMs)}")
         playbackError?.let { Text(it) }
+        if (localSubtitleUnavailable) {
+            Text("Some local subtitles are missing or invalid. Re-download subtitles.")
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MidnightTransit.SectionSpacing)) {
             OutlinedButton(onClick = { controller?.seekBack() }, enabled = controller != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("-10s") }
             Button(onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } }, enabled = controller != null, modifier = Modifier.weight(1f).sizeIn(minHeight = MidnightTransit.MinimumTouchTarget)) { Text("Play/Pause") }

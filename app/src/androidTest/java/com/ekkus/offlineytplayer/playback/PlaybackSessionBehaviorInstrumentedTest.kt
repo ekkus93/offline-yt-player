@@ -736,6 +736,75 @@ class PlaybackSessionBehaviorInstrumentedTest {
         assertLocalPlaybackFailureIsVisible(absent)
     }
 
+
+    @Test
+    fun truncatedOfflineMp4ReportsSafeErrorWithoutRemoteFallback() {
+        val truncated = File(context.cacheDir, "cov604-truncated.mp4")
+        try {
+            val encoded = instrumentation.context.assets
+                .open("playback/combined_0p5s.mp4.b64")
+                .bufferedReader(Charsets.US_ASCII)
+                .use { it.readText() }
+            val complete = Base64.decode(encoded, Base64.DEFAULT)
+            assertTrue(complete.size > 100)
+            truncated.writeBytes(complete.copyOf(20))
+            assertLocalPlaybackFailureIsVisible(truncated)
+        } finally {
+            truncated.delete()
+        }
+    }
+
+    @Test
+    fun missingAndTruncatedLocalVttShowSafeRecoveryWarning() {
+        val video = createLocalWaveFixture()
+        val subtitle = File(context.cacheDir, "cov604-truncated-subtitles.vtt")
+        val token = SessionToken(context, ComponentName(context, PlaybackSessionService::class.java))
+        val observer = MediaController.Builder(context, token).buildAsync().get(10, TimeUnit.SECONDS)
+        try {
+            subtitle.writeText("WEBV", Charsets.UTF_8)
+            val asset = LocalPlaybackAsset(
+                videoPath = video.absolutePath,
+                title = "Offline subtitle recovery",
+                itemId = "cov604-library-owned",
+                subtitleTracks = listOf(
+                    LocalSubtitleTrack(
+                        path = subtitle.absolutePath,
+                        language = "en",
+                        label = "English",
+                        mimeType = MimeTypes.TEXT_VTT,
+                    ),
+                ),
+            )
+            val item = LocalPlaybackPolicy.mediaItemFor(asset)
+            assertEquals("file", item.localConfiguration?.uri?.scheme)
+            assertEquals(
+                "file",
+                item.localConfiguration?.subtitleConfigurations?.single()?.uri?.scheme,
+            )
+            compose.setContent {
+                PortraitPlayerScreen(
+                    asset = asset,
+                    settings = AppSettingsSnapshot(),
+                    onUpdateSettings = {},
+                    onBack = {},
+                    positionGatewayFactory = { RecordingPositionGateway() },
+                )
+            }
+            compose.onNodeWithText(
+                "Some local subtitles are missing or invalid. Re-download subtitles.",
+            ).assertIsDisplayed()
+            waitForControllerState(observer) {
+                currentMediaItem?.localConfiguration?.uri?.scheme == "file"
+            }
+            compose.onNodeWithText("PRIVATE_LOCAL_FILE_DETAILS", substring = true)
+                .assertDoesNotExist()
+        } finally {
+            instrumentation.runOnMainSync { observer.release() }
+            subtitle.delete()
+            video.delete()
+        }
+    }
+
     @Test
     fun corruptOfflineMediaReportsSafePlayerErrorAndNeverClaimsReady() {
         val corrupt = File(context.cacheDir, "cov604-corrupt-media.mp4")

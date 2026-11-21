@@ -113,6 +113,8 @@ class Rmd1507NotificationControlInstrumentedTest {
 
         actions.getValue("Pause").actionIntent.send()
         waitForState(jobId, CoreDownloadState.PAUSED)
+        actions.getValue("Pause").actionIntent.send()
+        waitForState(jobId, CoreDownloadState.PAUSED)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             compose.onNodeWithText("Downloads").performClick()
@@ -123,12 +125,31 @@ class Rmd1507NotificationControlInstrumentedTest {
 
             actions.getValue("Resume").actionIntent.send()
             waitForState(jobId, CoreDownloadState.QUEUED)
+            actions.getValue("Resume").actionIntent.send()
+            waitForState(jobId, CoreDownloadState.QUEUED)
             compose.waitUntil(15_000) {
                 runCatching { compose.onNodeWithText("Active · Progress unknown", substring = true).assertIsDisplayed() }.isSuccess
             }
 
+            // A second pause/resume sequence must preserve the same row and
+            // must not strand a replaying notification PendingIntent.
+            actions.getValue("Pause").actionIntent.send()
+            waitForState(jobId, CoreDownloadState.PAUSED)
+            actions.getValue("Resume").actionIntent.send()
+            waitForState(jobId, CoreDownloadState.QUEUED)
+
             actions.getValue("Cancel").actionIntent.send()
             waitForState(jobId, CoreDownloadState.CANCELED)
+            actions.getValue("Cancel").actionIntent.send()
+            waitForState(jobId, CoreDownloadState.CANCELED)
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val result = core.listDownloadQueue()
+                assertNull(result.error)
+                val durable = requireNotNull(result.value)
+                assertEquals("duplicate notification actions cannot duplicate queue entries", 1, durable.size)
+                assertEquals(jobId, durable.single().jobId)
+                assertEquals(CoreDownloadState.CANCELED, durable.single().state)
+            }
             compose.waitUntil(15_000) {
                 runCatching { compose.onNodeWithText("Canceled · Progress unknown", substring = true).assertIsDisplayed() }.isSuccess
             }
