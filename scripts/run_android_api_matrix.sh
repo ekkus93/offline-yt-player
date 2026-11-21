@@ -56,6 +56,19 @@ for klass in "${classes[@]}"; do
       # installed by the three successful standard invocations above. Toggle
       # the real package permission *after* the last install and use the
       # existing instrumentation component without reinstalling anything.
+      if [[ "$mode" == denied ]]; then
+        # AGP connectedDebugAndroidTest uninstalls its instrumentation APK after
+        # every normal class. Install the already-built APKs ONCE, before the
+        # first permission phase, then switch permission only via pm commands.
+        app_apk="$(find app/build/outputs/apk/debug -type f -name '*.apk' | head -n 1)"
+        test_apk="$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' | head -n 1)"
+        test -f "$app_apk" && test -f "$test_apk" || {
+          echo "API_COMPATIBILITY_BUILT_APK_MISSING api=$actual_api"
+          exit 1
+        }
+        adb install -r "$app_apk"
+        adb install -r "$test_apk"
+      fi
       runner="$(adb shell pm list instrumentation | tr -d '\r' |
         sed -n 's/^instrumentation:\([^ ]*\) (target=com\.ekkus\.offlineytplayer)$/\1/p' | head -n 1)"
       if [[ -z "$runner" ]]; then
