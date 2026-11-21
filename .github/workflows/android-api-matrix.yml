@@ -92,9 +92,15 @@ jobs:
         run: |
           test -s app/build/reports/apiCompatibility/executed.txt
           grep -Fx "api=${{ matrix.api }}" app/build/reports/apiCompatibility/executed.txt
-          for name in AndroidRuntimeSmokeTest GeneratedUniffiSourceGatewaySmokeTest DownloadForegroundTimeoutInstrumentedTest NotificationPermissionStateInstrumentationTest; do
-            grep -Fx "class=$name" app/build/reports/apiCompatibility/executed.txt
+          for name in AndroidRuntimeSmokeTest GeneratedUniffiSourceGatewaySmokeTest DownloadForegroundTimeoutInstrumentedTest; do
+            grep -Fx "class=$name permission=standard" app/build/reports/apiCompatibility/executed.txt
           done
+          if (( ${{ matrix.api }} >= 33 )); then
+            grep -Fx "class=NotificationPermissionStateInstrumentationTest permission=denied" app/build/reports/apiCompatibility/executed.txt
+            grep -Fx "class=NotificationPermissionStateInstrumentationTest permission=granted" app/build/reports/apiCompatibility/executed.txt
+          else
+            grep -Fx "class=NotificationPermissionStateInstrumentationTest permission=standard" app/build/reports/apiCompatibility/executed.txt
+          fi
           {
             echo "### Android API ${{ matrix.api }} compatibility"
             echo "- Source SHA: $GITHUB_SHA"
