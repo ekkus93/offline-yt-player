@@ -527,6 +527,83 @@ class Rmd1506ConnectivityE2EInstrumentedTest {
         }
     }
 
+
+    /**
+     * Exercise a real generated UniFFI worker, not a fake cancel token. A
+     * platform stop is a retryable interruption, never an explicit user
+     * cancellation, even if eight Android callbacks race over one native handle.
+     */
+    @Test
+    fun concurrentNativePlatformStopsDuringRealTransferNeverRecordUserCancellation() {
+        deleteRuntimeState()
+        System.loadLibrary("offline_yt_core")
+        val jobId = "cov703-inflight-native-stop"
+        val payloadBytes = 8 * 1024 * 1024
+        val relativePath = "items/cov703-inflight-native-stop/video.mp4"
+        val partial = File(context.filesDir, "items/cov703-inflight-native-stop/.video.mp4.partial")
+        val finished = File(context.filesDir, relativePath)
+        val server = SlowRangeFixtureServer(
+            body = null,
+            generatedSize = payloadBytes,
+            generatedModulus = 239,
+        ).also { it.start() }
+        val execution = DownloadWorkerExecution()
+        val workerResult = AtomicReference<Boolean?>()
+        var worker: Thread? = null
+        try {
+            GeneratedUniffiDownloadControlGateway.open(database.absolutePath).use { control ->
+                val result = control.enqueue(jobId)
+                assertNull(result.error)
+                assertEquals(true, result.value)
+            }
+            seedDurableWork(jobId, server.mediaUrl, relativePath, payloadBytes)
+            worker = thread(start = true, name = "cov703-real-native-worker") {
+                workerResult.set(execution.execute(context, jobId))
+            }
+            waitForState(jobId, CoreDownloadState.DOWNLOADING)
+            waitForPartialBytes(partial)
+            val stopping = (0 until 8).map { index ->
+                thread(start = true, name = "cov703-native-stop-${index}") {
+                    repeat(4) { execution.requestStop() }
+                }
+            }
+            stopping.forEach {
+                it.join(10_000)
+                assertFalse("platform-stop caller hung on native handle", it.isAlive)
+            }
+            worker.join(20_000)
+            assertFalse("in-flight UniFFI worker did not cooperatively stop", worker.isAlive)
+            waitForState(jobId, CoreDownloadState.RETRY_WAIT)
+            assertTrue("platform stop must retain a verified resume prefix", partial.length() > 0L)
+            assertFalse("platform stop cannot publish a final asset", finished.exists())
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { core ->
+                val queue = core.listDownloadQueue()
+                assertNull(queue.error)
+                val durable = requireNotNull(queue.value).single { it.jobId == jobId }
+                assertEquals(CoreDownloadState.RETRY_WAIT, durable.state)
+                assertTrue("one claimed native transfer only", durable.attempt == 1)
+                val library = core.listLibrary()
+                assertNull(library.error)
+                assertFalse(requireNotNull(library.value).any { it.itemId == jobId && it.completed })
+            }
+            // A new FFI service instance must be able to read the interrupted
+            // durable work; a closed handle cannot have disposed its queue.
+            GeneratedUniffiCoreGateway.open(database.absolutePath).use { reopened ->
+                val queue = reopened.listDownloadQueue()
+                assertNull(queue.error)
+                assertEquals(
+                    CoreDownloadState.RETRY_WAIT,
+                    requireNotNull(queue.value).single { it.jobId == jobId }.state,
+                )
+            }
+            assertTrue("worker result not returned from generated native call", workerResult.get() != null)
+        } finally {
+            execution.requestStop()
+            worker?.join(20_000)
+            server.close()
+        }
+    }
+
     private fun waitForServiceNotification() {
         val manager = context.getSystemService(android.app.NotificationManager::class.java)
         val deadline = SystemClock.elapsedRealtime() + 10_000L

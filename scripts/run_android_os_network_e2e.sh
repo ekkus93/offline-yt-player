@@ -82,6 +82,21 @@ grep -q 'OK (1 test)' "$LOG" || {
     exit 1
 }
 
+# Native-only in-flight cooperative stop: real UniFFI worker + slow localhost
+# HTTP + eight competing Android stop callers. Exact one-test evidence required.
+STOP_LOG="$DIR/rmd1506-native-platform-stop.log"
+adb shell am instrument -w \
+    -e class 'com.ekkus.offlineytplayer.downloads.Rmd1506ConnectivityE2EInstrumentedTest#concurrentNativePlatformStopsDuringRealTransferNeverRecordUserCancellation' \
+    "$INSTRUMENTATION" > "$STOP_LOG" 2>&1 || {
+    cat "$STOP_LOG"
+    exit 1
+}
+cat "$STOP_LOG"
+grep -q 'OK (1 test)' "$STOP_LOG" || {
+    echo "Native in-flight platform-stop qualification must execute one real test"
+    exit 1
+}
+
 # Exercise a second real OS transition, this time keeping the Wi-Fi radio on
 # and switching Android's network cost classification for the connected SSID.
 # A device with no discoverable saved Wi-Fi SSID cannot qualify this additional
