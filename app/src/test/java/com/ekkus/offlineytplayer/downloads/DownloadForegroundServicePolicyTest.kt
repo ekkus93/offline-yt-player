@@ -32,6 +32,51 @@ class DownloadForegroundServicePolicyTest {
     }
 
     @Test
+    fun oneDeferredOsReconnectCanReclaimQueuedNativeWorkWithoutUnclaimedSpin() {
+        val queued = com.ekkus.offlineytplayer.coregateway.CoreDownloadState.QUEUED
+        val paused = com.ekkus.offlineytplayer.coregateway.CoreDownloadState.PAUSED
+        assertFalse(
+            ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+                claimed = false,
+                state = queued,
+                decision = DownloadNetworkDecision.Allow,
+            ),
+        )
+        assertTrue(
+            ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+                claimed = false,
+                state = queued,
+                decision = DownloadNetworkDecision.Allow,
+                deferredReconnect = true,
+            ),
+        )
+        assertFalse(
+            ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+                claimed = false,
+                state = paused,
+                decision = DownloadNetworkDecision.Allow,
+                deferredReconnect = true,
+            ),
+        )
+        assertFalse(
+            ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+                claimed = false,
+                state = queued,
+                decision = DownloadNetworkDecision.PauseForConnectivity,
+                deferredReconnect = true,
+            ),
+        )
+        assertFalse(
+            ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+                claimed = false,
+                state = com.ekkus.offlineytplayer.coregateway.CoreDownloadState.COMPLETED,
+                decision = DownloadNetworkDecision.Allow,
+                deferredReconnect = true,
+            ),
+        )
+    }
+
+    @Test
     fun foregroundServicePolicyIsUserVisibleAndBounded() {
         assertEquals("offline_downloads", DownloadServicePolicy.ChannelId)
         assertTrue(DownloadServicePolicy.NotificationId > 0)

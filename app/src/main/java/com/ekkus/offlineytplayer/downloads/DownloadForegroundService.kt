@@ -141,7 +141,11 @@ internal object ForegroundWorkerRelaunchPolicy {
         claimed: Boolean,
         state: CoreDownloadState?,
         decision: DownloadNetworkDecision,
-    ): Boolean = claimed && state == CoreDownloadState.QUEUED && decision == DownloadNetworkDecision.Allow
+        deferredReconnect: Boolean = false,
+    ): Boolean =
+        (claimed || deferredReconnect) &&
+            state == CoreDownloadState.QUEUED &&
+            decision == DownloadNetworkDecision.Allow
 }
 
 /**
@@ -163,6 +167,11 @@ internal fun runForegroundServiceTaskSafely(
 
 class DownloadForegroundService : Service() {
     private val workerRunning = AtomicBoolean(false)
+    // An eligible network callback can arrive while the previous native worker
+    // is still unwinding a durable PAUSED transfer. Remember exactly one
+    // reconnect handoff; an unclaimed stale job must not hot-loop.
+    // Accessed only under the synchronized connectivity/settlement callbacks.
+    private var deferredReconnectWhileWorkerRunning = false
     // Network-paused work may still be blocked in native HTTP I/O. Stop that
     // attempt cooperatively so its durable PAUSED state can be resumed when
     // connectivity becomes eligible again. Unlike workerOwnership.stop(), this
@@ -328,7 +337,10 @@ class DownloadForegroundService : Service() {
 
         // Never resume a connectivity pause before the active transfer thread has observed the
         // durable PAUSED state and returned. Resuming too early could race the worker's pause check.
-        if (decision == DownloadNetworkDecision.Allow && workerRunning.get()) return
+        if (decision == DownloadNetworkDecision.Allow && workerRunning.get()) {
+            deferredReconnectWhileWorkerRunning = true
+            return
+        }
 
         runConnectivityCoordinator(connectivity)
         if (decision == DownloadNetworkDecision.PauseForConnectivity) {
@@ -392,6 +404,7 @@ class DownloadForegroundService : Service() {
     private fun settleWorkerAfterExecution(queueItemId: String, claimed: Boolean) {
         if (workerOwnership.isStopped || serviceDestroyed) return
         if (activeQueueItemId != queueItemId) {
+            deferredReconnectWhileWorkerRunning = false
             // A newer schedule/resume command can replace the active job while the previous
             // worker is still running. Its observer-reuse kick sees workerRunning=true and
             // cannot dispatch yet; hand off once the previous worker releases that guard.
@@ -423,7 +436,18 @@ class DownloadForegroundService : Service() {
             state = currentDownloadState(queueItemId)
         }
 
-        if (ForegroundWorkerRelaunchPolicy.shouldRelaunch(claimed, state, lastNetworkDecision)) {
+        // Consume the deferred OS-reconnect handoff before starting a worker:
+        // one failed/stale attempt must never schedule itself indefinitely.
+        val reconnectWasDeferred = deferredReconnectWhileWorkerRunning
+        deferredReconnectWhileWorkerRunning = false
+        if (
+            ForegroundWorkerRelaunchPolicy.shouldRelaunch(
+                claimed = claimed,
+                state = state,
+                decision = lastNetworkDecision,
+                deferredReconnect = reconnectWasDeferred,
+            )
+        ) {
             launchWorkerIfEligible(queueItemId)
             return
         }
